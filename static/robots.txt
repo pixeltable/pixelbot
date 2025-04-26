@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Sitemap: https://agent.pixeltable.com/sitemap.xml
+
+# Prevent crawling of non-essential paths
+Disallow: /static/logs/
+Disallow: /static/temp/

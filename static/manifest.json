@@ -1,0 +1,24 @@
+{
+    "name": "Pixelbot: Pixeltable Agent",
+    "short_name": "Pixeltable Agent",
+    "description": "Ask questions about your documents, videos, images, audios, and get insights using Pixeltable's multimodal AI.",
+    "start_url": "/",
+    "scope": "/",
+    "display": "standalone",
+    "background_color": "#ffffff",
+    "theme_color": "#3b82f6",
+    "icons": [
+        {
+            "src": "/static/image/pixelbot.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "any maskable"
+        }
+    ],
+    "related_applications": [
+        {
+            "platform": "web",
+            "url": "https://pixeltable.com"
+        }
+    ]
+}
