@@ -1,6 +1,6 @@
 <div align="center">
 
-![Pixelbot](https://github.com/user-attachments/assets/29c6b22c-60cf-4d5e-8e72-58c6ca746dac)
+<img src="https://github.com/user-attachments/assets/29c6b22c-60cf-4d5e-8e72-58c6ca746dac" alt="Pixelbot" width="600"/>
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-0530AD.svg)](https://opensource.org/licenses/Apache-2.0) [![My Discord (1306431018890166272)](https://img.shields.io/badge/💬-Discord-%235865F2.svg)](https://discord.gg/QPyqFYx2UN)
 <br>
