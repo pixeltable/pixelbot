@@ -4,12 +4,11 @@
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-0530AD.svg)](https://opensource.org/licenses/Apache-2.0) [![My Discord (1306431018890166272)](https://img.shields.io/badge/💬-Discord-%235865F2.svg)](https://discord.gg/QPyqFYx2UN)
 <br>
-
-![Overview](/static/image/overview.gif)
-
 </div>
 
 [Pixelbot](http://agent.pixeltable.com/), a multimodal context-aware AI agent built using [Pixeltable](https://github.com/pixeltable/pixeltable) — open-source AI data infrastructure. The agent can process and reason about various data types (documents, images, videos, audio), use external tools, search its knowledge base derived from uploaded files, generate images, maintain a chat history, and leverage a selective memory bank.
+
+![Overview](/static/image/overview.gif)
 
 The endpoint is built with Flask (Python) and the frontend with vanilla JS. This open source code replicates entirely what you can find at https://agent.pixeltable.com/ that is hosted on AWS EC2 instances.
 
