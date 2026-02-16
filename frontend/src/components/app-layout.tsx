@@ -17,14 +17,37 @@ import {
 import { cn } from '@/lib/utils'
 import { FileSidebar } from '@/components/files/file-sidebar'
 
-const MAIN_NAV = [
-  { to: '/', icon: MessageSquare, label: 'Chat' },
-  { to: '/studio', icon: Wand2, label: 'Studio' },
-  { to: '/architecture', icon: GitBranch, label: 'Architecture' },
-  { to: '/history', icon: History, label: 'History' },
-  { to: '/images', icon: ImageIcon, label: 'Media' },
-  { to: '/memory', icon: Brain, label: 'Memory' },
-  { to: '/database', icon: Database, label: 'Database' },
+type NavItem = { to: string; icon: typeof MessageSquare; label: string }
+type NavGroup = { label: string; items: NavItem[] }
+
+const NAV_GROUPS: NavGroup[] = [
+  {
+    label: 'Conversation',
+    items: [
+      { to: '/', icon: MessageSquare, label: 'Chat' },
+      { to: '/history', icon: History, label: 'History' },
+      { to: '/memory', icon: Brain, label: 'Memory' },
+    ],
+  },
+  {
+    label: 'Create',
+    items: [
+      { to: '/images', icon: ImageIcon, label: 'Media' },
+    ],
+  },
+  {
+    label: 'Workspace',
+    items: [
+      { to: '/studio', icon: Wand2, label: 'Studio' },
+      { to: '/database', icon: Database, label: 'Database' },
+    ],
+  },
+  {
+    label: 'System',
+    items: [
+      { to: '/architecture', icon: GitBranch, label: 'Architecture' },
+    ],
+  },
 ]
 
 const BOTTOM_NAV = [
@@ -60,25 +83,41 @@ export function AppLayout() {
         </div>
 
         {/* Primary nav */}
-        <nav className="flex flex-1 flex-col gap-0.5 px-2 pt-2">
-          {MAIN_NAV.map(({ to, icon: Icon, label }) => (
-            <NavLink
-              key={to}
-              to={to}
-              end={to === '/'}
-              className={({ isActive }) =>
-                cn(
-                  'group flex items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-[13px] font-medium transition-colors',
-                  isSidebarOpen ? '' : 'justify-center',
-                  isActive
-                    ? 'bg-accent text-foreground'
-                    : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground',
-                )
-              }
-            >
-              <Icon className="h-[15px] w-[15px] shrink-0" />
-              {isSidebarOpen && <span>{label}</span>}
-            </NavLink>
+        <nav className="flex flex-1 flex-col px-2 pt-2">
+          {NAV_GROUPS.map((group, groupIdx) => (
+            <div key={group.label}>
+              {groupIdx > 0 && (
+                <div className={cn('my-1.5', isSidebarOpen ? 'mx-2.5' : 'mx-1')}>
+                  <div className="h-px bg-border/40" />
+                </div>
+              )}
+              {isSidebarOpen && (
+                <span className="block px-2.5 pt-1.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/40">
+                  {group.label}
+                </span>
+              )}
+              <div className="flex flex-col gap-0.5">
+                {group.items.map(({ to, icon: Icon, label }) => (
+                  <NavLink
+                    key={to}
+                    to={to}
+                    end={to === '/'}
+                    className={({ isActive }) =>
+                      cn(
+                        'group flex items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-[13px] font-medium transition-colors',
+                        isSidebarOpen ? '' : 'justify-center',
+                        isActive
+                          ? 'bg-accent text-foreground'
+                          : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground',
+                      )
+                    }
+                  >
+                    <Icon className="h-[15px] w-[15px] shrink-0" />
+                    {isSidebarOpen && <span>{label}</span>}
+                  </NavLink>
+                ))}
+              </div>
+            </div>
           ))}
         </nav>
 
@@ -141,12 +180,31 @@ export function AppLayout() {
             )}
           </button>
 
-          {/* Powered by */}
-          {isSidebarOpen && (
-            <div className="pt-2 pb-1 px-2.5">
-              <span className="text-[10px] text-muted-foreground/50">powered by Pixeltable</span>
+          {/* Powered by Pixeltable */}
+          <a
+            href="https://github.com/pixeltable/pixeltable"
+            target="_blank"
+            rel="noopener noreferrer"
+            className={cn(
+              'flex items-center gap-2 pt-2 pb-1 transition-opacity hover:opacity-80',
+              isSidebarOpen ? 'px-2.5' : 'justify-center px-1',
+            )}
+            title="Powered by Pixeltable — View on GitHub"
+          >
+            <div className="flex h-4 w-4 shrink-0 items-center justify-center rounded-sm bg-gradient-to-br from-emerald-500 to-teal-600">
+              <svg viewBox="0 0 16 16" fill="none" className="h-2.5 w-2.5">
+                <rect x="1" y="1" width="6" height="6" rx="1" fill="white" fillOpacity="0.9" />
+                <rect x="9" y="1" width="6" height="6" rx="1" fill="white" fillOpacity="0.6" />
+                <rect x="1" y="9" width="6" height="6" rx="1" fill="white" fillOpacity="0.6" />
+                <rect x="9" y="9" width="6" height="6" rx="1" fill="white" fillOpacity="0.3" />
+              </svg>
             </div>
-          )}
+            {isSidebarOpen && (
+              <span className="text-[10px] text-muted-foreground/50 hover:text-muted-foreground/70 transition-colors">
+                powered by Pixeltable
+              </span>
+            )}
+          </a>
         </div>
       </aside>
 

@@ -1185,6 +1185,192 @@ def _derive_filename(original_name: str, operation: str) -> str:
     return f"{base}_{operation}{ext}"
 
 
+# ── On-Demand Object Detection / Classification ──────────────────────────────
+
+DETECTION_MODELS = {
+    "detr-resnet-50": {
+        "id": "facebook/detr-resnet-50",
+        "type": "detection",
+        "label": "DETR ResNet-50 (Object Detection)",
+    },
+    "detr-resnet-101": {
+        "id": "facebook/detr-resnet-101",
+        "type": "detection",
+        "label": "DETR ResNet-101 (Object Detection)",
+    },
+    "vit-base": {
+        "id": "google/vit-base-patch16-224",
+        "type": "classification",
+        "label": "ViT Base (Image Classification)",
+    },
+}
+
+# In-memory model cache to avoid reloading on every request
+_model_cache: dict[str, tuple] = {}
+
+
+def _get_detection_model(model_key: str):
+    """Load and cache a HuggingFace detection/classification model + processor."""
+    if model_key in _model_cache:
+        return _model_cache[model_key]
+
+    info = DETECTION_MODELS[model_key]
+    model_id = info["id"]
+    model_type = info["type"]
+
+    if model_type == "detection":
+        from transformers import DetrForObjectDetection, DetrImageProcessor
+        processor = DetrImageProcessor.from_pretrained(model_id)
+        model = DetrForObjectDetection.from_pretrained(model_id)
+    else:
+        from transformers import ViTForImageClassification, ViTImageProcessor
+        processor = ViTImageProcessor.from_pretrained(model_id)
+        model = ViTForImageClassification.from_pretrained(model_id)
+
+    _model_cache[model_key] = (processor, model)
+    return processor, model
+
+
+class DetectRequest(BaseModel):
+    uuid: str
+    source: str = "image"  # "image" or "video_frame"
+    frame_idx: int | None = None  # required when source == "video_frame"
+    model: str = "detr-resnet-50"
+    threshold: float = 0.5
+    top_k: int = 5  # for classification only
+
+
+@router.get("/detect/models")
+def list_detection_models():
+    """Return available detection / classification models."""
+    return [
+        {"key": key, "type": info["type"], "label": info["label"]}
+        for key, info in DETECTION_MODELS.items()
+    ]
+
+
+@router.post("/detect")
+def detect_objects(body: DetectRequest):
+    """Run on-demand object detection or classification on an image or video frame.
+    Models are loaded lazily and cached in memory for fast subsequent calls.
+    """
+    import torch
+
+    user_id = config.DEFAULT_USER_ID
+
+    model_info = DETECTION_MODELS.get(body.model)
+    if not model_info:
+        raise HTTPException(status_code=400, detail=f"Unknown model: {body.model}")
+
+    # Load image from the right table
+    try:
+        img: Image.Image | None = None
+
+        if body.source == "video_frame":
+            if body.frame_idx is None:
+                raise HTTPException(status_code=400, detail="frame_idx required for video_frame source")
+            frames_view = pxt.get_table("agents.video_frames")
+            rows = frames_view.where(
+                (frames_view.uuid == body.uuid) & (frames_view.user_id == user_id) & (frames_view.frame_idx == body.frame_idx)
+            ).select(frame=frames_view.frame).collect()
+            if rows:
+                img = rows[0].get("frame")
+        else:
+            img_table = _get_pxt_table("image")
+            rows = img_table.where(
+                (img_table.uuid == body.uuid) & (img_table.user_id == user_id)
+            ).select(img=img_table.image).collect()
+            if rows:
+                img = rows[0].get("img")
+
+        if img is None or not isinstance(img, Image.Image):
+            raise HTTPException(status_code=404, detail="Image not found")
+
+        # Convert to RGB if needed
+        if img.mode != "RGB":
+            img = img.convert("RGB")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Detection: error loading image: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to load image: {e}")
+
+    # Run inference
+    try:
+        processor, model = _get_detection_model(body.model)
+        img_width, img_height = img.size
+
+        if model_info["type"] == "detection":
+            inputs = processor(images=img, return_tensors="pt")
+            with torch.no_grad():
+                outputs = model(**inputs)
+
+            target_sizes = torch.tensor([[img_height, img_width]])
+            results = processor.post_process_object_detection(
+                outputs, target_sizes=target_sizes, threshold=body.threshold
+            )[0]
+
+            detections = []
+            for score, label_id, box in zip(
+                results["scores"].tolist(),
+                results["labels"].tolist(),
+                results["boxes"].tolist(),
+            ):
+                detections.append({
+                    "label": model.config.id2label[label_id],
+                    "score": round(score, 3),
+                    "box": {
+                        "x1": round(box[0], 1),
+                        "y1": round(box[1], 1),
+                        "x2": round(box[2], 1),
+                        "y2": round(box[3], 1),
+                    },
+                })
+
+            # Sort by score descending
+            detections.sort(key=lambda d: d["score"], reverse=True)
+
+            return {
+                "type": "detection",
+                "model": body.model,
+                "image_width": img_width,
+                "image_height": img_height,
+                "count": len(detections),
+                "detections": detections,
+            }
+
+        else:
+            inputs = processor(images=img, return_tensors="pt")
+            with torch.no_grad():
+                outputs = model(**inputs)
+
+            logits = outputs.logits[0]
+            probs = torch.nn.functional.softmax(logits, dim=-1)
+            top_k = min(body.top_k, len(probs))
+            top_probs, top_indices = torch.topk(probs, top_k)
+
+            classifications = []
+            for prob, idx in zip(top_probs.tolist(), top_indices.tolist()):
+                classifications.append({
+                    "label": model.config.id2label[idx],
+                    "score": round(prob, 4),
+                })
+
+            return {
+                "type": "classification",
+                "model": body.model,
+                "image_width": img_width,
+                "image_height": img_height,
+                "count": len(classifications),
+                "classifications": classifications,
+            }
+
+    except Exception as e:
+        logger.error(f"Detection: inference error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Detection failed: {e}")
+
+
 # ── Save Transformed Image ───────────────────────────────────────────────────
 
 class SaveImageResponse(BaseModel):

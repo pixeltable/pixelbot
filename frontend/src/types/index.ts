@@ -301,6 +301,42 @@ export interface EmbeddingResponse {
   count: number
 }
 
+// ── Object Detection / Classification ───────────────────────────────────────
+
+export interface DetectionModel {
+  key: string
+  type: 'detection' | 'classification'
+  label: string
+}
+
+export interface BoundingBox {
+  x1: number
+  y1: number
+  x2: number
+  y2: number
+}
+
+export interface DetectionItem {
+  label: string
+  score: number
+  box: BoundingBox
+}
+
+export interface ClassificationItem {
+  label: string
+  score: number
+}
+
+export interface DetectionResponse {
+  type: 'detection' | 'classification'
+  model: string
+  image_width: number
+  image_height: number
+  count: number
+  detections?: DetectionItem[]
+  classifications?: ClassificationItem[]
+}
+
 // ── Database Browser ────────────────────────────────────────────────────────
 
 export interface TableColumn {

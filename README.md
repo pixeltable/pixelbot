@@ -16,7 +16,7 @@ Pixelbot is an open-source sandbox built to explore, stress-test, and iterate on
 
 The app itself combines a **multimodal AI agent**, an interactive **data studio**, and **media generation** — all powered end-to-end by Pixeltable's declarative data infrastructure. Upload documents, images, videos, and audio, then chat with an agent that reasons across all of them, transform files hands-on in the Studio, or generate images and video with state-of-the-art models.
 
-![Overview](docs/images/overview.gif)
+![Overview](docs/images/overview.png)
 
 ## Why This Exists
 

@@ -410,6 +410,26 @@ export async function revertCsvTable(
   })
 }
 
+// ── Object Detection / Classification ───────────────────────────────────────
+
+export async function getDetectionModels(): Promise<import('@/types').DetectionModel[]> {
+  return request<import('@/types').DetectionModel[]>('/studio/detect/models')
+}
+
+export async function detectObjects(params: {
+  uuid: string
+  source?: 'image' | 'video_frame'
+  frame_idx?: number | null
+  model?: string
+  threshold?: number
+  top_k?: number
+}): Promise<import('@/types').DetectionResponse> {
+  return request<import('@/types').DetectionResponse>('/studio/detect', {
+    method: 'POST',
+    body: JSON.stringify(params),
+  })
+}
+
 // ── Embeddings ──────────────────────────────────────────────────────────────
 
 export async function getEmbeddings(

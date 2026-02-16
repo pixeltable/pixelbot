@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   Database,
   Table2,
@@ -6,41 +6,142 @@ import {
   Loader2,
   ChevronRight,
   ChevronLeft,
+  ChevronDown,
   Columns3,
   Rows3,
   Cpu,
-  Clock,
   MessageSquare,
-  Brain,
   FileText,
   ImageIcon,
   Film,
   Music,
   Sparkles,
-  Wand2,
-  Upload,
-  User,
+  Brain,
+  Settings2,
+  TableProperties,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { useToast } from '@/components/ui/toast'
 import * as api from '@/lib/api'
-import type { TableInfo, TableRowsResponse, TimelineEvent } from '@/types'
+import type { TableInfo, TableRowsResponse } from '@/types'
 
-type DbView = 'tables' | 'timeline'
+// ── Grouping logic ──────────────────────────────────────────────────────────
+
+interface TableGroup {
+  label: string
+  icon: typeof Database
+  color: string
+  match: (shortName: string, table: TableInfo) => boolean
+}
+
+const GROUPS: TableGroup[] = [
+  {
+    label: 'Agent Pipeline',
+    icon: MessageSquare,
+    color: 'text-blue-400',
+    match: (n) => ['tools', 'chat_history', 'collection'].includes(n),
+  },
+  {
+    label: 'Documents',
+    icon: FileText,
+    color: 'text-amber-400',
+    match: (n) => n === 'chunks',
+  },
+  {
+    label: 'Images',
+    icon: ImageIcon,
+    color: 'text-emerald-400',
+    match: (n) => n === 'images',
+  },
+  {
+    label: 'Videos',
+    icon: Film,
+    color: 'text-rose-400',
+    match: (n) => ['videos', 'video_frames', 'video_audio_chunks', 'video_transcript_sentences'].includes(n),
+  },
+  {
+    label: 'Audio',
+    icon: Music,
+    color: 'text-orange-400',
+    match: (n) => ['audios', 'audio_chunks', 'audio_transcript_sentences'].includes(n),
+  },
+  {
+    label: 'Generation',
+    icon: Sparkles,
+    color: 'text-pink-400',
+    match: (n) => n.includes('generation_tasks'),
+  },
+  {
+    label: 'Memory & Config',
+    icon: Brain,
+    color: 'text-purple-400',
+    match: (n) => ['memory_bank', 'user_personas'].includes(n),
+  },
+  {
+    label: 'Data Tables',
+    icon: TableProperties,
+    color: 'text-cyan-400',
+    match: (n) => n.startsWith('csv_'),
+  },
+]
+
+function getShortName(path: string): string {
+  return path.replace(/^agents\//, '')
+}
+
+interface GroupedTables {
+  group: TableGroup
+  tables: TableInfo[]
+  views: TableInfo[]
+}
+
+function groupTables(tables: TableInfo[]): GroupedTables[] {
+  const result: GroupedTables[] = GROUPS.map((g) => ({ group: g, tables: [], views: [] }))
+  const ungrouped: TableInfo[] = []
+
+  for (const table of tables) {
+    const shortName = getShortName(table.path)
+    let matched = false
+    for (const entry of result) {
+      if (entry.group.match(shortName, table)) {
+        if (table.type === 'view') {
+          entry.views.push(table)
+        } else {
+          entry.tables.push(table)
+        }
+        matched = true
+        break
+      }
+    }
+    if (!matched) ungrouped.push(table)
+  }
+
+  // Add ungrouped as "Other" if any
+  if (ungrouped.length > 0) {
+    result.push({
+      group: { label: 'Other', icon: Settings2, color: 'text-muted-foreground', match: () => false },
+      tables: ungrouped.filter((t) => t.type !== 'view'),
+      views: ungrouped.filter((t) => t.type === 'view'),
+    })
+  }
+
+  // Only return groups that have items
+  return result.filter((g) => g.tables.length + g.views.length > 0)
+}
+
+// ── Component ───────────────────────────────────────────────────────────────
 
 export function DatabasePage() {
   const { addToast } = useToast()
-  const [view, setView] = useState<DbView>('tables')
   const [tables, setTables] = useState<TableInfo[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [selectedTable, setSelectedTable] = useState<TableInfo | null>(null)
   const [rowData, setRowData] = useState<TableRowsResponse | null>(null)
   const [isLoadingRows, setIsLoadingRows] = useState(false)
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
 
-  // Timeline state
-  const [timelineEvents, setTimelineEvents] = useState<TimelineEvent[]>([])
-  const [isLoadingTimeline, setIsLoadingTimeline] = useState(false)
+  const grouped = useMemo(() => groupTables(tables), [tables])
 
   useEffect(() => {
     async function load() {
@@ -55,22 +156,6 @@ export function DatabasePage() {
     }
     load()
   }, [addToast])
-
-  useEffect(() => {
-    if (view !== 'timeline') return
-    async function loadTimeline() {
-      setIsLoadingTimeline(true)
-      try {
-        const result = await api.getTimeline(200)
-        setTimelineEvents(result.events)
-      } catch (err) {
-        addToast(err instanceof Error ? err.message : 'Failed to load timeline', 'error')
-      } finally {
-        setIsLoadingTimeline(false)
-      }
-    }
-    loadTimeline()
-  }, [view, addToast])
 
   const handleSelectTable = useCallback(
     async (table: TableInfo) => {
@@ -105,25 +190,32 @@ export function DatabasePage() {
     [selectedTable, addToast],
   )
 
-  // Group tables by prefix (e.g. agents.csv_*, agents.video_*, etc.)
+  const toggleGroup = useCallback((label: string) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev)
+      if (next.has(label)) next.delete(label)
+      else next.add(label)
+      return next
+    })
+  }, [])
+
   const totalRows = tables.reduce((sum, t) => sum + t.row_count, 0)
   const tableCount = tables.filter((t) => t.type === 'table').length
   const viewCount = tables.filter((t) => t.type === 'view').length
 
-  if (view === 'timeline') {
-    return (
-      <div className="flex h-full overflow-hidden flex-col">
-        <TimelineHeader view={view} onViewChange={setView} tableCount={tables.length} totalRows={totalRows} />
-        <TimelineView events={timelineEvents} isLoading={isLoadingTimeline} />
-      </div>
-    )
-  }
-
   return (
     <div className="flex h-full overflow-hidden">
-      {/* Left panel: table list */}
+      {/* Left panel: grouped table list */}
       <div className="w-72 shrink-0 border-r border-border/60 flex flex-col bg-card/20">
-        <TimelineHeader view={view} onViewChange={setView} tableCount={tables.length} totalRows={totalRows} />
+        <div className="px-4 pt-5 pb-3">
+          <h2 className="text-sm font-semibold text-foreground flex items-center gap-2 mb-1.5">
+            <Database className="h-4 w-4 text-k-yellow" />
+            Database
+          </h2>
+          <p className="text-[10px] text-muted-foreground">
+            {tables.length} objects &middot; {totalRows.toLocaleString()} total rows
+          </p>
+        </div>
 
         {/* Stats bar */}
         <div className="flex gap-2 px-4 pb-3">
@@ -137,46 +229,68 @@ export function DatabasePage() {
           </Badge>
         </div>
 
-        {/* Table list */}
+        {/* Grouped table list */}
         <div className="flex-1 overflow-y-auto px-2 pb-2">
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-5 w-5 animate-spin text-k-yellow" />
             </div>
           ) : (
-            <div className="space-y-0.5">
-              {tables.map((table) => {
-                const isSelected = selectedTable?.path === table.path
-                const shortName = table.path.replace(/^agents\//, '')
+            <div className="space-y-1">
+              {grouped.map(({ group, tables: groupTables, views: groupViews }) => {
+                const Icon = group.icon
+                const isCollapsed = collapsedGroups.has(group.label)
+                const itemCount = groupTables.length + groupViews.length
+
                 return (
-                  <button
-                    key={table.path}
-                    className={cn(
-                      'flex items-center gap-2 w-full rounded-lg px-2.5 py-2 text-left transition-colors group',
-                      isSelected
-                        ? 'bg-primary/10 text-foreground'
-                        : 'text-muted-foreground hover:bg-accent hover:text-foreground',
+                  <div key={group.label}>
+                    {/* Group header */}
+                    <button
+                      className="flex items-center gap-2 w-full rounded-lg px-2.5 py-1.5 text-left hover:bg-accent/30 transition-colors"
+                      onClick={() => toggleGroup(group.label)}
+                    >
+                      <ChevronDown
+                        className={cn(
+                          'h-3 w-3 shrink-0 text-muted-foreground/50 transition-transform duration-150',
+                          isCollapsed && '-rotate-90',
+                        )}
+                      />
+                      <Icon className={cn('h-3.5 w-3.5 shrink-0', group.color)} />
+                      <span className="text-[11px] font-semibold text-muted-foreground flex-1">
+                        {group.label}
+                      </span>
+                      <span className="text-[9px] text-muted-foreground/40 tabular-nums">
+                        {itemCount}
+                      </span>
+                    </button>
+
+                    {/* Group items */}
+                    {!isCollapsed && (
+                      <div className="ml-3 pl-2.5 border-l border-border/30 space-y-px mt-0.5 mb-1">
+                        {/* Tables first */}
+                        {groupTables.map((table) => (
+                          <TableItem
+                            key={table.path}
+                            table={table}
+                            isSelected={selectedTable?.path === table.path}
+                            onClick={() => handleSelectTable(table)}
+                          />
+                        ))}
+                        {/* Then views */}
+                        {groupViews.length > 0 && groupTables.length > 0 && (
+                          <div className="py-0.5" />
+                        )}
+                        {groupViews.map((view) => (
+                          <TableItem
+                            key={view.path}
+                            table={view}
+                            isSelected={selectedTable?.path === view.path}
+                            onClick={() => handleSelectTable(view)}
+                          />
+                        ))}
+                      </div>
                     )}
-                    onClick={() => handleSelectTable(table)}
-                  >
-                    {table.type === 'view' ? (
-                      <Eye className="h-3.5 w-3.5 shrink-0 text-blue-400" />
-                    ) : (
-                      <Table2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[11px] font-medium truncate">{shortName}</p>
-                      <p className="text-[9px] text-muted-foreground/60">
-                        {table.columns.length} cols &middot; {table.row_count.toLocaleString()} rows
-                      </p>
-                    </div>
-                    <ChevronRight
-                      className={cn(
-                        'h-3 w-3 shrink-0 transition-opacity',
-                        isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-50',
-                      )}
-                    />
-                  </button>
+                  </div>
                 )
               })}
             </div>
@@ -338,6 +452,51 @@ export function DatabasePage() {
   )
 }
 
+// ── Sub-components ──────────────────────────────────────────────────────────
+
+function TableItem({
+  table,
+  isSelected,
+  onClick,
+}: {
+  table: TableInfo
+  isSelected: boolean
+  onClick: () => void
+}) {
+  const shortName = getShortName(table.path)
+  const isView = table.type === 'view'
+
+  return (
+    <button
+      className={cn(
+        'flex items-center gap-2 w-full rounded-md px-2 py-1.5 text-left transition-colors group',
+        isSelected
+          ? 'bg-primary/10 text-foreground'
+          : 'text-muted-foreground hover:bg-accent hover:text-foreground',
+      )}
+      onClick={onClick}
+    >
+      {isView ? (
+        <Eye className="h-3 w-3 shrink-0 text-blue-400/70" />
+      ) : (
+        <Table2 className="h-3 w-3 shrink-0 text-emerald-400/70" />
+      )}
+      <div className="flex-1 min-w-0">
+        <p className="text-[11px] font-medium truncate">{shortName}</p>
+      </div>
+      <span className="text-[9px] text-muted-foreground/40 tabular-nums shrink-0">
+        {table.row_count.toLocaleString()}
+      </span>
+      <ChevronRight
+        className={cn(
+          'h-2.5 w-2.5 shrink-0 transition-opacity',
+          isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-50',
+        )}
+      />
+    </button>
+  )
+}
+
 function formatCellValue(val: unknown): string {
   if (val === null || val === undefined) return '—'
   if (typeof val === 'string') {
@@ -353,187 +512,4 @@ function formatCellValue(val: unknown): string {
     return s.length > 120 ? s.slice(0, 120) + '...' : s
   }
   return String(val)
-}
-
-// ── Shared Header ────────────────────────────────────────────────────────────
-
-function TimelineHeader({
-  view,
-  onViewChange,
-  tableCount,
-  totalRows,
-}: {
-  view: DbView
-  onViewChange: (v: DbView) => void
-  tableCount: number
-  totalRows: number
-}) {
-  return (
-    <div className="px-4 pt-5 pb-3">
-      <div className="flex items-center justify-between mb-1.5">
-        <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
-          <Database className="h-4 w-4 text-k-yellow" />
-          Database
-        </h2>
-        <div className="flex rounded-lg border border-border overflow-hidden">
-          <button
-            className={cn(
-              'px-2.5 py-1 text-[10px] font-medium transition-colors',
-              view === 'tables'
-                ? 'bg-accent text-foreground'
-                : 'text-muted-foreground hover:text-foreground',
-            )}
-            onClick={() => onViewChange('tables')}
-          >
-            <Table2 className="h-3 w-3 inline mr-1" />
-            Tables
-          </button>
-          <button
-            className={cn(
-              'px-2.5 py-1 text-[10px] font-medium transition-colors border-l border-border',
-              view === 'timeline'
-                ? 'bg-accent text-foreground'
-                : 'text-muted-foreground hover:text-foreground',
-            )}
-            onClick={() => onViewChange('timeline')}
-          >
-            <Clock className="h-3 w-3 inline mr-1" />
-            Timeline
-          </button>
-        </div>
-      </div>
-      <p className="text-[10px] text-muted-foreground">
-        {tableCount} objects &middot; {totalRows.toLocaleString()} total rows
-      </p>
-    </div>
-  )
-}
-
-// ── Timeline View ────────────────────────────────────────────────────────────
-
-const EVENT_ICONS: Record<string, typeof Database> = {
-  Query: MessageSquare,
-  Chat: MessageSquare,
-  Memory: Brain,
-  Document: FileText,
-  Image: ImageIcon,
-  Video: Film,
-  Audio: Music,
-  ImageGen: Sparkles,
-  VideoGen: Wand2,
-  CSV: Upload,
-  Persona: User,
-}
-
-const EVENT_COLORS: Record<string, string> = {
-  Query: 'text-blue-400',
-  Chat: 'text-sky-400',
-  Memory: 'text-purple-400',
-  Document: 'text-amber-400',
-  Image: 'text-emerald-400',
-  Video: 'text-rose-400',
-  Audio: 'text-orange-400',
-  ImageGen: 'text-pink-400',
-  VideoGen: 'text-red-400',
-  CSV: 'text-cyan-400',
-  Persona: 'text-indigo-400',
-}
-
-function TimelineView({
-  events,
-  isLoading,
-}: {
-  events: TimelineEvent[]
-  isLoading: boolean
-}) {
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center flex-1">
-        <Loader2 className="h-5 w-5 animate-spin text-k-yellow" />
-      </div>
-    )
-  }
-
-  if (events.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center flex-1 gap-2">
-        <Clock className="h-10 w-10 text-muted-foreground/15" />
-        <p className="text-sm text-muted-foreground">No activity yet</p>
-      </div>
-    )
-  }
-
-  // Group events by date
-  const groups: Record<string, TimelineEvent[]> = {}
-  for (const event of events) {
-    const dateKey = event.timestamp
-      ? new Date(event.timestamp).toLocaleDateString('en-US', {
-          weekday: 'short',
-          month: 'short',
-          day: 'numeric',
-        })
-      : 'Unknown date'
-    if (!groups[dateKey]) groups[dateKey] = []
-    groups[dateKey].push(event)
-  }
-
-  return (
-    <div className="flex-1 overflow-y-auto px-6 py-4 max-w-3xl mx-auto w-full">
-      {Object.entries(groups).map(([date, dateEvents]) => (
-        <div key={date} className="mb-6">
-          <div className="flex items-center gap-2 mb-3">
-            <div className="h-px flex-1 bg-border" />
-            <span className="text-[10px] font-medium text-muted-foreground/60 uppercase tracking-wider shrink-0">
-              {date}
-            </span>
-            <div className="h-px flex-1 bg-border" />
-          </div>
-          <div className="space-y-1">
-            {dateEvents.map((event, idx) => {
-              const Icon = EVENT_ICONS[event.type] ?? Database
-              const colorClass = EVENT_COLORS[event.type] ?? 'text-muted-foreground'
-              const time = event.timestamp
-                ? new Date(event.timestamp).toLocaleTimeString('en-US', {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })
-                : ''
-
-              return (
-                <div
-                  key={`${event.table}-${idx}`}
-                  className="flex items-start gap-3 rounded-lg px-3 py-2 hover:bg-accent/30 transition-colors"
-                >
-                  <div className={cn('mt-0.5 shrink-0', colorClass)}>
-                    <Icon className="h-3.5 w-3.5" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <Badge
-                        variant="outline"
-                        className={cn('text-[8px] shrink-0', colorClass)}
-                      >
-                        {event.type}
-                      </Badge>
-                      {event.role && (
-                        <span className="text-[9px] text-muted-foreground/50">
-                          {event.role}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-[11px] text-foreground/80 mt-0.5 line-clamp-2">
-                      {event.label}
-                    </p>
-                  </div>
-                  <span className="text-[9px] text-muted-foreground/40 tabular-nums shrink-0 mt-0.5">
-                    {time}
-                  </span>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      ))}
-    </div>
-  )
 }

@@ -48,6 +48,7 @@ import { cn } from '@/lib/utils'
 import * as api from '@/lib/api'
 import { SearchResults } from './search-results'
 import { EmbeddingMap } from './embedding-map'
+import { DetectionPanel } from './detection-panel'
 import type {
   StudioFile,
   StudioFiles,
@@ -902,6 +903,7 @@ export function StudioPage() {
                         onDownload={handleDownloadImage}
                         isSaving={isSaving}
                         isDownloading={isDownloading}
+                        imageUuid={selectedFile.uuid}
                       />
                     )}
 
@@ -917,6 +919,7 @@ export function StudioPage() {
                     {/* Video frames, transforms, and transcription */}
                     {selectedFile.type === 'video' && (
                       <VideoWorkspace
+                        videoUuid={selectedFile.uuid}
                         videoFrames={videoFrames}
                         transcription={transcription}
                         videoTransformResult={videoTransformResult}
@@ -995,6 +998,7 @@ function ImageWorkspace({
   onDownload,
   isSaving,
   isDownloading,
+  imageUuid,
 }: {
   originalPreview: ImagePreview | null
   transformResult: TransformResult | null
@@ -1004,6 +1008,7 @@ function ImageWorkspace({
   onDownload: () => void
   isSaving: boolean
   isDownloading: boolean
+  imageUuid: string
 }) {
   if (isLoadingPreview) {
     return (
@@ -1106,6 +1111,23 @@ function ImageWorkspace({
           </p>
         </div>
       )}
+
+      {/* Object Detection / Classification */}
+      <div className="col-span-full mt-4 pt-4 border-t border-border/50">
+        <div className="flex items-center gap-2 mb-3">
+          <div className="h-1.5 w-1.5 rounded-full bg-violet-500" />
+          <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+            AI Analysis
+          </span>
+        </div>
+        <DetectionPanel
+          imageUuid={imageUuid}
+          source="image"
+          imageSrc={originalPreview.preview}
+          imageWidth={originalPreview.width}
+          imageHeight={originalPreview.height}
+        />
+      </div>
     </div>
   )
 }
@@ -1223,6 +1245,7 @@ function DocumentWorkspace({
 }
 
 function VideoWorkspace({
+  videoUuid,
   videoFrames,
   transcription,
   videoTransformResult,
@@ -1231,6 +1254,7 @@ function VideoWorkspace({
   onSaveVideoResult,
   onSaveExtractedFrame,
 }: {
+  videoUuid: string
   videoFrames: VideoFrames | null
   transcription: Transcription | null
   videoTransformResult: VideoTransformResult | null
@@ -1239,6 +1263,7 @@ function VideoWorkspace({
   onSaveVideoResult: () => void
   onSaveExtractedFrame: () => void
 }) {
+  const [analyzingFrame, setAnalyzingFrame] = useState<number | null>(null)
   if (!selectedOperation) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
@@ -1267,14 +1292,40 @@ function VideoWorkspace({
                 alt={`Frame ${frame.position}`}
                 className="w-full aspect-video object-cover"
               />
-              <div className="absolute bottom-0 left-0 right-0 bg-black/60 px-2 py-0.5">
+              <div className="absolute bottom-0 left-0 right-0 bg-black/60 px-2 py-0.5 flex items-center justify-between">
                 <span className="text-[10px] text-white/80 font-mono">
                   {frame.position}s
                 </span>
+                <button
+                  className="text-[9px] text-violet-300 hover:text-violet-100 font-medium opacity-0 group-hover:opacity-100 transition-opacity"
+                  onClick={() => setAnalyzingFrame(analyzingFrame === i ? null : i)}
+                >
+                  {analyzingFrame === i ? 'Close' : 'Detect'}
+                </button>
               </div>
             </div>
           ))}
         </div>
+
+        {/* Frame detection panel */}
+        {analyzingFrame !== null && videoFrames.frames[analyzingFrame] && (
+          <div className="mt-3 pt-3 border-t border-border/50 animate-fade-in">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="h-1.5 w-1.5 rounded-full bg-violet-500" />
+              <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+                Frame {analyzingFrame} Detection
+              </span>
+            </div>
+            <DetectionPanel
+              imageUuid={videoUuid}
+              source="video_frame"
+              frameIdx={analyzingFrame}
+              imageSrc={videoFrames.frames[analyzingFrame].frame}
+              imageWidth={640}
+              imageHeight={360}
+            />
+          </div>
+        )}
       </div>
     )
   }
