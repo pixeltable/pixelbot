@@ -1,0 +1,23 @@
+# Web Framework
+fastapi
+uvicorn[standard]
+
+# AI and ML
+anthropic
+sentence-transformers
+tiktoken
+spacy
+openai
+mistralai
+numpy
+umap-learn
+openpyxl
+pixeltable==0.3.12
+
+# Utilities
+python-dotenv
+python-multipart
+duckduckgo-search
+serpapi
+yfinance
+Pillow

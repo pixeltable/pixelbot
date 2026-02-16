@@ -2,336 +2,247 @@
 
 <img src="https://github.com/user-attachments/assets/29c6b22c-60cf-4d5e-8e72-58c6ca746dac" alt="Pixelbot" width="600"/>
 
-[![License](https://img.shields.io/badge/License-Apache%202.0-0530AD.svg)](https://opensource.org/licenses/Apache-2.0) [![My Discord (1306431018890166272)](https://img.shields.io/badge/💬-Discord-%235865F2.svg)](https://discord.gg/QPyqFYx2UN)
-<br>
+**A vibe-coded playground for exploring everything [Pixeltable](https://github.com/pixeltable/pixeltable) can do**
+
+[![License](https://img.shields.io/badge/License-Apache%202.0-0530AD.svg)](https://opensource.org/licenses/Apache-2.0) [![Discord](https://img.shields.io/badge/Discord-%235865F2.svg)](https://discord.gg/QPyqFYx2UN)
+
+[Live Demo](http://agent.pixeltable.com/) · [Pixeltable Docs](https://docs.pixeltable.com/) · [Cookbooks](https://docs.pixeltable.com/docs/howto/cookbooks)
+
 </div>
 
-[Pixelbot](http://agent.pixeltable.com/), a multimodal context-aware AI agent built using [Pixeltable](https://github.com/pixeltable/pixeltable) — open-source AI data infrastructure. The agent can process and reason about various data types (documents, images, videos, audio), use external tools, search its knowledge base derived from uploaded files, generate images, maintain a chat history, and leverage a selective memory bank.
+---
 
-![Overview](/static/image/overview.gif)
+Pixelbot is an open-source sandbox built to explore, stress-test, and iterate on [Pixeltable](https://github.com/pixeltable/pixeltable) features. It's intentionally vibe-coded — we build fast, break things, and use the result to figure out what works, what's missing, and how to make Pixeltable better.
 
-The endpoint is built with Flask (Python) and the frontend with vanilla JS. This open source code replicates entirely what you can find at https://agent.pixeltable.com/ that is hosted on AWS EC2 instances.
+The app itself combines a **multimodal AI agent**, an interactive **data studio**, and **media generation** — all powered end-to-end by Pixeltable's declarative data infrastructure. Upload documents, images, videos, and audio, then chat with an agent that reasons across all of them, transform files hands-on in the Studio, or generate images and video with state-of-the-art models.
 
-## 🚀 How Pixeltable Powers This App
+![Overview](docs/images/overview.gif)
 
-Pixeltable acts as AI Data Infrastructure, simplifying the development of this complex, infinite-memory multimodal agent:
+## Why This Exists
 
--   📜 **Declarative Workflows**: The entire agent logic—from data ingestion and processing to LLM calls and tool execution—is defined declaratively using Pixeltable **tables**, **views**, and **computed columns** (`setup_pixeltable.py`). Pixeltable automatically manages dependencies and execution order.
--   🔀 **Unified Data Handling**: Natively handles diverse data types (documents, images, videos, audio) within its tables, eliminating the need for separate storage solutions.
--   ⚙️ **Automated Processing**: **Computed columns** automatically trigger functions (like thumbnail generation, audio extraction, transcription via Whisper, image generation via DALL-E) when new data arrives or dependencies change.
--   ✨ **Efficient Transformations**: **Views** and **Iterators** (like `DocumentSplitter`, `FrameIterator`, `AudioSplitter`) process data on-the-fly (e.g., chunking documents, extracting video frames) without duplicating the underlying data.
--   🔎 **Integrated Search**: **Embedding indexes** are easily added to tables/views, enabling powerful semantic search across text, images, and frames with simple syntax (`.similarity()`).
--   🔌 **Seamless Tool Integration**: Any Python function (`@pxt.udf`) or Pixeltable query function (`@pxt.query`) can be registered as a tool for the LLM using `pxt.tools()`. Pixeltable handles the invocation (`pxt.invoke_tools()`) based on the LLM's decision.
--   💾 **State Management**: Persistently stores all relevant application state (uploaded files, chat history, memory, generated images, workflow runs) within its managed tables.
+Pixeltable is building open-source AI data infrastructure that handles storage, indexing, transformation, and model orchestration declaratively. Pixelbot exists to:
 
-```mermaid
-flowchart TD
-    %% User Interaction
-    User([User]) -->|Query| ToolsTable[agents.tools]
-    User -->|Selective Memory| MemoryBankTable[agents.memory_bank]
-    User -->|Upload Files| SourceTables["agents.collection, agents.images, agents.videos, agents.audios"]
-    User -->|Generate Image| ImageGenTable[agents.image_generation_tasks]
+- **Exercise every feature** — tables, views, computed columns, iterators, embedding indexes, UDFs, tool calling, `@pxt.query`, similarity search, version control — all wired up in one app
+- **Discover rough edges** — if something is awkward to use, we find it here first
+- **Prototype use cases** — each feature in Pixelbot maps to a real Pixeltable use case (RAG, agents, media processing, data wrangling) that we can refine and document
+- **Ship cookbooks** — patterns that work here become [official cookbooks](https://docs.pixeltable.com/docs/howto/cookbooks) and [use-case guides](https://docs.pixeltable.com/docs/use-cases/ai-applications)
 
-    %% Main Agent Workflow
-    ToolsTable -->|Prompt| DocSearch[Search Documents]
-    ToolsTable -->|Prompt| ImageSearch[Search Images]
-    ToolsTable -->|Prompt| VideoFrameSearch[Search Video Frames]
+## What We're Exploring
 
-    ToolsTable -->|Prompt, Tools| InitialLLM[Claude 3.5 - Tools]
-    AvailableTools["**Available Tools**:
-    get_latest_news
-    fetch_financial_data
-    search_news
-    search_video_transcripts
-    search_audio_transcripts"] -.-> InitialLLM
-    InitialLLM -->|Tool Choice| ToolExecution[pxt.invoke_tools]
-    ToolExecution --> ToolOutput[Tool Output]
+### Pixeltable Features Exercised
 
-    %% Context Assembly
-    DocSearch -->|Context| AssembleTextContext[Assemble Text Context]
-    ImageSearch -->|Context| AssembleFinalMessages[Assemble Final Messages]
-    VideoFrameSearch -->|Context| AssembleFinalMessages
+| Pixeltable Feature | How Pixelbot Uses It | Cookbook Reference |
+|---|---|---|
+| **Tables & multimodal types** | `pxt.Document`, `pxt.Image`, `pxt.Video`, `pxt.Audio`, `pxt.Json` for all uploads | [Tables & Data Ops](https://docs.pixeltable.com/docs/tutorials/tables-and-data-operations) |
+| **Computed columns** | 11-step agent pipeline, thumbnails, audio extraction, auto-summarization — all triggered on insert | [Computed Columns](https://docs.pixeltable.com/docs/tutorials/computed-columns) |
+| **Views & iterators** | `DocumentSplitter` (page+sentence), `FrameIterator` (keyframes), `AudioSplitter` (30s/60s chunks), `StringSplitter` | [Iterators](https://docs.pixeltable.com/docs/platform/iterators) |
+| **Embedding indexes** | E5-large-instruct (text), CLIP (images, video frames) — `.similarity()` across all media | [Embedding Indexes](https://docs.pixeltable.com/docs/platform/embedding-indexes) |
+| **`@pxt.udf` functions** | News API, financial data, context assembly, text extraction, multimodal message building | [UDFs](https://docs.pixeltable.com/docs/platform/udfs-in-pixeltable) |
+| **`@pxt.query` functions** | `search_documents`, `search_images`, `search_video_frames`, `search_memory`, `search_chat_history` | [RAG Pipeline](https://docs.pixeltable.com/docs/howto/cookbooks/agents/pattern-rag-pipeline) |
+| **`pxt.tools()` + `invoke_tools()`** | Agent tool selection with Claude Sonnet 4, automatic tool execution | [Tool Calling](https://docs.pixeltable.com/docs/howto/cookbooks/agents/llm-tool-calling) |
+| **Agent memory** | Chat history table + memory bank with semantic search over past conversations | [Agent Memory](https://docs.pixeltable.com/docs/howto/cookbooks/agents/pattern-agent-memory) |
+| **LLM integrations** | Anthropic (Claude Sonnet 4), Google (Gemini 2.5 Flash, Imagen 4.0, Veo 3.0), OpenAI (Whisper, DALL-E 3) | [Integrations](https://docs.pixeltable.com/docs/integrations/frameworks) |
+| **PIL image transforms** | Resize, rotate, flip, blur, sharpen, edge detect, grayscale, brightness, contrast, saturation | [PIL Transforms](https://docs.pixeltable.com/docs/howto/cookbooks/images/img-pil-transforms) |
+| **Video UDFs** | `get_metadata`, `extract_frame`, `clip`, `overlay_text`, `scene_detect_content` | [Video Cookbooks](https://docs.pixeltable.com/docs/howto/cookbooks/video/video-extract-frames) |
+| **Document processing** | Auto-summarization (Gemini structured JSON), chunking, text extraction from Office formats | [Doc Chunking](https://docs.pixeltable.com/docs/howto/cookbooks/text/doc-chunk-for-rag) |
+| **CSV/tabular data** | Dynamic table creation, inline CRUD, type coercion via `tbl._get_schema()` | [Import CSV](https://docs.pixeltable.com/docs/howto/cookbooks/data/data-import-csv) |
 
-    ToolOutput -->|Context| AssembleTextContext
-    AssembleTextContext -->|Text Summary| AssembleFinalMessages
-    ToolsTable -->|Recent History| AssembleFinalMessages
-    MemIndex -->|Context| AssembleTextContext
-    ChatHistIndex -->|Context| AssembleTextContext
+### What's Still on the Roadmap
 
-    %% Final LLM Call & Output
-    AssembleFinalMessages -->|Messages| FinalLLM[Claude 3.5 - Answer]
-    FinalLLM -->|Answer| ExtractAnswer[Extract Answer]
-    ExtractAnswer -->|Answer| User
-    ExtractAnswer -->|Answer| LogChat[agents.chat_history]
-    ToolsTable -->|User Prompt| LogChat
+Pixeltable features and cookbook patterns we haven't wired up yet — contributions welcome:
 
-    %% Follow-up Generation
-    FinalLLM -->|Answer| FollowUpLLM[Mistral Small - Follow-up]
-    FollowUpLLM -->|Suggestions| User
+- [ ] **Object detection** — YOLOX / DETR on images and video frames ([cookbook](https://docs.pixeltable.com/docs/howto/cookbooks/images/img-detect-objects))
+- [ ] **Image captioning** — auto-generate descriptions ([cookbook](https://docs.pixeltable.com/docs/howto/cookbooks/images/img-generate-captions))
+- [ ] **Vision structured output** — extract structured data from images ([cookbook](https://docs.pixeltable.com/docs/howto/cookbooks/images/vision-structured-output))
+- [ ] **Image-to-image** — style transfer and editing ([cookbook](https://docs.pixeltable.com/docs/howto/cookbooks/images/img-image-to-image))
+- [ ] **Text-to-speech** — audio generation from text ([cookbook](https://docs.pixeltable.com/docs/howto/cookbooks/audio/audio-text-to-speech))
+- [ ] **Podcast summarization** — transcribe + summarize long audio ([cookbook](https://docs.pixeltable.com/docs/howto/cookbooks/audio/audio-summarize-podcast))
+- [ ] **Data export** — PyTorch DataLoader, Parquet, S3 push ([cookbooks](https://docs.pixeltable.com/docs/howto/cookbooks/data/data-export-pytorch))
+- [ ] **Version control** — snapshots and history tracking ([guide](https://docs.pixeltable.com/docs/howto/cookbooks/core/version-control-history))
+- [ ] **MCP integration** — expose Pixeltable tables as MCP tools ([guide](https://docs.pixeltable.com/docs/use-cases/agents-mcp))
+- [ ] **Label Studio / FiftyOne** — annotation workflows ([guide](https://docs.pixeltable.com/docs/howto/using-label-studio-with-pixeltable))
+- [ ] **Custom embedding models** — Voyage, Jina, OpenAI embeddings ([guide](https://docs.pixeltable.com/docs/integrations/embedding-model))
+- [ ] **Local models** — Ollama, Llama.cpp, WhisperX ([guide](https://docs.pixeltable.com/docs/howto/providers/working-with-ollama))
 
-    %% Image Generation Workflow
-    ImageGenTable -->|Prompt| OpenAI_Dalle[DALL-E 3]
-    OpenAI_Dalle -->|Image Data| ImageGenTable
-    ImageGenTable -->|Retrieve Image| User
+## The App
 
-    %% Supporting Structures
-    SourceTables --> Views[**Materialized Views**
-    Chunks, Frames, Sentences]
-    Views --> Indexes[Embedding Indexes
-    E5, CLIP]
-    MemoryBankTable --> MemIndex[Search Memory]
-    LogChat --> ChatHistIndex[Search Conversations]
+### Chat — Multimodal AI Agent
 
-    %% Styling
-    classDef table fill:#E1C1E9,stroke:#333,stroke-width:1px
-    classDef view fill:#C5CAE9,stroke:#333,stroke-width:1px
-    classDef llm fill:#FFF9C4,stroke:#333,stroke-width:1px
-    classDef workflow fill:#E1F5FE,stroke:#333,stroke-width:1px
-    classDef search fill:#C8E6C9,stroke:#333,stroke-width:1px
-    classDef tool fill:#FFCCBC,stroke:#333,stroke-width:1px
-    classDef io fill:#fff,stroke:#000,stroke-width:2px
+Ask questions and get answers grounded in your uploaded files. The agent searches across documents, images, video frames, and audio transcripts, calls external tools, and assembles multimodal context before responding.
 
-    class User io
-    class ToolsTable,,SourceTables,ImageGenTable,LogChat,MemoryBankTable table
-    class Views view
-    class Indexes,MemIndex,ChatHistIndex search
-    class InitialLLM,FinalLLM,FollowUpLLM,OpenAI_Dalle llm
-    class DocSearch,ImageSearch,VideoFrameSearch,MemorySearch,ChatHistorySearch search
-    class ToolExecution,AvailableTools,ToolOutput tool
-    class AssembleTextContext,AssembleFinalMessages,ExtractAnswer workflow
-```
+- Semantic search across all media types (text, image, video, audio)
+- Tool calling with external APIs (NewsAPI, yfinance, DuckDuckGo)
+- Image & video generation (Imagen 4.0 / DALL-E 3, Veo 3.0)
+- Follow-up suggestions via Gemini 2.5 Flash
+- Persistent chat history and selective memory bank
+- Customizable personas with adjustable system prompts and LLM parameters
+- Markdown rendering with code blocks, tables, and lists
 
-## 📁 Project Structure
+### Studio — Interactive Data Wrangler
 
-```
-.
-├── .env                  # Environment variables (API keys, AUTH_MODE)
-├── .venv/                # Virtual environment files (if created here)
-├── data/                 # Default directory for uploaded/source media files
-├── logs/                 # Application logs
-│   └── app.log
-├── static/               # Static assets for Flask frontend (CSS, JS, Images)
-│   ├── css/style.css
-│   ├── image/*.png
-│   ├── js/
-│   │   ├── api.js
-│   │   └── ui.js
-│   └── manifest.json
-│   └── robots.txt
-│   └── sitemap.xml
-├── templates/            # HTML templates for Flask frontend
-│   └── index.html
-├── endpoint.py           # Flask backend: API endpoints and UI rendering
-├── functions.py          # Python UDFs and context assembly logic
-├── config.py             # Central configuration (model IDs, defaults, personas)
-├── requirements.txt      # Python dependencies
-└── setup_pixeltable.py   # Pixeltable schema definition script
-```
+Browse uploaded files and apply operations powered by Pixeltable UDFs:
 
-## 📊 Pixeltable Schema Overview
+- **Documents**: Auto-generated summaries (Gemini structured JSON), sentence-level chunks with metadata
+- **Images**: PIL transforms with live before/after preview, save back to Pixeltable or download
+- **Videos**: Keyframe extraction, clip creation, text overlay, scene detection, metadata inspection, transcriptions
+- **Audio**: Transcriptions with sentence-level breakdown
+- **CSV**: Inline cell editing, add/delete rows — all via Pixeltable `insert()`/`update()`/`delete()` primitives
+- **Cross-modal search**: Semantic search across all file types via `.similarity()` on embedding indexes
+- **Embedding map**: Interactive 2D t-SNE visualization of text and visual embedding spaces
 
-Pixeltable organizes data in directories, tables, and views. This application uses the following structure within the `agents` directory:
+### Media — Image & Video Generation
 
-```
-agents/
-├── collection              # Table: Source documents (PDF, TXT, etc.)
-│   ├── document: pxt.Document
-│   ├── uuid: pxt.String
-│   └── timestamp: pxt.Timestamp
-├── images                  # Table: Source images
-│   ├── image: pxt.Image
-│   ├── uuid: pxt.String
-│   ├── timestamp: pxt.Timestamp
-│   └── thumbnail: pxt.String(computed) # Base64 sidebar thumbnail
-├── videos                  # Table: Source videos
-│   ├── video: pxt.Video
-│   ├── uuid: pxt.String
-│   ├── timestamp: pxt.Timestamp
-│   └── audio: pxt.Audio(computed)      # Extracted audio (used by audio_chunks view)
-├── audios                  # Table: Source audio files (MP3, WAV)
-│   ├── audio: pxt.Audio
-│   ├── uuid: pxt.String
-│   └── timestamp: pxt.Timestamp
-├── chat_history            # Table: Stores conversation turns
-│   ├── role: pxt.String        # 'user' or 'assistant'
-│   ├── content: pxt.String
-│   └── timestamp: pxt.Timestamp
-├── memory_bank             # Table: Saved text/code snippets
-│   ├── content: pxt.String
-│   ├── type: pxt.String         # 'code' or 'text'
-│   ├── language: pxt.String    # e.g., 'python'
-│   ├── context_query: pxt.String # Original query or note
-│   └── timestamp: pxt.Timestamp
-├── image_generation_tasks  # Table: Image generation requests & results
-│   ├── prompt: pxt.String
-│   ├── timestamp: pxt.Timestamp
-│   └── generated_image: pxt.Image(computed) # DALL-E 3 output
-├── user_personas           # Table: User-defined personas
-│   ├── persona_name: pxt.String
-│   ├── initial_prompt: pxt.String
-│   ├── final_prompt: pxt.String
-│   ├── llm_params: pxt.Json
-│   └── timestamp: pxt.Timestamp
-├── tools                   # Table: Main agent workflow orchestration
-│   ├── prompt: pxt.String
-│   ├── timestamp: pxt.Timestamp
-│   ├── user_id: pxt.String
-│   ├── initial_system_prompt: pxt.String
-│   ├── final_system_prompt: pxt.String
-│   ├── max_tokens, stop_sequences, temperature, top_k, top_p # LLM Params
-│   ├── initial_response: pxt.Json(computed)  # Claude tool choice output
-│   ├── tool_output: pxt.Json(computed)       # Output from executed tools (UDFs or Queries)
-│   ├── doc_context: pxt.Json(computed)       # Results from document search
-│   ├── image_context: pxt.Json(computed)     # Results from image search
-│   ├── video_frame_context: pxt.Json(computed) # Results from video frame search
-│   ├── memory_context: pxt.Json(computed)    # Results from memory bank search
-│   ├── chat_memory_context: pxt.Json(computed) # Results from chat history search
-│   ├── history_context: pxt.Json(computed)   # Recent chat turns
-│   ├── multimodal_context_summary: pxt.String(computed) # Assembled text context for final LLM
-│   ├── final_prompt_messages: pxt.Json(computed) # Fully assembled messages (incl. images/frames) for final LLM
-│   ├── final_response: pxt.Json(computed)    # Claude final answer generation output
-│   ├── answer: pxt.String(computed)          # Extracted text answer
-│   ├── follow_up_input_message: pxt.String(computed) # Formatted prompt for Mistral
-│   ├── follow_up_raw_response: pxt.Json(computed) # Raw Mistral response
-│   └── follow_up_text: pxt.String(computed) # Extracted follow-up suggestions
-├── chunks                  # View: Document chunks via DocumentSplitter
-│   └── (Implicit: EmbeddingIndex: E5-large-instruct on text)
-├── video_frames            # View: Video frames via FrameIterator (1 FPS)
-│   └── (Implicit: EmbeddingIndex: CLIP on frame)
-├── video_audio_chunks      # View: Audio chunks from video table via AudioSplitter
-│   └── transcription: pxt.Json(computed)   # Whisper transcription
-├── video_transcript_sentences # View: Sentences from video transcripts via StringSplitter
-│   └── (Implicit: EmbeddingIndex: E5-large-instruct on text)
-├── audio_chunks            # View: Audio chunks from audio table via AudioSplitter
-│   └── transcription: pxt.Json(computed)   # Whisper transcription
-└── audio_transcript_sentences # View: Sentences from direct audio transcripts via StringSplitter
-    └── (Implicit: EmbeddingIndex: E5-large-instruct on text)
+- Tabbed generation UI for images (Imagen 4.0 / DALL-E 3) and videos (Veo 3.0)
+- Gallery with search, detail view, download
+- "Save to Collection" — push generated media into the main tables for automatic CLIP embedding, keyframe extraction, transcription, and RAG indexing
 
-# Available Tools (Registered via pxt.tools()):
-# - functions.get_latest_news (UDF)
-# - functions.fetch_financial_data (UDF)
-# - functions.search_news (UDF)
-# - search_video_transcripts (@pxt.query function)
-# - search_audio_transcripts (@pxt.query function)
+### Architecture — Interactive Diagram
 
-# Embedding Indexes Enabled On:
-# - agents.chunks.text
-# - agents.images.image
-# - agents.video_frames.frame
-# - agents.video_transcript_sentences.text
-# - agents.audio_transcript_sentences.text
-# - agents.memory_bank.content
-# - agents.chat_history.content
-```
+A full React Flow diagram of the Pixeltable schema (38 nodes, 40 edges) showing every table, view, index, model, UDF, and data flow. Click any node to highlight its connections. Organized into swim lanes: Documents, Images, Video, Audio, Agent Pipeline, Knowledge, Config, Generation.
 
-## ▶️ Getting Started
+### History — Debug & Export
+
+- Workflow history with search and detail view
+- **Debug Export** — download the full `agents.tools` table with all 21 columns (prompts, tool outputs, LLM responses, contexts, follow-ups) for row-level pipeline inspection
+
+## How Pixeltable Powers Everything
+
+Pixeltable replaces the need for separate vector databases, object stores, ETL pipelines, and orchestration frameworks:
+
+- **Declarative workflows** — The entire pipeline (ingestion → processing → LLM calls → tool execution → answer) is defined with tables, views, and computed columns in `setup_pixeltable.py`. Pixeltable manages execution order automatically.
+- **Unified multimodal storage** — Documents, images, videos, and audio live in native Pixeltable tables with first-class type support.
+- **Automated processing** — Computed columns trigger on insert: thumbnail generation, audio extraction, Whisper transcription, embedding computation, auto-summarization.
+- **Views & iterators** — `DocumentSplitter`, `FrameIterator`, `AudioSplitter`, `StringSplitter` transform data without duplicating it.
+- **Built-in vector search** — Embedding indexes enable `.similarity()` queries across text (E5-large-instruct), images (CLIP), and video frames (CLIP).
+- **Tool integration** — `@pxt.udf` and `@pxt.query` functions registered as LLM tools via `pxt.tools()`.
+- **Persistent state** — All data survives restarts. Files, chat history, memory, generated media, workflow runs — everything is in managed tables at `~/.pixeltable/`.
+
+## Getting Started
 
 ### Prerequisites
 
-You are welcome to swap any of the below calls, e.g. [WhisperX](https://docs.pixeltable.com/docs/examples/search/audio) instead of OpenAI Whisper, [Llama.cpp](https://docs.pixeltable.com/docs/integrations/frameworks#local-llm-runtimes) instead of Mistral... either through our built-in modules or by bringing your own models, frameworks, and API calls. See our [integration](https://docs.pixeltable.com/docs/integrations/frameworks) and [UDFs](https://docs.pixeltable.com/docs/datastore/custom-functions) pages to learn more. You can easily make this applicaiton entirely local if you decide to rely on local LLM runtimes and local embedding/transcription solutions.
+- Python 3.10+
+- Node.js 18+
+- API keys:
+  - [Anthropic](https://console.anthropic.com/) — reasoning & tool use (Claude Sonnet 4)
+  - [Google AI](https://ai.google.dev/) — summarization, follow-ups, image & video generation (Gemini 2.5 Flash, Imagen 4.0, Veo 3.0)
+  - [OpenAI](https://platform.openai.com/api-keys) — transcription & optional image gen (Whisper, DALL-E 3)
+  - [NewsAPI](https://newsapi.org/) — optional, 100 req/day free
 
--   Python 3.9+
--   API Keys:
-    -   [Anthropic](https://console.anthropic.com/)
-    -   [OpenAI](https://platform.openai.com/api-keys)
-    -   [Mistral AI](https://console.mistral.ai/api-keys/)
-    -   [NewsAPI](https://newsapi.org/) (100 requests per day free)
+> All LLM providers are swappable. Pixeltable supports [local runtimes](https://docs.pixeltable.com/docs/howto/providers/working-with-ollama) (Ollama, Llama.cpp, WhisperX) and [20+ integrations](https://docs.pixeltable.com/docs/integrations/frameworks). You can make this entirely local.
 
 ### Installation
 
 ```bash
-# 1. Create and activate a virtual environment (recommended)
+# Backend
+cd backend
 python -m venv .venv
-# Windows: .venv\Scripts\activate
-# macOS/Linux: source .venv/bin/activate
-
-# 2. Install dependencies
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
+
+# Frontend
+cd ../frontend
+npm install
 ```
 
 ### Environment Setup
 
-Create a `.env` file in the project root and add your API keys. Keys marked with `*` are required for core LLM functionality.
+Create `backend/.env`:
 
 ```dotenv
-# Required for Core LLM Functionality *
-ANTHROPIC_API_KEY=sk-ant-api03-...  # For main reasoning/tool use (Claude 3.5 Sonnet)
-OPENAI_API_KEY=sk-...             # For audio transcription (Whisper) & image generation (DALL-E 3)
-MISTRAL_API_KEY=...               # For follow-up question suggestions (Mistral Small)
+# Required
+ANTHROPIC_API_KEY=sk-ant-...
+OPENAI_API_KEY=sk-...
+GOOGLE_API_KEY=...
 
-# Optional (Enable specific tools by providing keys)
-NEWS_API_KEY=...                  # Enables the NewsAPI tool
-# Note: yfinance and DuckDuckGo Search tools do not require API keys.
+# Optional
+NEWS_API_KEY=...
 
-# --- !!**Authentication Mode (required to run locally)**!! ---
-# Set to 'local' to bypass the WorkOS authentication used at agent.pixeltable.com and to leverage a default user.
-# Leaving unset will result in errors
-AUTH_MODE=local
+# Generation provider ("gemini" or "openai")
+IMAGE_GEN_PROVIDER=gemini
+VIDEO_GEN_PROVIDER=gemini
 ```
 
-### Running the Application
+### Running
 
-1.  **Initialize Pixeltable Schema:**
-    This script creates the necessary Pixeltable directories, tables, views, and computed columns defined in `setup_pixeltable.py`. Run this *once* initially.
+```bash
+# 1. Initialize schema (first time only)
+cd backend && python setup_pixeltable.py
 
-    *Why run this?* This defines the data structures and the declarative AI workflow within Pixeltable. It tells Pixeltable how to store, transform, index, and process your data automatically.
+# 2. Start backend
+python main.py                # http://localhost:8000
 
-    ```bash
-    python setup_pixeltable.py
-    ```
+# 3. Start frontend (dev)
+cd ../frontend && npm run dev  # http://localhost:5173 → proxies /api to :8000
+```
 
-2.  **Start the Web Server:**
-    This runs the Flask application using the Waitress production server by default.
+**Production build:**
 
-    ```bash
-    python endpoint.py
-    ```
+```bash
+cd frontend && npm run build   # → backend/static/
+cd ../backend && python main.py # serves everything at :8000
+```
 
-    The application will be available at `http://localhost:5000`.
+## Tech Stack
 
-**Data Persistence Note:** Pixeltable stores all its data (file references, tables, views, indexes) locally, typically in a `.pixeltable` directory created within your project workspace. This means your uploaded files, generated images, chat history, and memory bank are persistent across application restarts.
+| Layer | Technology |
+|---|---|
+| Data infrastructure | [Pixeltable](https://github.com/pixeltable/pixeltable) |
+| Backend | FastAPI (Python) |
+| Frontend | React, TypeScript, Tailwind CSS, Radix UI |
+| Reasoning & tools | Anthropic Claude Sonnet 4 |
+| Summarization & follow-ups | Google Gemini 2.5 Flash |
+| Transcription | OpenAI Whisper |
+| Image generation | Google Imagen 4.0 / OpenAI DALL-E 3 (configurable) |
+| Video generation | Google Veo 3.0 |
+| Text embeddings | E5-large-instruct (multilingual) |
+| Visual embeddings | CLIP ViT-B/32 |
 
-## 🖱️ Usage Overview
+## Project Structure
 
-The web interface provides several tabs:
+```
+.
+├── backend/                   # FastAPI backend
+│   ├── main.py                # App entrypoint (FastAPI, CORS, lifespan, static serving)
+│   ├── config.py              # Model IDs, prompts, LLM params, generation providers
+│   ├── models.py              # Pydantic row models for Pixeltable inserts
+│   ├── functions.py           # @pxt.udf and @pxt.query functions
+│   ├── queries.py             # Reusable Pixeltable query helpers
+│   ├── setup_pixeltable.py    # Pixeltable schema (tables, views, computed columns, indexes)
+│   └── routers/
+│       ├── chat.py            # POST /api/query — agent workflow
+│       ├── files.py           # Upload, URL import, delete, context info
+│       ├── history.py         # Workflow detail, export, debug export
+│       ├── images.py          # Image/video generation, save to collection
+│       ├── memory.py          # Memory bank CRUD + export
+│       ├── personas.py        # Persona CRUD
+│       └── studio.py          # File browsing, transforms, chunks, frames, transcripts, CSV CRUD
+├── frontend/                  # React + TypeScript + Tailwind
+│   └── src/
+│       ├── components/
+│       │   ├── chat/          # Chat page (messages, personas, follow-ups, markdown rendering)
+│       │   ├── studio/        # Studio (file browser, transforms, search, embedding map, CSV editor)
+│       │   ├── architecture/  # React Flow architecture diagram (manual grid layout, swim lanes)
+│       │   ├── history/       # Workflow history + debug export
+│       │   ├── images/        # Media generation (images + videos) with save to collection
+│       │   ├── memory/        # Memory bank with semantic search
+│       │   └── settings/      # Persona editor
+│       ├── lib/api.ts         # Typed API client
+│       └── types/index.ts     # Shared TypeScript interfaces
+└── CODEGASE_GUIDE.md          # Internal codebase reference (auto-maintained)
+```
 
--   **Chat Interface**: Main interaction area. Ask questions, switch between chat and image generation modes. View results, including context retrieved (images, video frames) and follow-up suggestions. Save responses to the Memory Bank.
--   **Agent Settings**: Configure the system prompts (initial for tool use, final for answer generation) and LLM parameters (temperature, max tokens, etc.) used by Claude.
--   **Chat History**: View past queries and responses. Search history and view detailed execution metadata for each query. Download history as JSON.
--   **Generated Images**: View images created using the image generation mode. Search by prompt, view details, download, or delete images.
--   **Memory Bank**: View, search, manually add, and delete saved text/code snippets. Download memory as JSON.
--   **How it Works**: Provides a technical overview of how Pixeltable powers the application's features.
+## Related Pixeltable Projects
 
-## ⭐ Key Features
+- [**Pixeltable**](https://github.com/pixeltable/pixeltable) — the core library
+- [**Pixelagent**](https://github.com/pixeltable/pixelagent) — lightweight agent framework with built-in memory
+- [**Pixelmemory**](https://github.com/pixeltable/pixelmemory) — persistent memory layer for AI apps
+- [**MCP Server**](https://github.com/pixeltable/mcp-server-pixeltable-developer) — Model Context Protocol server for Claude, Cursor, and AI IDEs
 
--   💾 **Unified Multimodal Data Management**: Ingests, manages, process, and index documents (text, PDFs, markdown), images (JPG, PNG), videos (MP4), and audio files (MP3, WAV) using Pixeltable's specialized [data types](https://docs.pixeltable.com/docs/datastore/bringing-data).
--   ⚙️ **Declarative AI Workloads**: Leverages Pixeltable's **[computed columns](https://docs.pixeltable.com/docs/datastore/computed-columns)** and **[views](https://docs.pixeltable.com/docs/datastore/views)** to declaratively define complex conditional workflows including data processing (chunking, frame extraction, audio extraction), embedding generation, AI model inference, and context assembly while maintaining data lineage and versioning.
--   🧠 **Agentic RAG & Tool Use**: The agent dynamically decides which tools to use based on the query. Available tools include:
-    -   **External APIs**: Fetching news (NewsAPI, DuckDuckGo), financial data (yfinance).
-    -   **Internal Knowledge Search**: Pixeltable `@pxt.query` functions are registered as tools, allowing the agent to search video transcripts and audio transcripts on demand, as an example.
--   🔍 **Semantic Search**: Implements [vector search](https://docs.pixeltable.com/docs/datastore/vector-database) across multiple modalities, powered by any **embedding indexes** that Pixeltable incrementally and automatically maintain:
-    -   Document Chunks (`sentence-transformers`)
-    -   Images & Video Frames (`CLIP`)
-    -   Chat History (`sentence-transformers`)
-    -   Memory Bank items (`sentence-transformers`)
--   🔌 **LLM Integration**: Seamlessly [integrates](https://docs.pixeltable.com/docs/integrations/frameworks) multiple LLMs for different tasks within the Pixeltable workflow:
-    -   **Reasoning & Tool Use**: Anthropic Claude 3.5 Sonnet
-    -   **Audio Transcription**: OpenAI Whisper (via computed columns on audio chunks)
-    -   **Image Generation**: OpenAI DALL-E 3 (via computed columns on image prompts)
-    -   **Follow-up Suggestions**: Mistral Small Latest
--   💬 **Chat History**: Persistently stores conversation turns in a Pixeltable [table](https://docs.pixeltable.com/docs/datastore/tables-and-operations) (`agents.chat_history`), enabling retrieval and semantic search over past interactions.
--   📝 **Memory Bank**: Allows saving and semantically searching important text snippets or code blocks stored in a dedicated Pixeltable table (`agents.memory_bank`).
--   🖼️ **Image Generation**: Generates images based on user prompts using DALL-E 3, orchestrated via a Pixeltable table (`agents.image_generation_tasks`).
--   🏠 **Local Mode**: Supports running locally without external authentication ([WorkOS](https://github.com/workos/python-flask-example-applications)) (`AUTH_MODE=local`) for easier setup and development.
--   🖥️ **Responsive UI**: A clean web interface built with Flask, Tailwind CSS, and JavaScript.
--   🛠️ **Centralized Configuration**: Uses an arbitraty `config.py` to manage model IDs, default system prompts, LLM parameters, and persona presets.
+## Contributing
 
-## ⚠️ Disclaimer
+This is a playground — rough edges are expected. If you find a Pixeltable feature that's missing or awkward, that's exactly the kind of thing we want to know about. Open an issue or PR.
 
-This application serves as a comprehensive demonstration of Pixeltable's capabilities for managing complex multimodal AI workflows, covering data storage, transformation, indexing, retrieval, and serving.
+## License
 
-The primary focus is on illustrating Pixeltable patterns and best practices within the `setup_pixeltable.py` script and related User-Defined Functions (`functions.py`).
-
-While functional, less emphasis was placed on optimizing the Flask application (`endpoint.py`) and the associated frontend components (`style.css`, `index.html`, `ui.js`...). These parts should not necessarily be considered exemplars of web development best practices.
-
-For simpler examples demonstrating Pixeltable integration with various frameworks (FastAPI, React, TypeScript, Gradio, etc.), please refer to the [Pixeltable Examples Documentation](https://docs.pixeltable.com/docs/examples/use-cases).
+Apache 2.0 — see [LICENSE](LICENSE).

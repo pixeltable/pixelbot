@@ -1,0 +1,244 @@
+@import "tailwindcss";
+
+/* ─── Kandinsky Design System ─────────────────────────────────────────────── */
+
+@theme {
+  /* Brand Colors */
+  --color-k-yellow: #F1AE03;
+  --color-k-yellow-hover: #D99D02;
+  --color-k-red: #DC2404;
+  --color-k-blue: #022A59;
+  --color-k-blue-light: #7DA8EF;
+  --color-k-black: #020704;
+
+  /* Light theme (default) */
+  --color-border: #e2e2e0;
+  --color-input: #e2e2e0;
+  --color-ring: #070000;
+  --color-background: #fafaf9;
+  --color-foreground: #070000;
+  --color-primary: #070000;
+  --color-primary-foreground: #fafaf9;
+  --color-secondary: #f4f4f3;
+  --color-secondary-foreground: #070000;
+  --color-destructive: #DC2404;
+  --color-destructive-foreground: #ffffff;
+  --color-muted: #f4f4f3;
+  --color-muted-foreground: #6b6b6b;
+  --color-accent: #f0f0ee;
+  --color-accent-foreground: #070000;
+  --color-card: #ffffff;
+  --color-card-foreground: #070000;
+
+  --radius-sm: 0.25rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.5rem;
+}
+
+/* ─── Dark theme ─────────────────────────────────────────────────────────── */
+@media (prefers-color-scheme: dark) {
+  @theme {
+    --color-border: #232323;
+    --color-input: #2a2a2a;
+    --color-ring: #F1AE03;
+    --color-background: #0a0a0a;
+    --color-foreground: #ececec;
+    --color-primary: #F1AE03;
+    --color-primary-foreground: #0a0a0a;
+    --color-secondary: #161616;
+    --color-secondary-foreground: #ececec;
+    --color-destructive: #DC2404;
+    --color-destructive-foreground: #ffffff;
+    --color-muted: #141414;
+    --color-muted-foreground: #888888;
+    --color-accent: #1a1a1a;
+    --color-accent-foreground: #ececec;
+    --color-card: #111111;
+    --color-card-foreground: #ececec;
+  }
+}
+
+/* ─── Base styles ────────────────────────────────────────────────────────── */
+
+html {
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+  min-height: 100vh;
+  min-height: 100dvh;
+  line-height: 1.6;
+}
+
+* {
+  box-sizing: border-box;
+  border-color: var(--color-border);
+}
+
+/* ─── Scrollbar ──────────────────────────────────────────────────────────── */
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: var(--color-border);
+  border-radius: 3px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--color-muted-foreground);
+}
+
+/* ─── Animations ─────────────────────────────────────────────────────────── */
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slide-in-left {
+  from { opacity: 0; transform: translateX(-12px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes pulse-subtle {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.3s ease-out forwards;
+}
+
+.animate-slide-in {
+  animation: slide-in-left 0.25s ease-out forwards;
+}
+
+.animate-pulse-subtle {
+  animation: pulse-subtle 1.5s ease-in-out infinite;
+}
+
+/* ─── Prose for markdown ─────────────────────────────────────────────────── */
+
+.prose-chat {
+  font-size: 0.875rem;
+  line-height: 1.65;
+}
+
+.prose-chat p {
+  margin: 0.5em 0;
+}
+
+.prose-chat p:first-child {
+  margin-top: 0;
+}
+
+.prose-chat p:last-child {
+  margin-bottom: 0;
+}
+
+.prose-chat pre {
+  background: #1a1d2e;
+  color: #e2e8f0;
+  padding: 0.75rem 1rem;
+  border-radius: 0.375rem;
+  overflow-x: auto;
+  margin: 0.5em 0;
+  font-size: 0.8125rem;
+}
+
+.prose-chat code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.8125rem;
+}
+
+.prose-chat code:not(pre code) {
+  background: var(--color-muted);
+  padding: 0.125rem 0.375rem;
+  border-radius: 0.25rem;
+  font-size: 0.8125rem;
+}
+
+.prose-chat ul {
+  list-style-type: disc;
+  padding-left: 1.5em;
+  margin: 0.5em 0;
+}
+
+.prose-chat ol {
+  list-style-type: decimal;
+  padding-left: 1.5em;
+  margin: 0.5em 0;
+}
+
+.prose-chat li {
+  margin: 0.25em 0;
+}
+
+.prose-chat strong {
+  font-weight: 600;
+}
+
+.prose-chat a {
+  color: var(--color-k-blue-light);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.prose-chat blockquote {
+  border-left: 3px solid var(--color-k-yellow);
+  padding-left: 1rem;
+  color: var(--color-muted-foreground);
+  margin: 0.5em 0;
+}
+
+.prose-chat h1, .prose-chat h2, .prose-chat h3 {
+  font-weight: 600;
+  margin: 1em 0 0.5em;
+}
+
+.prose-chat table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.5em 0;
+}
+
+.prose-chat th, .prose-chat td {
+  border: 1px solid var(--color-border);
+  padding: 0.375rem 0.75rem;
+  text-align: left;
+  font-size: 0.8125rem;
+}
+
+.prose-chat th {
+  background: var(--color-muted);
+  font-weight: 600;
+}
+
+.prose-chat hr {
+  border-color: var(--color-border);
+  margin: 1em 0;
+}
+
+.prose-chat img {
+  max-width: 100%;
+  border-radius: 0.5rem;
+}

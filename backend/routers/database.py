@@ -1,0 +1,235 @@
+"""Database introspection router — browse the Pixeltable catalog."""
+
+import logging
+from datetime import datetime
+
+from fastapi import APIRouter, HTTPException
+import pixeltable as pxt
+
+logger = logging.getLogger(__name__)
+router = APIRouter(prefix="/api/db", tags=["database"])
+
+NAMESPACE = "agents"
+
+
+def _safe_value(val: object) -> object:
+    """Convert a Pixeltable value to a JSON-safe representation."""
+    if val is None or isinstance(val, (str, int, float, bool)):
+        return val
+    if isinstance(val, datetime):
+        return val.isoformat()
+    if isinstance(val, bytes):
+        return f"<binary {len(val)} bytes>"
+    if isinstance(val, dict):
+        return {k: _safe_value(v) for k, v in val.items()}
+    if isinstance(val, (list, tuple)):
+        return [_safe_value(item) for item in val]
+    s = str(val)
+    if len(s) > 300:
+        return s[:300] + "..."
+    return s
+
+
+def _column_info(tbl) -> list[dict]:
+    """Extract column info from a table: name, type, whether computed."""
+    schema = tbl._get_schema()
+    col_names = tbl.columns()
+
+    # Computed columns have expressions; insertable ones don't.
+    # We can detect computed columns by checking tbl._tbl_version_path metadata.
+    computed_cols: set[str] = set()
+    try:
+        for col in tbl._tbl_version_path.columns():
+            if col.is_computed:
+                computed_cols.add(col.name)
+    except Exception:
+        pass
+
+    columns = []
+    for name in col_names:
+        col_type = schema.get(name)
+        columns.append({
+            "name": name,
+            "type": str(col_type) if col_type else "unknown",
+            "is_computed": name in computed_cols,
+        })
+    return columns
+
+
+@router.get("/tables")
+def list_all_tables():
+    """List all tables and views in the agents namespace with schema info."""
+    try:
+        table_paths = pxt.list_tables(NAMESPACE, recursive=True)
+
+        tables = []
+        for path in sorted(table_paths):
+            try:
+                tbl = pxt.get_table(path)
+                base = tbl.get_base_table()
+                row_count = tbl.count()
+
+                # get_base_table() returns a Table object; extract just the path name
+                base_path = None
+                if base is not None:
+                    try:
+                        base_path = base._tbl_version_path.tbl_version.get().path_str()
+                    except Exception:
+                        base_path = "unknown"
+
+                tables.append({
+                    "path": path,
+                    "type": "view" if base is not None else "table",
+                    "base_table": base_path,
+                    "columns": _column_info(tbl),
+                    "row_count": row_count,
+                })
+            except Exception as e:
+                logger.warning(f"Could not inspect table {path}: {e}")
+                tables.append({
+                    "path": path,
+                    "type": "unknown",
+                    "base_table": None,
+                    "columns": [],
+                    "row_count": 0,
+                    "error": str(e),
+                })
+
+        return {"namespace": NAMESPACE, "tables": tables, "count": len(tables)}
+
+    except Exception as e:
+        logger.error(f"Error listing tables: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/table/{path:path}/rows")
+def get_table_rows(path: str, limit: int = 50, offset: int = 0):
+    """Fetch rows from a table with pagination."""
+    try:
+        tbl = pxt.get_table(path)
+    except Exception:
+        raise HTTPException(status_code=404, detail=f"Table '{path}' not found")
+
+    try:
+        total = tbl.count()
+        col_names = tbl.columns()
+
+        raw_rows = tbl.select().limit(limit).collect()
+        # Apply offset manually (Pixeltable collect doesn't have skip)
+        # Actually we can use head/tail but let's keep it simple with limit for now
+
+        rows = []
+        for raw in raw_rows:
+            row: dict = {}
+            for col in col_names:
+                val = raw.get(col)
+                row[col] = _safe_value(val)
+            rows.append(row)
+
+        return {
+            "path": path,
+            "columns": col_names,
+            "rows": rows,
+            "total": total,
+            "offset": offset,
+            "limit": limit,
+        }
+
+    except Exception as e:
+        logger.error(f"Error fetching rows from {path}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/table/{path:path}/schema")
+def get_table_schema(path: str):
+    """Get detailed schema for a specific table."""
+    try:
+        tbl = pxt.get_table(path)
+    except Exception:
+        raise HTTPException(status_code=404, detail=f"Table '{path}' not found")
+
+    try:
+        base = tbl.get_base_table()
+        base_path = None
+        if base is not None:
+            try:
+                base_path = base._tbl_version_path.tbl_version.get().path_str()
+            except Exception:
+                base_path = "unknown"
+        return {
+            "path": path,
+            "type": "view" if base is not None else "table",
+            "base_table": base_path,
+            "columns": _column_info(tbl),
+            "row_count": tbl.count(),
+        }
+
+    except Exception as e:
+        logger.error(f"Error getting schema for {path}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/timeline")
+def get_timeline(limit: int = 100):
+    """Unified chronological feed across all timestamped tables."""
+    events: list[dict] = []
+
+    # Tables with timestamp columns that represent meaningful activity
+    TIMELINE_SOURCES = [
+        ("agents/tools", "prompt", "Query"),
+        ("agents/chat_history", "content", "Chat"),
+        ("agents/memory_bank", "content", "Memory"),
+        ("agents/collection", "document", "Document"),
+        ("agents/images", "image", "Image"),
+        ("agents/videos", "video", "Video"),
+        ("agents/audios", "audio", "Audio"),
+        ("agents/image_generation_tasks", "prompt", "ImageGen"),
+        ("agents/video_generation_tasks", "prompt", "VideoGen"),
+        ("agents/csv_registry", "display_name", "CSV"),
+        ("agents/user_personas", "persona_name", "Persona"),
+    ]
+
+    for table_path, label_col, event_type in TIMELINE_SOURCES:
+        try:
+            tbl = pxt.get_table(table_path)
+            cols = tbl.columns()
+            if "timestamp" not in cols:
+                continue
+
+            # Select timestamp + label column + any role column
+            select_cols = {"timestamp": tbl.timestamp}
+            if label_col in cols:
+                select_cols["label"] = getattr(tbl, label_col)
+            if "role" in cols:
+                select_cols["role"] = tbl.role
+            if "user_id" in cols:
+                select_cols["user_id"] = tbl.user_id
+
+            rows = tbl.select(**select_cols).limit(limit).collect()
+
+            for row in rows:
+                ts = row.get("timestamp")
+                label_val = row.get("label", "")
+                role = row.get("role")
+
+                # Build display label
+                display = str(label_val) if label_val else "(no label)"
+                if len(display) > 150:
+                    display = display[:150] + "..."
+
+                events.append({
+                    "table": table_path,
+                    "type": event_type,
+                    "role": role,
+                    "label": display,
+                    "timestamp": ts.isoformat() if ts else None,
+                    "user_id": row.get("user_id"),
+                })
+
+        except Exception as e:
+            logger.warning(f"Timeline: could not read {table_path}: {e}")
+
+    # Sort by timestamp descending (most recent first)
+    events.sort(key=lambda e: e.get("timestamp") or "", reverse=True)
+
+    return {"events": events[:limit], "total": len(events)}
