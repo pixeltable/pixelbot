@@ -35,6 +35,7 @@ import {
   GitBranch,
   Globe,
   UserCog,
+  FlaskConical,
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -120,6 +121,11 @@ const SCHEMA_NODES: SchemaNode[] = [
   { id: 'imagen', label: 'Imagen / DALL-E', type: 'model', icon: Sparkles, description: 'Gemini Imagen 4.0 or OpenAI DALL-E 3. Can be saved to Images collection for CLIP + RAG.', color: '#f472b6', details: ['generated_image (computed)', 'thumbnail 128×128', 'Save to Collection → agents.images'], group: 'generation' },
   { id: 'vid_gen', label: 'Video Gen', type: 'table', icon: Wand2, description: 'agents.video_generation_tasks — prompt table (Studio UI)', color: '#f472b6', details: ['prompt', 'timestamp', 'user_id'], group: 'generation' },
   { id: 'veo', label: 'Veo 3.0', type: 'model', icon: Sparkles, description: 'Gemini Veo 3.0 video generation. Can be saved to Videos collection for keyframes + transcription + RAG.', color: '#f472b6', details: ['generated_video (computed)', 'Save to Collection → agents.videos'], group: 'generation' },
+  { id: 'speech_tasks', label: 'Speech Tasks', type: 'table', icon: Mic, description: 'agents.speech_tasks — TTS input text + voice selection', color: '#f472b6', details: ['input_text', 'voice', 'timestamp', 'user_id'], group: 'generation' },
+  { id: 'tts_model', label: 'OpenAI TTS', type: 'model', icon: Mic, description: 'openai.speech(tts-1) — 6 voices: alloy, echo, fable, onyx, nova, shimmer', color: '#f472b6', details: ['audio (computed)', 'model=tts-1'], group: 'generation' },
+
+  // ── Prompt Lab ──────────────────────────────────
+  { id: 'prompt_experiments', label: 'Prompt Experiments', type: 'table', icon: FlaskConical, description: 'agents.prompt_experiments — multi-model prompt comparison results', color: '#e879f9', details: ['experiment_id', 'model_id', 'response', 'response_time_ms', 'word_count'], group: 'experiments' },
 ]
 
 const SCHEMA_EDGES: SchemaEdge[] = [
@@ -192,6 +198,9 @@ const SCHEMA_EDGES: SchemaEdge[] = [
   // ── Save to Collection (user-triggered) ──────────
   { source: 'imagen', target: 'images', label: 'save to collection', excludeFromLayout: true },
   { source: 'veo', target: 'videos', label: 'save to collection', excludeFromLayout: true },
+
+  // ── TTS pipeline ─────────────────────────────────
+  { source: 'speech_tasks', target: 'tts_model', label: 'generate' },
 ]
 
 // ── Node type styles ─────────────────────────────────────────────────────────
@@ -305,11 +314,16 @@ const GRID: Record<string, [number, number]> = {
   ext_apis:            [555,  850],
   agent:               [740,  850],
 
-  // ── Generation (y ≈ 960–1035) ──
+  // ── Generation (y ≈ 960–1110) ──
   img_gen:             [0,    960],
   imagen:              [185,  960],
   vid_gen:             [0,    1035],
   veo:                 [185,  1035],
+  speech_tasks:        [0,    1110],
+  tts_model:           [185,  1110],
+
+  // ── Prompt Lab (y ≈ 1185) ──
+  prompt_experiments:  [0,    1185],
 }
 
 // Swim-lane labels rendered as non-interactive annotation nodes
@@ -330,6 +344,7 @@ const LANE_LABELS: LaneLabel[] = [
   { id: 'lane-know',   label: 'KNOWLEDGE',   x: 280,  y: 710,  color: '#a78bfa' },
   { id: 'lane-config', label: 'CONFIG',      x: 280,  y: 862,  color: '#94a3b8' },
   { id: 'lane-gen',    label: 'GENERATION',  x: -100, y: 980,  color: '#f472b6' },
+  { id: 'lane-lab',    label: 'PROMPT LAB', x: -100, y: 1197, color: '#e879f9' },
 ]
 
 function LaneLabelComponent({ data }: NodeProps<Node<{ label: string; color: string }>>) {
