@@ -38,6 +38,9 @@ import {
   Check,
   X,
   Undo2,
+  History,
+  ChevronDown,
+  GitCommitVertical,
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -63,6 +66,7 @@ import type {
   Transcription,
   SearchResult,
   SearchResponse,
+  CsvVersion,
 } from '@/types'
 
 // ── Icons per operation ─────────────────────────────────────────────────────
@@ -1627,9 +1631,32 @@ function CsvWorkspace({
   // Delete row state
   const [deletingRowIdx, setDeletingRowIdx] = useState<number | null>(null)
 
-  // Undo state (single revert via table.revert())
+  // Version history state
   const [canUndo, setCanUndo] = useState(false)
   const [isReverting, setIsReverting] = useState(false)
+  const [versions, setVersions] = useState<CsvVersion[]>([])
+  const [currentVersion, setCurrentVersion] = useState<number>(0)
+  const [showHistory, setShowHistory] = useState(false)
+  const [isLoadingVersions, setIsLoadingVersions] = useState(false)
+
+  const loadVersions = useCallback(async () => {
+    if (!tableName) return
+    setIsLoadingVersions(true)
+    try {
+      const data = await api.getCsvVersions(tableName)
+      setVersions(data.versions)
+      setCurrentVersion(data.current_version)
+      setCanUndo(data.can_undo)
+    } catch {
+      // Versions not available — degrade gracefully
+    } finally {
+      setIsLoadingVersions(false)
+    }
+  }, [tableName])
+
+  useEffect(() => {
+    loadVersions()
+  }, [loadVersions])
 
   // Focus the edit input when editing starts
   useEffect(() => {
@@ -1665,8 +1692,8 @@ function CsvWorkspace({
       await api.updateCsvRow(tableName, row, { [editingCell.col]: editValue })
       addToast('Cell updated', 'success')
       handleCancelEdit()
-      setCanUndo(true)
       await onDataChanged()
+      await loadVersions()
     } catch (err) {
       addToast(err instanceof Error ? err.message : 'Update failed', 'error')
     } finally {
@@ -1682,8 +1709,8 @@ function CsvWorkspace({
       addToast('Row added', 'success')
       setIsAddingRow(false)
       setNewRowValues({})
-      setCanUndo(true)
       await onDataChanged()
+      await loadVersions()
     } catch (err) {
       addToast(err instanceof Error ? err.message : 'Add failed', 'error')
     } finally {
@@ -1700,8 +1727,8 @@ function CsvWorkspace({
     try {
       await api.deleteCsvRows(tableName, row)
       addToast('Row deleted', 'success')
-      setCanUndo(true)
       await onDataChanged()
+      await loadVersions()
     } catch (err) {
       addToast(err instanceof Error ? err.message : 'Delete failed', 'error')
     } finally {
@@ -1710,19 +1737,21 @@ function CsvWorkspace({
   }, [csvData, tableName, addToast, onDataChanged])
 
   const handleRevert = useCallback(async () => {
-    if (!tableName || isReverting) return
+    if (!tableName || isReverting || !canUndo) return
     setIsReverting(true)
     try {
-      await api.revertCsvTable(tableName)
-      addToast('Reverted to previous version', 'success')
-      setCanUndo(false)
+      const result = await api.revertCsvTable(tableName)
+      addToast(`Reverted to v${result.current_version}`, 'success')
+      setCanUndo(result.can_undo)
+      setCurrentVersion(result.current_version)
       await onDataChanged()
+      await loadVersions()
     } catch (err) {
       addToast(err instanceof Error ? err.message : 'Revert failed', 'error')
     } finally {
       setIsReverting(false)
     }
-  }, [tableName, isReverting, addToast, onDataChanged])
+  }, [tableName, isReverting, canUndo, addToast, onDataChanged, loadVersions])
 
   if (isLoading && !csvData) {
     return (
@@ -1785,6 +1814,19 @@ function CsvWorkspace({
               Undo
             </button>
           )}
+          <button
+            className={cn(
+              'flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-medium transition-colors',
+              showHistory
+                ? 'bg-violet-500/10 text-violet-400'
+                : 'text-muted-foreground hover:bg-accent hover:text-foreground',
+            )}
+            onClick={() => setShowHistory(!showHistory)}
+            title="Show version history"
+          >
+            <History className="h-3 w-3" />
+            v{currentVersion}
+          </button>
         </div>
         {totalPages > 1 && (
           <div className="flex items-center gap-2">
@@ -1845,6 +1887,65 @@ function CsvWorkspace({
               Cancel
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Version History Panel */}
+      {showHistory && (
+        <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 p-3 space-y-2 animate-fade-in">
+          <div className="flex items-center justify-between">
+            <p className="text-[11px] font-semibold text-violet-400 uppercase tracking-wider flex items-center gap-1.5">
+              <History className="h-3 w-3" />
+              Version History
+            </p>
+            {isLoadingVersions && <Loader2 className="h-3 w-3 animate-spin text-violet-400/60" />}
+          </div>
+          {versions.length === 0 ? (
+            <p className="text-[10px] text-muted-foreground py-2">No version history available.</p>
+          ) : (
+            <div className="max-h-[200px] overflow-y-auto space-y-px">
+              {versions.map((v, idx) => {
+                const isCurrent = idx === 0
+                const changes: string[] = []
+                if (v.inserts > 0) changes.push(`+${v.inserts}`)
+                if (v.updates > 0) changes.push(`~${v.updates}`)
+                if (v.deletes > 0) changes.push(`-${v.deletes}`)
+                if (v.schema_change) changes.push(v.schema_change)
+                const changeStr = changes.length > 0 ? changes.join(' ') : (v.change_type === 'schema' ? 'schema change' : 'no changes')
+
+                return (
+                  <div
+                    key={v.version}
+                    className={cn(
+                      'flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-[11px] transition-colors',
+                      isCurrent
+                        ? 'bg-violet-500/10 text-violet-300'
+                        : 'text-muted-foreground hover:bg-accent/50',
+                    )}
+                  >
+                    <GitCommitVertical className={cn('h-3 w-3 shrink-0', isCurrent ? 'text-violet-400' : 'text-muted-foreground/40')} />
+                    <span className="font-mono font-semibold tabular-nums w-8">v{v.version}</span>
+                    <span className="flex-1 truncate">
+                      {changeStr}
+                    </span>
+                    {v.errors > 0 && (
+                      <span className="text-[9px] text-red-400 font-medium">{v.errors} err</span>
+                    )}
+                    {v.created_at && (
+                      <span className="text-[9px] text-muted-foreground/50 tabular-nums shrink-0">
+                        {new Date(v.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    )}
+                    {isCurrent && (
+                      <Badge variant="secondary" className="text-[8px] h-4 px-1.5 bg-violet-500/20 text-violet-300 border-0">
+                        current
+                      </Badge>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       )}
 

@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import {
   Send,
   ImageIcon,
+  Film,
   Loader2,
   Bookmark,
   User,
@@ -56,7 +57,7 @@ export function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  const [mode, setMode] = useState<'chat' | 'image'>('chat')
+  const [mode, setMode] = useState<'chat' | 'image' | 'video'>('chat')
   const [personas, setPersonas] = useState<Persona[]>([])
   const [selectedPersona, setSelectedPersona] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -89,6 +90,27 @@ export function ChatPage() {
         ])
       } catch (err) {
         addToast(err instanceof Error ? err.message : 'Image generation failed', 'error')
+      } finally {
+        setIsLoading(false)
+      }
+      return
+    }
+
+    if (mode === 'video') {
+      setMessages((prev) => [...prev, { role: 'user', content: text }])
+      try {
+        const result = await api.generateVideo(text)
+        const videoUrl = api.getVideoUrl(result.video_path)
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: 'assistant',
+            content: `Generated video for: "${text}"`,
+            video_url: videoUrl,
+          },
+        ])
+      } catch (err) {
+        addToast(err instanceof Error ? err.message : 'Video generation failed', 'error')
       } finally {
         setIsLoading(false)
       }
@@ -203,7 +225,9 @@ export function ChatPage() {
                 placeholder={
                   mode === 'image'
                     ? 'Describe the image you want to generate...'
-                    : 'Ask anything...'
+                    : mode === 'video'
+                      ? 'Describe the video you want to generate...'
+                      : 'Ask anything...'
                 }
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
@@ -243,10 +267,23 @@ export function ChatPage() {
                       ? 'bg-k-yellow/10 text-k-yellow'
                       : 'text-muted-foreground hover:bg-accent hover:text-foreground',
                   )}
-                  onClick={() => setMode(mode === 'chat' ? 'image' : 'chat')}
+                  onClick={() => setMode(mode === 'image' ? 'chat' : 'image')}
                 >
                   <ImageIcon className="h-3 w-3" />
                   {mode === 'image' ? 'Image mode' : 'Image'}
+                </button>
+
+                <button
+                  className={cn(
+                    'flex items-center gap-1.5 rounded-lg px-2.5 h-7 text-[11px] font-medium transition-colors',
+                    mode === 'video'
+                      ? 'bg-violet-500/10 text-violet-400'
+                      : 'text-muted-foreground hover:bg-accent hover:text-foreground',
+                  )}
+                  onClick={() => setMode(mode === 'video' ? 'chat' : 'video')}
+                >
+                  <Film className="h-3 w-3" />
+                  {mode === 'video' ? 'Video mode' : 'Video'}
                 </button>
               </div>
 
@@ -289,11 +326,12 @@ function MessageBubble({
 }) {
   const isUser = message.role === 'user'
   const isImage = message.content.startsWith('![')
+  const isVideo = !!message.video_url
 
   const renderedHtml = useMemo(() => {
-    if (isUser || isImage) return ''
+    if (isUser || isImage || isVideo) return ''
     return renderMarkdown(message.content)
-  }, [message.content, isUser, isImage])
+  }, [message.content, isUser, isImage, isVideo])
 
   const sources = useMemo(() => {
     if (!message.metadata) return []
@@ -337,7 +375,18 @@ function MessageBubble({
       {/* Content */}
       <div className="flex-1 min-w-0 space-y-3">
         {/* Main answer */}
-        {isImage ? (
+        {isVideo ? (
+          <div className="space-y-2">
+            <p className="text-sm text-muted-foreground">{message.content}</p>
+            <div className="rounded-xl border border-border overflow-hidden bg-black max-w-lg">
+              <video
+                src={message.video_url}
+                controls
+                className="w-full"
+              />
+            </div>
+          </div>
+        ) : isImage ? (
           <img
             src={message.content.match(/\(([^)]+)\)/)?.[1]}
             alt="Generated"
@@ -412,7 +461,7 @@ function MessageBubble({
         )}
 
         {/* Actions */}
-        {!isImage && (
+        {!isImage && !isVideo && (
           <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
             <button
               className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"

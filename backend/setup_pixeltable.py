@@ -400,6 +400,31 @@ csv_registry = pxt.create_table(
     if_exists="ignore",
 )
 
+# ── Prompt Experiments ─────────────────────────────────────────────────────────
+
+prompt_experiments = pxt.create_table(
+    "agents.prompt_experiments",
+    {
+        "experiment_id": pxt.String,
+        "task": pxt.String,
+        "system_prompt": pxt.String,
+        "user_prompt": pxt.String,
+        "model_id": pxt.String,
+        "model_name": pxt.String,
+        "provider": pxt.String,
+        "temperature": pxt.Float,
+        "max_tokens": pxt.Int,
+        "response": pxt.String,
+        "response_time_ms": pxt.Float,
+        "word_count": pxt.Int,
+        "char_count": pxt.Int,
+        "error": pxt.String,
+        "timestamp": pxt.Timestamp,
+        "user_id": pxt.String,
+    },
+    if_exists="ignore",
+)
+
 # ── Agent Workflow ────────────────────────────────────────────────────────────
 
 tools = pxt.tools(

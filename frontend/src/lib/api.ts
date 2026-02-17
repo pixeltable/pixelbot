@@ -403,10 +403,52 @@ export async function deleteCsvRows(
 
 export async function revertCsvTable(
   tableName: string,
-): Promise<{ message: string; new_total: number }> {
+): Promise<{ message: string; new_total: number; current_version: number; can_undo: boolean }> {
   return request('/studio/csv/revert', {
     method: 'POST',
     body: JSON.stringify({ table_name: tableName }),
+  })
+}
+
+export async function getCsvVersions(
+  tableName: string,
+): Promise<import('@/types').CsvVersionsResponse> {
+  return request<import('@/types').CsvVersionsResponse>(
+    `/studio/csv/versions?table_name=${encodeURIComponent(tableName)}`,
+  )
+}
+
+// ── Reve AI Edit / Remix ────────────────────────────────────────────────
+
+export async function reveEdit(params: {
+  timestamp?: string | null
+  uuid?: string | null
+  instruction: string
+}): Promise<import('@/types').ReveEditResponse> {
+  return request<import('@/types').ReveEditResponse>('/studio/reve/edit', {
+    method: 'POST',
+    body: JSON.stringify(params),
+  })
+}
+
+export async function reveRemix(params: {
+  prompt: string
+  timestamps?: string[]
+  uuids?: string[]
+  aspect_ratio?: string | null
+}): Promise<import('@/types').ReveRemixResponse> {
+  return request<import('@/types').ReveRemixResponse>('/studio/reve/remix', {
+    method: 'POST',
+    body: JSON.stringify(params),
+  })
+}
+
+export async function reveSave(
+  tempPath: string,
+): Promise<import('@/types').ReveSaveResponse> {
+  return request<import('@/types').ReveSaveResponse>('/studio/reve/save', {
+    method: 'POST',
+    body: JSON.stringify({ temp_path: tempPath }),
   })
 }
 
@@ -467,6 +509,38 @@ export async function getTimeline(
   limit = 100,
 ): Promise<import('@/types').TimelineResponse> {
   return request<import('@/types').TimelineResponse>(`/db/timeline?limit=${limit}`)
+}
+
+// ── Prompt Lab (Experiments) ─────────────────────────────────────────────────
+
+export async function getExperimentModels(): Promise<import('@/types').ExperimentModelInfo[]> {
+  return request<import('@/types').ExperimentModelInfo[]>('/experiments/models')
+}
+
+export async function runExperiment(params: {
+  task: string
+  system_prompt: string
+  user_prompt: string
+  models: import('@/types').ExperimentModelConfig[]
+  temperature: number
+  max_tokens: number
+}): Promise<import('@/types').ExperimentRun> {
+  return request<import('@/types').ExperimentRun>('/experiments/run', {
+    method: 'POST',
+    body: JSON.stringify(params),
+  })
+}
+
+export async function getExperimentHistory(): Promise<import('@/types').ExperimentSummary[]> {
+  return request<import('@/types').ExperimentSummary[]>('/experiments/history')
+}
+
+export async function getExperiment(experimentId: string): Promise<import('@/types').ExperimentRun> {
+  return request<import('@/types').ExperimentRun>(`/experiments/${experimentId}`)
+}
+
+export async function deleteExperiment(experimentId: string): Promise<{ message: string }> {
+  return request<{ message: string }>(`/experiments/${experimentId}`, { method: 'DELETE' })
 }
 
 // ── Health ───────────────────────────────────────────────────────────────────

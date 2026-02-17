@@ -13,6 +13,7 @@ import {
   Wand2,
   GitBranch,
   Database,
+  FlaskConical,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { FileSidebar } from '@/components/files/file-sidebar'
@@ -30,16 +31,12 @@ const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    label: 'Create',
-    items: [
-      { to: '/images', icon: ImageIcon, label: 'Media' },
-    ],
-  },
-  {
     label: 'Workspace',
     items: [
+      { to: '/images', icon: ImageIcon, label: 'Media Library' },
       { to: '/studio', icon: Wand2, label: 'Studio' },
       { to: '/database', icon: Database, label: 'Database' },
+      { to: '/experiments', icon: FlaskConical, label: 'Prompt Lab' },
     ],
   },
   {

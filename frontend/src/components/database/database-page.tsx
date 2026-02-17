@@ -19,7 +19,12 @@ import {
   Brain,
   Settings2,
   TableProperties,
+  Search,
+  Download,
+  Filter,
+  X,
 } from 'lucide-react'
+import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { useToast } from '@/components/ui/toast'
@@ -140,8 +145,49 @@ export function DatabasePage() {
   const [rowData, setRowData] = useState<TableRowsResponse | null>(null)
   const [isLoadingRows, setIsLoadingRows] = useState(false)
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
+  const [tableSearch, setTableSearch] = useState('')
+  const [rowFilter, setRowFilter] = useState('')
 
-  const grouped = useMemo(() => groupTables(tables), [tables])
+  const filteredTables = useMemo(() => {
+    if (!tableSearch.trim()) return tables
+    const q = tableSearch.toLowerCase()
+    return tables.filter((t) => t.path.toLowerCase().includes(q))
+  }, [tables, tableSearch])
+
+  const grouped = useMemo(() => groupTables(filteredTables), [filteredTables])
+
+  const filteredRows = useMemo(() => {
+    if (!rowData || !rowFilter.trim()) return rowData?.rows ?? []
+    const q = rowFilter.toLowerCase()
+    return rowData.rows.filter((row) =>
+      rowData.columns.some((col) => {
+        const val = row[col]
+        if (val === null || val === undefined) return false
+        return String(val).toLowerCase().includes(q)
+      }),
+    )
+  }, [rowData, rowFilter])
+
+  const handleDownloadCsv = useCallback(() => {
+    if (!rowData || !selectedTable) return
+    const rows = rowFilter.trim() ? filteredRows : rowData.rows
+    if (rows.length === 0) {
+      addToast('No rows to download', 'info')
+      return
+    }
+    const cols = rowData.columns
+    const csvLines: string[] = [cols.map(escapeCsvField).join(',')]
+    for (const row of rows) {
+      csvLines.push(cols.map((col) => escapeCsvField(formatCellValue(row[col]))).join(','))
+    }
+    const blob = new Blob([csvLines.join('\n')], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${getShortName(selectedTable.path)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }, [rowData, selectedTable, filteredRows, rowFilter, addToast])
 
   useEffect(() => {
     async function load() {
@@ -162,6 +208,7 @@ export function DatabasePage() {
       setSelectedTable(table)
       setIsLoadingRows(true)
       setRowData(null)
+      setRowFilter('')
       try {
         const rows = await api.getTableRows(table.path, 50, 0)
         setRowData(rows)
@@ -218,7 +265,7 @@ export function DatabasePage() {
         </div>
 
         {/* Stats bar */}
-        <div className="flex gap-2 px-4 pb-3">
+        <div className="flex gap-2 px-4 pb-2">
           <Badge variant="secondary" className="text-[9px]">
             <Table2 className="h-2.5 w-2.5 mr-1" />
             {tableCount} tables
@@ -227,6 +274,27 @@ export function DatabasePage() {
             <Eye className="h-2.5 w-2.5 mr-1" />
             {viewCount} views
           </Badge>
+        </div>
+
+        {/* Table search */}
+        <div className="px-3 pb-2">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground/50" />
+            <Input
+              placeholder="Filter tables..."
+              value={tableSearch}
+              onChange={(e) => setTableSearch(e.target.value)}
+              className="h-7 pl-7 pr-7 text-[11px] rounded-md"
+            />
+            {tableSearch && (
+              <button
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground/50 hover:text-foreground transition-colors"
+                onClick={() => setTableSearch('')}
+              >
+                <X className="h-3 w-3" />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Grouped table list */}
@@ -315,23 +383,36 @@ export function DatabasePage() {
             {/* Schema header */}
             <div className="px-5 pt-4 pb-3 border-b border-border/60 shrink-0">
               <div className="flex items-center gap-2 mb-2">
-                <h3 className="text-sm font-semibold text-foreground font-mono">
+                <h3 className="text-sm font-semibold text-foreground font-mono flex-1 min-w-0 truncate">
                   {selectedTable.path}
                 </h3>
                 <Badge
                   variant="outline"
                   className={cn(
-                    'text-[9px]',
+                    'text-[9px] shrink-0',
                     selectedTable.type === 'view' ? 'text-blue-400 border-blue-400/30' : 'text-emerald-400 border-emerald-400/30',
                   )}
                 >
                   {selectedTable.type}
                 </Badge>
                 {selectedTable.base_table && (
-                  <span className="text-[10px] text-muted-foreground/60">
+                  <span className="text-[10px] text-muted-foreground/60 shrink-0">
                     from {selectedTable.base_table}
                   </span>
                 )}
+                <button
+                  className={cn(
+                    'flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1 text-[10px] font-medium shrink-0',
+                    'text-muted-foreground hover:bg-accent hover:text-foreground transition-colors',
+                    (!rowData || rowData.rows.length === 0) && 'opacity-30 pointer-events-none',
+                  )}
+                  onClick={handleDownloadCsv}
+                  disabled={!rowData || rowData.rows.length === 0}
+                  title="Download visible rows as CSV"
+                >
+                  <Download className="h-3 w-3" />
+                  CSV
+                </button>
               </div>
 
               {/* Column chips */}
@@ -356,6 +437,27 @@ export function DatabasePage() {
                   </div>
                 ))}
               </div>
+
+              {/* Row filter */}
+              {rowData && rowData.rows.length > 0 && (
+                <div className="relative mt-2.5">
+                  <Filter className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground/50" />
+                  <Input
+                    placeholder="Filter rows..."
+                    value={rowFilter}
+                    onChange={(e) => setRowFilter(e.target.value)}
+                    className="h-7 pl-7 pr-7 text-[11px] rounded-md"
+                  />
+                  {rowFilter && (
+                    <button
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground/50 hover:text-foreground transition-colors"
+                      onClick={() => setRowFilter('')}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Data grid */}
@@ -368,6 +470,17 @@ export function DatabasePage() {
                 <div className="flex flex-col items-center justify-center h-full gap-2">
                   <Rows3 className="h-8 w-8 text-muted-foreground/15" />
                   <p className="text-xs text-muted-foreground">No rows in this table</p>
+                </div>
+              ) : filteredRows.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full gap-2">
+                  <Search className="h-8 w-8 text-muted-foreground/15" />
+                  <p className="text-xs text-muted-foreground">No rows match "{rowFilter}"</p>
+                  <button
+                    className="text-[10px] text-k-yellow hover:underline"
+                    onClick={() => setRowFilter('')}
+                  >
+                    Clear filter
+                  </button>
                 </div>
               ) : (
                 <div className="min-w-full">
@@ -388,13 +501,13 @@ export function DatabasePage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {rowData.rows.map((row, idx) => (
+                      {filteredRows.map((row, idx) => (
                         <tr
                           key={idx}
                           className="border-b border-border/30 hover:bg-accent/30 transition-colors"
                         >
                           <td className="px-3 py-1.5 text-muted-foreground/40 tabular-nums">
-                            {rowData.offset + idx + 1}
+                            {rowFilter ? idx + 1 : rowData.offset + idx + 1}
                           </td>
                           {rowData.columns.map((col) => {
                             const val = row[col]
@@ -418,10 +531,12 @@ export function DatabasePage() {
             </div>
 
             {/* Pagination footer */}
-            {rowData && rowData.total > rowData.limit && (
+            {rowData && (rowData.total > rowData.limit || rowFilter) && (
               <div className="flex items-center justify-between px-5 py-2 border-t border-border/60 shrink-0">
                 <span className="text-[10px] text-muted-foreground">
-                  {rowData.total.toLocaleString()} rows total
+                  {rowFilter
+                    ? `${filteredRows.length} of ${rowData.rows.length} rows match`
+                    : `${rowData.total.toLocaleString()} rows total`}
                 </span>
                 <div className="flex items-center gap-2">
                   <button
@@ -512,4 +627,11 @@ function formatCellValue(val: unknown): string {
     return s.length > 120 ? s.slice(0, 120) + '...' : s
   }
   return String(val)
+}
+
+function escapeCsvField(value: string): string {
+  if (value.includes(',') || value.includes('"') || value.includes('\n')) {
+    return `"${value.replace(/"/g, '""')}"`
+  }
+  return value
 }

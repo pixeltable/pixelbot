@@ -8,11 +8,16 @@ import {
   Palette,
   Clock,
   Film,
-  Sparkles,
-  Send,
   Zap,
   FolderPlus,
   Check,
+  Pencil,
+  Shuffle,
+  Sparkles,
+  ArrowRight,
+  Save,
+  RotateCcw,
+  X,
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -30,11 +35,12 @@ import type { GeneratedImage, GeneratedVideo, GenerationConfig } from '@/types'
 import { cn } from '@/lib/utils'
 
 type ActiveTab = 'images' | 'videos'
+type ReveMode = 'edit' | 'remix'
 
 export function ImagesPage() {
   const { addToast } = useToast()
 
-  // Generation config
+  // Generation config (for provider badge display)
   const [genConfig, setGenConfig] = useState<GenerationConfig | null>(null)
 
   // Tab
@@ -52,13 +58,13 @@ export function ImagesPage() {
   const [isLoadingVideos, setIsLoadingVideos] = useState(true)
   const [selectedVideo, setSelectedVideo] = useState<GeneratedVideo | null>(null)
 
-  // Generation prompt
-  const [prompt, setPrompt] = useState('')
-  const [isGenerating, setIsGenerating] = useState(false)
-
   // Save to collection tracking
   const [isSavingToCollection, setIsSavingToCollection] = useState(false)
   const [savedToCollection, setSavedToCollection] = useState<Set<string>>(new Set())
+
+  // Reve edit/remix state
+  const [reveImage, setReveImage] = useState<GeneratedImage | null>(null)
+  const [reveMode, setReveMode] = useState<ReveMode>('edit')
 
   // Load config + data
   useEffect(() => {
@@ -93,29 +99,6 @@ export function ImagesPage() {
     fetchImages()
     fetchVideos()
   }, [fetchImages, fetchVideos])
-
-  // Generate
-  const handleGenerate = useCallback(async () => {
-    if (!prompt.trim() || isGenerating) return
-    setIsGenerating(true)
-    try {
-      if (activeTab === 'images') {
-        await api.generateImage(prompt.trim())
-        addToast('Image generated', 'success')
-        setPrompt('')
-        await fetchImages()
-      } else {
-        await api.generateVideo(prompt.trim())
-        addToast('Video generated', 'success')
-        setPrompt('')
-        await fetchVideos()
-      }
-    } catch (err) {
-      addToast(err instanceof Error ? err.message : 'Generation failed', 'error')
-    } finally {
-      setIsGenerating(false)
-    }
-  }, [prompt, isGenerating, activeTab, addToast, fetchImages, fetchVideos])
 
   const handleDeleteImage = useCallback(
     async (timestamp: string) => {
@@ -193,6 +176,22 @@ export function ImagesPage() {
     [isSavingToCollection, savedToCollection, addToast],
   )
 
+  const handleEditImage = useCallback((image: GeneratedImage) => {
+    setSelectedImage(null)
+    setReveImage(image)
+    setReveMode('edit')
+  }, [])
+
+  const handleRemixImage = useCallback((image: GeneratedImage) => {
+    setSelectedImage(null)
+    setReveImage(image)
+    setReveMode('remix')
+  }, [])
+
+  const handleEditVideo = useCallback(() => {
+    addToast('Video editing coming soon — RunwayML integration', 'info')
+  }, [addToast])
+
   const filteredImages = images.filter(
     (img) => !imageSearch || img.prompt.toLowerCase().includes(imageSearch.toLowerCase()),
   )
@@ -208,15 +207,12 @@ export function ImagesPage() {
         : 'DALL-E'
       : 'Gemini Veo'
 
-  const modelId =
-    activeTab === 'images' ? genConfig?.image_model : genConfig?.video_model
-
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-border">
         <div>
-          <h2 className="text-lg font-semibold tracking-tight">Media Generation</h2>
+          <h2 className="text-lg font-semibold tracking-tight">Media Library</h2>
           <div className="flex items-center gap-2 mt-0.5">
             <p className="text-xs text-muted-foreground">
               {images.length} image{images.length !== 1 ? 's' : ''} &middot;{' '}
@@ -226,9 +222,6 @@ export function ImagesPage() {
               <Badge variant="secondary" className="text-[9px] px-1.5 py-0 gap-1">
                 <Zap className="h-2.5 w-2.5" />
                 {providerLabel}
-                {modelId && (
-                  <span className="text-muted-foreground/60 font-mono">{modelId}</span>
-                )}
               </Badge>
             )}
           </div>
@@ -263,43 +256,6 @@ export function ImagesPage() {
         </div>
       </div>
 
-      {/* Generation Prompt Bar */}
-      <div className="flex items-center gap-2 px-6 py-3 border-b border-border bg-muted/30">
-        <Sparkles className="h-4 w-4 text-k-yellow shrink-0" />
-        <Input
-          placeholder={
-            activeTab === 'images'
-              ? 'Describe the image you want to generate...'
-              : 'Describe the video you want to generate...'
-          }
-          value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && handleGenerate()}
-          className="h-8 text-sm flex-1"
-          disabled={isGenerating}
-        />
-        <button
-          className={cn(
-            'flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-xs font-medium transition-all',
-            'bg-k-yellow text-k-black hover:bg-k-yellow-hover',
-            (isGenerating || !prompt.trim()) && 'opacity-50 pointer-events-none',
-          )}
-          onClick={handleGenerate}
-          disabled={isGenerating || !prompt.trim()}
-        >
-          {isGenerating ? (
-            <Loader2 className="h-3 w-3 animate-spin" />
-          ) : (
-            <Send className="h-3 w-3" />
-          )}
-          {isGenerating
-            ? activeTab === 'images'
-              ? 'Generating...'
-              : 'Generating...'
-            : 'Generate'}
-        </button>
-      </div>
-
       {/* Search */}
       <div className="px-6 py-3">
         <div className="relative">
@@ -323,14 +279,12 @@ export function ImagesPage() {
           <ImageGallery
             images={filteredImages}
             isLoading={isLoadingImages}
-            providerLabel={providerLabel}
             onSelect={setSelectedImage}
           />
         ) : (
           <VideoGallery
             videos={filteredVideos}
             isLoading={isLoadingVideos}
-            providerLabel={providerLabel}
             onSelect={setSelectedVideo}
           />
         )}
@@ -383,6 +337,18 @@ export function ImagesPage() {
                     {isSavingToCollection ? 'Saving...' : 'Save to Collection'}
                   </button>
                 )}
+                <button
+                  className="flex items-center gap-1.5 rounded-lg border border-violet-500/30 px-3 py-1.5 text-xs font-medium text-violet-400 hover:bg-violet-500/10 transition-colors"
+                  onClick={() => handleEditImage(selectedImage)}
+                >
+                  <Pencil className="h-3 w-3" /> Edit
+                </button>
+                <button
+                  className="flex items-center gap-1.5 rounded-lg border border-amber-500/30 px-3 py-1.5 text-xs font-medium text-amber-400 hover:bg-amber-500/10 transition-colors"
+                  onClick={() => handleRemixImage(selectedImage)}
+                >
+                  <Shuffle className="h-3 w-3" /> Remix
+                </button>
                 <button
                   className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
                   onClick={() => handleDownloadImage(selectedImage)}
@@ -449,6 +415,12 @@ export function ImagesPage() {
                   </button>
                 )}
                 <button
+                  className="flex items-center gap-1.5 rounded-lg border border-violet-500/30 px-3 py-1.5 text-xs font-medium text-violet-400 hover:bg-violet-500/10 transition-colors"
+                  onClick={handleEditVideo}
+                >
+                  <Pencil className="h-3 w-3" /> Edit
+                </button>
+                <button
                   className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
                   onClick={() => handleDownloadVideo(selectedVideo)}
                 >
@@ -465,7 +437,391 @@ export function ImagesPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Reve Edit / Remix Dialog */}
+      <ReveEditDialog
+        image={reveImage}
+        mode={reveMode}
+        onModeChange={setReveMode}
+        open={!!reveImage}
+        onOpenChange={(open) => {
+          if (!open) setReveImage(null)
+        }}
+        onSaved={() => {
+          addToast('Result saved to collection', 'success')
+          fetchImages()
+        }}
+      />
     </div>
+  )
+}
+
+// ── Reve Edit / Remix Dialog ────────────────────────────────────────────────
+
+function ReveEditDialog({
+  image,
+  mode,
+  onModeChange,
+  open,
+  onOpenChange,
+  onSaved,
+}: {
+  image: GeneratedImage | null
+  mode: ReveMode
+  onModeChange: (mode: ReveMode) => void
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onSaved: () => void
+}) {
+  const { addToast } = useToast()
+  const [instruction, setInstruction] = useState('')
+  const [isProcessing, setIsProcessing] = useState(false)
+  const [resultPreview, setResultPreview] = useState<string | null>(null)
+  const [resultTempPath, setResultTempPath] = useState<string | null>(null)
+  const [resultDimensions, setResultDimensions] = useState<{ width: number; height: number } | null>(null)
+  const [isSaving, setIsSaving] = useState(false)
+
+  const resetState = useCallback(() => {
+    setInstruction('')
+    setIsProcessing(false)
+    setResultPreview(null)
+    setResultTempPath(null)
+    setResultDimensions(null)
+    setIsSaving(false)
+  }, [])
+
+  const handleClose = useCallback(() => {
+    resetState()
+    onOpenChange(false)
+  }, [resetState, onOpenChange])
+
+  const handleGenerate = useCallback(async () => {
+    if (!image || !instruction.trim()) return
+    setIsProcessing(true)
+    setResultPreview(null)
+    setResultTempPath(null)
+
+    try {
+      if (mode === 'edit') {
+        const result = await api.reveEdit({
+          timestamp: image.timestamp,
+          instruction: instruction.trim(),
+        })
+        setResultPreview(result.preview)
+        setResultTempPath(result.temp_path)
+        setResultDimensions({ width: result.width, height: result.height })
+      } else {
+        const result = await api.reveRemix({
+          prompt: instruction.trim(),
+          timestamps: [image.timestamp],
+        })
+        setResultPreview(result.preview)
+        setResultTempPath(result.temp_path)
+        setResultDimensions({ width: result.width, height: result.height })
+      }
+    } catch (err) {
+      addToast(
+        err instanceof Error ? err.message : `Reve ${mode} failed`,
+        'error',
+      )
+    } finally {
+      setIsProcessing(false)
+    }
+  }, [image, instruction, mode, addToast])
+
+  const handleSave = useCallback(async () => {
+    if (!resultTempPath) return
+    setIsSaving(true)
+    try {
+      await api.reveSave(resultTempPath)
+      onSaved()
+      handleClose()
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : 'Save failed', 'error')
+    } finally {
+      setIsSaving(false)
+    }
+  }, [resultTempPath, onSaved, handleClose, addToast])
+
+  const handleDownloadResult = useCallback(() => {
+    if (!resultPreview) return
+    const a = document.createElement('a')
+    a.href = resultPreview
+    a.download = `pixelbot_reve_${mode}_${Date.now()}.png`
+    a.click()
+  }, [resultPreview, mode])
+
+  const handleRetry = useCallback(() => {
+    setResultPreview(null)
+    setResultTempPath(null)
+    setResultDimensions(null)
+  }, [])
+
+  if (!image) return null
+
+  const isEdit = mode === 'edit'
+  const accentColor = isEdit ? 'violet' : 'amber'
+  const hasResult = !!resultPreview
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose() }}>
+      <DialogContent className="max-w-4xl overflow-y-auto max-h-[90vh]">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            {isEdit ? (
+              <Pencil className="h-4 w-4 text-violet-400" />
+            ) : (
+              <Shuffle className="h-4 w-4 text-amber-400" />
+            )}
+            {isEdit ? 'Edit with Reve AI' : 'Remix with Reve AI'}
+            <Badge variant="secondary" className="text-[9px] ml-1">
+              <Sparkles className="h-2.5 w-2.5 mr-0.5" />
+              Reve
+            </Badge>
+          </DialogTitle>
+          <DialogDescription className="text-sm">
+            {isEdit
+              ? 'Describe how you want to modify this image using natural language.'
+              : 'Create a new image inspired by this reference with a creative prompt.'}
+          </DialogDescription>
+        </DialogHeader>
+
+        {/* Mode toggle */}
+        <div className="flex gap-1 p-0.5 rounded-lg bg-muted/50 w-fit">
+          <button
+            className={cn(
+              'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all',
+              mode === 'edit'
+                ? 'bg-violet-500/10 text-violet-400 ring-1 ring-violet-500/20'
+                : 'text-muted-foreground hover:text-foreground',
+            )}
+            onClick={() => {
+              onModeChange('edit')
+              handleRetry()
+            }}
+            disabled={isProcessing}
+          >
+            <Pencil className="h-3 w-3" />
+            Edit
+          </button>
+          <button
+            className={cn(
+              'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all',
+              mode === 'remix'
+                ? 'bg-amber-500/10 text-amber-400 ring-1 ring-amber-500/20'
+                : 'text-muted-foreground hover:text-foreground',
+            )}
+            onClick={() => {
+              onModeChange('remix')
+              handleRetry()
+            }}
+            disabled={isProcessing}
+          >
+            <Shuffle className="h-3 w-3" />
+            Remix
+          </button>
+        </div>
+
+        {/* Image comparison */}
+        <div className="grid grid-cols-2 gap-4">
+          {/* Original */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-1.5">
+              <div className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50" />
+              <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+                Original
+              </span>
+            </div>
+            <div className="rounded-xl border border-border overflow-hidden bg-muted/30">
+              <img
+                src={image.full_image}
+                alt={image.prompt}
+                className="w-full object-contain max-h-[360px]"
+              />
+            </div>
+            <p className="text-[10px] text-muted-foreground/60 truncate">{image.prompt}</p>
+          </div>
+
+          {/* Result */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-1.5">
+              <div className={cn(
+                'h-1.5 w-1.5 rounded-full',
+                hasResult
+                  ? isEdit ? 'bg-violet-400' : 'bg-amber-400'
+                  : 'bg-muted-foreground/30',
+              )} />
+              <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+                Result
+              </span>
+              {resultDimensions && (
+                <span className="text-[9px] text-muted-foreground/50">
+                  {resultDimensions.width}&times;{resultDimensions.height}
+                </span>
+              )}
+            </div>
+            <div className={cn(
+              'rounded-xl border overflow-hidden min-h-[200px] flex items-center justify-center',
+              hasResult
+                ? isEdit ? 'border-violet-500/20 bg-violet-500/5' : 'border-amber-500/20 bg-amber-500/5'
+                : 'border-dashed border-border bg-muted/20',
+            )}>
+              {isProcessing ? (
+                <div className="flex flex-col items-center gap-3 py-12">
+                  <div className="relative">
+                    <Loader2 className={cn(
+                      'h-8 w-8 animate-spin',
+                      isEdit ? 'text-violet-400' : 'text-amber-400',
+                    )} />
+                    <Sparkles className={cn(
+                      'absolute -top-1 -right-1 h-3.5 w-3.5 animate-pulse',
+                      isEdit ? 'text-violet-300' : 'text-amber-300',
+                    )} />
+                  </div>
+                  <div className="text-center">
+                    <p className="text-xs font-medium text-muted-foreground">
+                      {isEdit ? 'Applying edit...' : 'Creating remix...'}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground/50 mt-0.5">
+                      Reve AI is processing your image
+                    </p>
+                  </div>
+                </div>
+              ) : hasResult ? (
+                <img
+                  src={resultPreview!}
+                  alt="Reve result"
+                  className="w-full object-contain max-h-[360px]"
+                />
+              ) : (
+                <div className="flex flex-col items-center gap-2 py-12 text-center px-4">
+                  <ArrowRight className="h-5 w-5 text-muted-foreground/30" />
+                  <p className="text-xs text-muted-foreground/50">
+                    {isEdit
+                      ? 'Enter an edit instruction and click Apply'
+                      : 'Enter a creative prompt and click Create'}
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Instruction input */}
+        <div className="space-y-2">
+          <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+            {isEdit ? 'Edit instruction' : 'Remix prompt'}
+          </label>
+          <div className="relative">
+            <textarea
+              value={instruction}
+              onChange={(e) => setInstruction(e.target.value)}
+              placeholder={
+                isEdit
+                  ? 'e.g. "Make the sky more dramatic", "Add a warm sunset glow", "Remove the background"'
+                  : 'e.g. "Reimagine as a watercolor painting", "Transform into cyberpunk style", "Make it look like a vintage photograph"'
+              }
+              className={cn(
+                'w-full rounded-xl border bg-background px-4 py-3 text-sm resize-none',
+                'placeholder:text-muted-foreground/40 focus:outline-none focus:ring-2',
+                isEdit
+                  ? 'border-violet-500/20 focus:ring-violet-500/30'
+                  : 'border-amber-500/20 focus:ring-amber-500/30',
+              )}
+              rows={2}
+              disabled={isProcessing}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault()
+                  handleGenerate()
+                }
+              }}
+            />
+          </div>
+          {mode === 'remix' && (
+            <p className="text-[10px] text-muted-foreground/50">
+              Tip: Use <code className="px-1 py-0.5 rounded bg-muted text-[9px]">&lt;img&gt;0&lt;/img&gt;</code> in
+              your prompt to reference the source image explicitly.
+            </p>
+          )}
+        </div>
+
+        {/* Actions */}
+        <div className="flex items-center justify-between pt-1">
+          <button
+            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+            onClick={handleClose}
+            disabled={isProcessing}
+          >
+            <X className="h-3 w-3" />
+            Cancel
+          </button>
+
+          <div className="flex items-center gap-2">
+            {hasResult && (
+              <>
+                <button
+                  className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                  onClick={handleRetry}
+                  disabled={isProcessing}
+                >
+                  <RotateCcw className="h-3 w-3" />
+                  Try again
+                </button>
+                <button
+                  className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                  onClick={handleDownloadResult}
+                >
+                  <Download className="h-3 w-3" />
+                  Download
+                </button>
+                <button
+                  className={cn(
+                    'flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-xs font-semibold transition-colors',
+                    isEdit
+                      ? 'bg-violet-500 text-white hover:bg-violet-600'
+                      : 'bg-amber-500 text-white hover:bg-amber-600',
+                    isSaving && 'opacity-50 pointer-events-none',
+                  )}
+                  onClick={handleSave}
+                  disabled={isSaving}
+                >
+                  {isSaving ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Save className="h-3 w-3" />
+                  )}
+                  {isSaving ? 'Saving...' : 'Save to Library'}
+                </button>
+              </>
+            )}
+
+            {!hasResult && (
+              <button
+                className={cn(
+                  'flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-xs font-semibold transition-colors',
+                  isEdit
+                    ? 'bg-violet-500 text-white hover:bg-violet-600'
+                    : 'bg-amber-500 text-white hover:bg-amber-600',
+                  (!instruction.trim() || isProcessing) && 'opacity-50 pointer-events-none',
+                )}
+                onClick={handleGenerate}
+                disabled={!instruction.trim() || isProcessing}
+              >
+                {isProcessing ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Sparkles className="h-3 w-3" />
+                )}
+                {isProcessing
+                  ? isEdit ? 'Editing...' : 'Remixing...'
+                  : isEdit ? 'Apply Edit' : 'Create Remix'}
+              </button>
+            )}
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -474,12 +830,10 @@ export function ImagesPage() {
 function ImageGallery({
   images,
   isLoading,
-  providerLabel,
   onSelect,
 }: {
   images: GeneratedImage[]
   isLoading: boolean
-  providerLabel: string
   onSelect: (img: GeneratedImage) => void
 }) {
   if (isLoading) {
@@ -499,7 +853,7 @@ function ImageGallery({
         </div>
         <p className="text-sm text-muted-foreground font-medium">No images yet</p>
         <p className="text-xs text-muted-foreground/60 mt-1 max-w-xs">
-          Use the prompt bar above to generate images with {providerLabel}
+          Generate images from Chat using the Image mode toggle, then manage them here.
         </p>
       </div>
     )
@@ -547,12 +901,10 @@ function ImageGallery({
 function VideoGallery({
   videos,
   isLoading,
-  providerLabel,
   onSelect,
 }: {
   videos: GeneratedVideo[]
   isLoading: boolean
-  providerLabel: string
   onSelect: (vid: GeneratedVideo) => void
 }) {
   if (isLoading) {
@@ -572,7 +924,7 @@ function VideoGallery({
         </div>
         <p className="text-sm text-muted-foreground font-medium">No videos yet</p>
         <p className="text-xs text-muted-foreground/60 mt-1 max-w-xs">
-          Use the prompt bar above to generate videos with {providerLabel}
+          Generate videos from Chat using the Video mode toggle, then manage them here.
         </p>
       </div>
     )

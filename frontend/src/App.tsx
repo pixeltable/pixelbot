@@ -9,6 +9,7 @@ import { MemoryPage } from '@/components/memory/memory-page'
 import { SettingsPage } from '@/components/settings/settings-page'
 import { ArchitecturePage } from '@/components/architecture/architecture-page'
 import { DatabasePage } from '@/components/database/database-page'
+import { ExperimentsPage } from '@/components/experiments/experiments-page'
 
 export function App() {
   return (
@@ -23,6 +24,7 @@ export function App() {
             <Route path="images" element={<ImagesPage />} />
             <Route path="memory" element={<MemoryPage />} />
             <Route path="database" element={<DatabasePage />} />
+            <Route path="experiments" element={<ExperimentsPage />} />
             <Route path="settings" element={<SettingsPage />} />
           </Route>
         </Routes>

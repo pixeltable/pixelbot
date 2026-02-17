@@ -122,6 +122,27 @@ export interface ChatMessage {
   video_frame_context?: VideoFrameContext[]
   follow_up_text?: string | null
   metadata?: QueryMetadata
+  video_url?: string
+}
+
+// ── CSV Version History ─────────────────────────────────────────────────────
+
+export interface CsvVersion {
+  version: number
+  created_at: string | null
+  change_type: 'data' | 'schema'
+  inserts: number
+  updates: number
+  deletes: number
+  errors: number
+  schema_change: string | null
+}
+
+export interface CsvVersionsResponse {
+  table_name: string
+  current_version: number
+  can_undo: boolean
+  versions: CsvVersion[]
 }
 
 // ── Studio ──────────────────────────────────────────────────────────────────
@@ -335,6 +356,75 @@ export interface DetectionResponse {
   count: number
   detections?: DetectionItem[]
   classifications?: ClassificationItem[]
+}
+
+// ── Reve AI Edit / Remix ────────────────────────────────────────────────
+
+export interface ReveEditResponse {
+  preview: string
+  width: number
+  height: number
+  instruction: string
+  temp_path: string
+}
+
+export interface ReveRemixResponse {
+  preview: string
+  width: number
+  height: number
+  prompt: string
+  temp_path: string
+}
+
+export interface ReveSaveResponse {
+  message: string
+  uuid: string
+}
+
+// ── Prompt Lab (Experiments) ─────────────────────────────────────────────────
+
+export interface ExperimentModelInfo {
+  id: string
+  name: string
+  provider: string
+  available: boolean
+}
+
+export interface ExperimentResult {
+  model_id: string
+  model_name: string
+  provider: string
+  response: string | null
+  response_time_ms: number
+  word_count: number
+  char_count: number
+  error: string | null
+}
+
+export interface ExperimentModelConfig {
+  model_id: string
+  provider?: string | null
+  display_name?: string | null
+}
+
+export interface ExperimentRun {
+  experiment_id: string
+  task: string
+  system_prompt: string
+  user_prompt: string
+  temperature: number
+  max_tokens: number
+  timestamp: string
+  results: ExperimentResult[]
+}
+
+export interface ExperimentSummary {
+  experiment_id: string
+  task: string
+  user_prompt: string
+  model_ids: string[]
+  results_count: number
+  timestamp: string
 }
 
 // ── Database Browser ────────────────────────────────────────────────────────

@@ -675,13 +675,54 @@ def csv_revert(body: CsvRevertRequest):
         tbl.revert()
         new_count = _sync_registry_row_count(body.table_name, user_id)
 
+        versions = tbl.get_versions()
+        can_undo = len(versions) > 1
+
         return {
             "message": "Reverted to previous version",
             "new_total": new_count,
+            "current_version": versions[0]["version"] if versions else 0,
+            "can_undo": can_undo,
         }
 
     except Exception as e:
         logger.error(f"Error reverting CSV table: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── CSV Version History ──────────────────────────────────────────────────────
+
+@router.get("/csv/versions")
+def csv_versions(table_name: str):
+    """Get version history for a CSV table using table.get_versions()."""
+    user_id = config.DEFAULT_USER_ID
+    _verify_csv_ownership(table_name, user_id)
+
+    try:
+        tbl = pxt.get_table(table_name)
+        versions = tbl.get_versions()
+
+        return {
+            "table_name": table_name,
+            "current_version": versions[0]["version"] if versions else 0,
+            "can_undo": len(versions) > 1,
+            "versions": [
+                {
+                    "version": v["version"],
+                    "created_at": v["created_at"].isoformat() if v.get("created_at") else None,
+                    "change_type": v.get("change_type", "data"),
+                    "inserts": v.get("inserts", 0),
+                    "updates": v.get("updates", 0),
+                    "deletes": v.get("deletes", 0),
+                    "errors": v.get("errors", 0),
+                    "schema_change": v.get("schema_change"),
+                }
+                for v in versions
+            ],
+        }
+
+    except Exception as e:
+        logger.error(f"Error fetching CSV versions: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -1753,6 +1794,243 @@ def _apply_image_operation(img: Image.Image, operation: str, params: dict) -> Im
 
     else:
         raise ValueError(f"Unknown operation: {operation}")
+
+
+# ── Reve AI Image Edit / Remix ───────────────────────────────────────────
+
+class ReveEditRequest(BaseModel):
+    timestamp: str | None = None
+    uuid: str | None = None
+    instruction: str
+
+
+class ReveRemixRequest(BaseModel):
+    prompt: str
+    timestamps: list[str] = []
+    uuids: list[str] = []
+    aspect_ratio: str | None = None
+
+
+class ReveSaveRequest(BaseModel):
+    temp_path: str
+
+
+def _load_image_by_identifier(
+    timestamp: str | None, uid: str | None, user_id: str
+) -> Image.Image:
+    """Load a PIL Image from either image_generation_tasks (by timestamp) or agents.images (by uuid)."""
+    if timestamp:
+        target_ts = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S.%f")
+        gen_table = pxt.get_table("agents.image_generation_tasks")
+        rows = gen_table.where(
+            (gen_table.timestamp == target_ts) & (gen_table.user_id == user_id)
+        ).select(img=gen_table.generated_image).collect()
+        if rows and isinstance(rows[0].get("img"), Image.Image):
+            return rows[0]["img"]
+    elif uid:
+        img_table = _get_pxt_table("image")
+        rows = img_table.where(
+            (img_table.uuid == uid) & (img_table.user_id == user_id)
+        ).select(img=img_table.image).collect()
+        if rows and isinstance(rows[0].get("img"), Image.Image):
+            return rows[0]["img"]
+    raise HTTPException(status_code=404, detail="Source image not found")
+
+
+def _check_reve_api_key():
+    """Raise a clear HTTP 400 if the REVE_API_KEY is not configured."""
+    if not os.environ.get("REVE_API_KEY"):
+        raise HTTPException(
+            status_code=400,
+            detail="Reve API key not configured. Set the REVE_API_KEY environment variable or add api_key to the [reve] section of $PIXELTABLE_HOME/config.toml.",
+        )
+
+
+def _save_reve_temp(img: Image.Image, prefix: str) -> str:
+    """Save a Reve result to a temp directory, return the file path."""
+    temp_dir = os.path.join(config.UPLOAD_FOLDER, "_reve_temp")
+    os.makedirs(temp_dir, exist_ok=True)
+    temp_name = f"{prefix}_{uuid_mod.uuid4().hex[:12]}.png"
+    temp_path = os.path.join(temp_dir, temp_name)
+    if img.mode == "RGBA":
+        img = img.convert("RGB")
+    img.save(temp_path, format="PNG")
+    return temp_path
+
+
+@router.post("/reve/edit")
+def reve_edit_image(body: ReveEditRequest):
+    """Edit an image using Reve AI with a natural language instruction.
+
+    Loads the source image from Pixeltable, calls `reve.edit()` via Pixeltable's
+    on-demand select, saves the result to a temp file, and returns a preview.
+    """
+    from pixeltable.functions import reve as reve_fn
+
+    user_id = config.DEFAULT_USER_ID
+    _check_reve_api_key()
+
+    if not body.instruction.strip():
+        raise HTTPException(status_code=400, detail="Edit instruction is required")
+
+    try:
+        edited_img: Image.Image | None = None
+
+        if body.timestamp:
+            target_ts = datetime.strptime(body.timestamp, "%Y-%m-%d %H:%M:%S.%f")
+            gen_table = pxt.get_table("agents.image_generation_tasks")
+            rows = gen_table.where(
+                (gen_table.timestamp == target_ts) & (gen_table.user_id == user_id)
+            ).select(
+                edited=reve_fn.edit(gen_table.generated_image, body.instruction),
+            ).collect()
+            if rows:
+                edited_img = rows[0].get("edited")
+
+        elif body.uuid:
+            img_table = _get_pxt_table("image")
+            rows = img_table.where(
+                (img_table.uuid == body.uuid) & (img_table.user_id == user_id)
+            ).select(
+                edited=reve_fn.edit(img_table.image, body.instruction),
+            ).collect()
+            if rows:
+                edited_img = rows[0].get("edited")
+
+        else:
+            raise HTTPException(status_code=400, detail="Provide either timestamp or uuid")
+
+        if edited_img is None or not isinstance(edited_img, Image.Image):
+            raise HTTPException(status_code=500, detail="Reve edit returned no result")
+
+        temp_path = _save_reve_temp(edited_img, "reve_edit")
+        preview = _pil_image_to_data_uri(edited_img, max_size=(1024, 1024))
+
+        return {
+            "preview": preview,
+            "width": edited_img.size[0],
+            "height": edited_img.size[1],
+            "instruction": body.instruction,
+            "temp_path": temp_path,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        err_str = str(e)
+        logger.error(f"Reve edit error: {e}", exc_info=True)
+        if "api_key" in err_str and "not configured" in err_str:
+            raise HTTPException(status_code=400, detail="Reve API key not configured. Set REVE_API_KEY environment variable.")
+        raise HTTPException(status_code=500, detail=f"Reve edit failed: {e}")
+
+
+@router.post("/reve/remix")
+def reve_remix_images(body: ReveRemixRequest):
+    """Remix one or more images using Reve AI with a creative prompt.
+
+    Collects source images from Pixeltable, calls `reve.remix()` directly,
+    saves the result to a temp file, and returns a preview.
+
+    Use `<img>0</img>`, `<img>1</img>` tags in the prompt to reference
+    specific source images.
+    """
+    from pixeltable.functions import reve as reve_fn
+
+    user_id = config.DEFAULT_USER_ID
+    _check_reve_api_key()
+
+    if not body.prompt.strip():
+        raise HTTPException(status_code=400, detail="Prompt is required")
+
+    try:
+        source_images: list[Image.Image] = []
+
+        for ts_str in body.timestamps:
+            img = _load_image_by_identifier(ts_str, None, user_id)
+            source_images.append(img)
+
+        for uid in body.uuids:
+            img = _load_image_by_identifier(None, uid, user_id)
+            source_images.append(img)
+
+        if not source_images:
+            raise HTTPException(status_code=400, detail="No valid source images found")
+
+        kwargs: dict = {"prompt": body.prompt, "images": source_images}
+        if body.aspect_ratio:
+            kwargs["aspect_ratio"] = body.aspect_ratio
+
+        remixed_img = reve_fn.remix(**kwargs)
+
+        if remixed_img is None or not isinstance(remixed_img, Image.Image):
+            raise HTTPException(status_code=500, detail="Reve remix returned no result")
+
+        temp_path = _save_reve_temp(remixed_img, "reve_remix")
+        preview = _pil_image_to_data_uri(remixed_img, max_size=(1024, 1024))
+
+        return {
+            "preview": preview,
+            "width": remixed_img.size[0],
+            "height": remixed_img.size[1],
+            "prompt": body.prompt,
+            "temp_path": temp_path,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        err_str = str(e)
+        logger.error(f"Reve remix error: {e}", exc_info=True)
+        if "api_key" in err_str and "not configured" in err_str:
+            raise HTTPException(status_code=400, detail="Reve API key not configured. Set REVE_API_KEY environment variable.")
+        raise HTTPException(status_code=500, detail=f"Reve remix failed: {e}")
+
+
+@router.post("/reve/save")
+def reve_save_result(body: ReveSaveRequest):
+    """Save a Reve edit/remix result from temp storage into the image collection.
+
+    The temp file was created by the edit or remix endpoint. This copies it to
+    permanent storage and inserts it into Pixeltable's `agents.images` table,
+    triggering CLIP embedding and RAG indexing.
+    """
+    user_id = config.DEFAULT_USER_ID
+
+    if not os.path.exists(body.temp_path):
+        raise HTTPException(status_code=404, detail="Temporary file not found — may have been cleaned up")
+
+    try:
+        import shutil
+
+        file_uuid = str(uuid_mod.uuid4())
+        final_name = f"{file_uuid}_reve_result.png"
+        os.makedirs(config.UPLOAD_FOLDER, exist_ok=True)
+        final_path = os.path.join(config.UPLOAD_FOLDER, final_name)
+        shutil.copy2(body.temp_path, final_path)
+
+        img_table = _get_pxt_table("image")
+        img_table.insert([ImageRow(
+            image=final_path,
+            uuid=file_uuid,
+            timestamp=datetime.now(),
+            user_id=user_id,
+        )])
+
+        try:
+            os.remove(body.temp_path)
+        except OSError:
+            pass
+
+        return {
+            "message": "Reve result saved to collection — CLIP embedding and RAG indexing started",
+            "uuid": file_uuid,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Reve save error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to save Reve result: {e}")
 
 
 # ── Document Summary ─────────────────────────────────────────────────────────
