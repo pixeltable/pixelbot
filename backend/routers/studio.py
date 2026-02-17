@@ -370,53 +370,6 @@ def get_csv_rows(body: CsvRowsRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/csv/lookup")
-def csv_lookup(body: dict):
-    """Look up rows in a CSV table using a retrieval UDF."""
-    user_id = config.DEFAULT_USER_ID
-    table_name = body.get("table_name", "")
-    lookup_params = body.get("params", {})
-    limit = body.get("limit", 10)
-
-    if not table_name.startswith("agents.csv_"):
-        raise HTTPException(status_code=400, detail="Invalid CSV table name")
-
-    try:
-        # Verify ownership
-        registry = pxt.get_table("agents.csv_registry")
-        check = registry.where(
-            (registry.table_name == table_name) & (registry.user_id == user_id)
-        ).select(registry.col_names).collect()
-        if not check:
-            raise HTTPException(status_code=404, detail="CSV table not found")
-
-        col_names = check[0]["col_names"]
-        tbl = pxt.get_table(table_name)
-
-        # Build lookup UDF on the fly
-        lookup_cols = [k for k in lookup_params.keys() if k in col_names]
-        if not lookup_cols:
-            raise HTTPException(status_code=400, detail="No valid lookup columns provided")
-
-        udf = pxt.retrieval_udf(
-            tbl,
-            name=f"lookup_{table_name.split('.')[-1]}",
-            description=f"Look up rows in {table_name}",
-            parameters=lookup_cols,
-            limit=limit,
-        )
-
-        result = tbl.select(udf(**lookup_params)).limit(1).collect()
-        if result:
-            return {"rows": result[0].get(f"lookup_{table_name.split('.')[-1]}", [])}
-        return {"rows": []}
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error in CSV lookup: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
-
 
 @router.delete("/csv/{csv_uuid}")
 def delete_csv_table(csv_uuid: str):

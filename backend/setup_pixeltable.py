@@ -450,7 +450,6 @@ tools = pxt.tools(
     functions.get_latest_news,
     functions.fetch_financial_data,
     functions.search_news,
-    functions.query_csv_table,
     search_video_transcripts,
     search_audio_transcripts,
 )

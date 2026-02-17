@@ -420,7 +420,6 @@ def get_context_info():
             {"name": "get_latest_news", "description": inspect.getdoc(functions.get_latest_news)},
             {"name": "fetch_financial_data", "description": inspect.getdoc(functions.fetch_financial_data)},
             {"name": "search_news", "description": inspect.getdoc(functions.search_news)},
-            {"name": "query_csv_table", "description": inspect.getdoc(functions.query_csv_table)},
         ]
 
         # Documents — direct iteration over ResultSet
