@@ -8,8 +8,6 @@ import {
   Settings,
   PanelLeftClose,
   PanelLeftOpen,
-  FolderOpen,
-  X,
   Wand2,
   GitBranch,
   Database,
@@ -17,7 +15,6 @@ import {
   Code2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { FileSidebar } from '@/components/files/file-sidebar'
 
 type NavItem = { to: string; icon: typeof MessageSquare; label: string }
 type NavGroup = { label: string; items: NavItem[] }
@@ -55,7 +52,6 @@ const BOTTOM_NAV = [
 
 export function AppLayout() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
-  const [isFilePanelOpen, setIsFilePanelOpen] = useState(false)
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
@@ -122,25 +118,6 @@ export function AppLayout() {
 
         {/* Bottom section */}
         <div className="px-2 pb-2 space-y-0.5">
-          {/* Files toggle */}
-          <button
-            className={cn(
-              'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-[13px] font-medium transition-colors',
-              isSidebarOpen ? '' : 'justify-center',
-              isFilePanelOpen
-                ? 'bg-accent text-foreground'
-                : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground',
-            )}
-            onClick={() => setIsFilePanelOpen(!isFilePanelOpen)}
-          >
-            {isFilePanelOpen ? (
-              <X className="h-[15px] w-[15px] shrink-0" />
-            ) : (
-              <FolderOpen className="h-[15px] w-[15px] shrink-0" />
-            )}
-            {isSidebarOpen && <span>{isFilePanelOpen ? 'Close Files' : 'Files'}</span>}
-          </button>
-
           {/* Settings */}
           {BOTTOM_NAV.map(({ to, icon: Icon, label }) => (
             <NavLink
@@ -209,17 +186,8 @@ export function AppLayout() {
 
       {/* Main content area (no top bar) */}
       <main className="flex flex-1 flex-col overflow-hidden">
-        <div className="flex flex-1 overflow-hidden">
-          <div className="flex-1 overflow-auto">
-            <Outlet />
-          </div>
-
-          {/* File panel */}
-          {isFilePanelOpen && (
-            <div className="w-72 shrink-0 border-l border-border/60 overflow-y-auto overflow-x-hidden bg-card/30 animate-slide-in">
-              <FileSidebar />
-            </div>
-          )}
+        <div className="flex-1 overflow-auto">
+          <Outlet />
         </div>
       </main>
     </div>

@@ -33,27 +33,17 @@ def _safe_value(val: object) -> object:
 
 
 def _column_info(tbl) -> list[dict]:
-    """Extract column info from a table: name, type, whether computed."""
-    schema = tbl._get_schema()
-    col_names = tbl.columns()
-
-    # Computed columns have expressions; insertable ones don't.
-    # We can detect computed columns by checking tbl._tbl_version_path metadata.
-    computed_cols: set[str] = set()
-    try:
-        for col in tbl._tbl_version_path.columns():
-            if col.is_computed:
-                computed_cols.add(col.name)
-    except Exception:
-        pass
+    """Extract column info from a table using the public get_metadata() API."""
+    meta = tbl.get_metadata()
+    col_meta = meta.get("columns", {})
 
     columns = []
-    for name in col_names:
-        col_type = schema.get(name)
+    for name in tbl.columns():
+        info = col_meta.get(name, {})
         columns.append({
             "name": name,
-            "type": str(col_type) if col_type else "unknown",
-            "is_computed": name in computed_cols,
+            "type": info.get("type_", "unknown"),
+            "is_computed": info.get("computed_with") is not None,
         })
     return columns
 
@@ -69,20 +59,13 @@ def list_all_tables():
         for path in sorted(table_paths):
             try:
                 tbl = pxt.get_table(path)
-                base = tbl.get_base_table()
                 row_count = tbl.count()
-
-                # get_base_table() returns a Table object; extract just the path name
-                base_path = None
-                if base is not None:
-                    try:
-                        base_path = base._tbl_version_path.tbl_version.get().path_str()
-                    except Exception:
-                        base_path = "unknown"
+                meta = tbl.get_metadata()
+                base_path = meta.get("base")
 
                 tables.append({
                     "path": path,
-                    "type": "view" if base is not None else "table",
+                    "type": "view" if meta.get("is_view") else "table",
                     "base_table": base_path,
                     "columns": _column_info(tbl),
                     "row_count": row_count,
@@ -154,16 +137,11 @@ def get_table_schema(path: str):
         raise HTTPException(status_code=404, detail=f"Table '{path}' not found")
 
     try:
-        base = tbl.get_base_table()
-        base_path = None
-        if base is not None:
-            try:
-                base_path = base._tbl_version_path.tbl_version.get().path_str()
-            except Exception:
-                base_path = "unknown"
+        meta = tbl.get_metadata()
+        base_path = meta.get("base")
         return {
             "path": path,
-            "type": "view" if base is not None else "table",
+            "type": "view" if meta.get("is_view") else "table",
             "base_table": base_path,
             "columns": _column_info(tbl),
             "row_count": tbl.count(),

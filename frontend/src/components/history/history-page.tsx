@@ -425,7 +425,7 @@ function TimelineView({
   }
 
   return (
-    <div className="flex-1 overflow-y-auto px-6 py-4 max-w-3xl mx-auto w-full">
+    <div className="flex-1 overflow-y-auto px-6 py-4 w-full">
       {Object.entries(groups).map(([date, dateEvents]) => (
         <div key={date} className="mb-6">
           <div className="flex items-center gap-2 mb-3">

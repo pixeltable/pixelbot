@@ -54,7 +54,8 @@ export function ImagesPage() {
   // Videos
   const [videos, setVideos] = useState<GeneratedVideo[]>([])
   const [videoSearch, setVideoSearch] = useState('')
-  const [isLoadingVideos, setIsLoadingVideos] = useState(true)
+  const [isLoadingVideos, setIsLoadingVideos] = useState(false)
+  const [videosLoaded, setVideosLoaded] = useState(false)
   const [selectedVideo, setSelectedVideo] = useState<GeneratedVideo | null>(null)
 
   // Save to collection tracking
@@ -87,6 +88,7 @@ export function ImagesPage() {
     try {
       const data = await api.getVideoHistory()
       setVideos(data)
+      setVideosLoaded(true)
     } catch {
       addToast('Failed to load videos', 'error')
     } finally {
@@ -96,8 +98,14 @@ export function ImagesPage() {
 
   useEffect(() => {
     fetchImages()
-    fetchVideos()
-  }, [fetchImages, fetchVideos])
+  }, [fetchImages])
+
+  // Lazy-load videos only when the Videos tab is first selected
+  useEffect(() => {
+    if (activeTab === 'videos' && !videosLoaded) {
+      fetchVideos()
+    }
+  }, [activeTab, videosLoaded, fetchVideos])
 
   const handleDeleteImage = useCallback(
     async (timestamp: string) => {

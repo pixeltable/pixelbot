@@ -1,7 +1,9 @@
 # utils.py - Shared utility functions for the backend routers.
 
+import asyncio
 import base64
 import functools
+import inspect
 import io
 import logging
 import time
@@ -30,33 +32,57 @@ def pxt_retry(
 ) -> Callable[[Callable[P, T]], Callable[P, T]]:
     """Decorator that retries a function on transient Pixeltable connection errors.
 
-    Catches AssertionError, ProgrammingError, ResourceClosedError and similar
-    transient errors that occur when concurrent requests hit the Pixeltable
-    catalog during startup or hot-reload.
+    Supports both sync and async functions. Catches AssertionError,
+    ProgrammingError, ResourceClosedError and similar transient errors that
+    occur when concurrent requests hit the Pixeltable catalog.
     """
     def decorator(fn: Callable[P, T]) -> Callable[P, T]:
-        @functools.wraps(fn)
-        def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
-            last_exc: Exception | None = None
-            wait = delay
-            for attempt in range(1, max_attempts + 1):
-                try:
-                    return fn(*args, **kwargs)
-                except Exception as exc:
-                    err_str = str(exc)
-                    is_transient = any(msg in err_str for msg in _TRANSIENT_MESSAGES)
-                    if not is_transient or attempt == max_attempts:
-                        raise
-                    last_exc = exc
-                    logger.warning(
-                        f"[pxt_retry] {fn.__name__} attempt {attempt}/{max_attempts} "
-                        f"failed with transient error: {err_str[:120]}. "
-                        f"Retrying in {wait:.1f}s..."
-                    )
-                    time.sleep(wait)
-                    wait *= backoff
-            raise last_exc  # type: ignore[misc]
-        return wrapper
+        if inspect.iscoroutinefunction(fn):
+            @functools.wraps(fn)
+            async def async_wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
+                last_exc: Exception | None = None
+                wait = delay
+                for attempt in range(1, max_attempts + 1):
+                    try:
+                        return await fn(*args, **kwargs)
+                    except Exception as exc:
+                        err_str = str(exc)
+                        is_transient = any(msg in err_str for msg in _TRANSIENT_MESSAGES)
+                        if not is_transient or attempt == max_attempts:
+                            raise
+                        last_exc = exc
+                        logger.warning(
+                            f"[pxt_retry] {fn.__name__} attempt {attempt}/{max_attempts} "
+                            f"failed with transient error: {err_str[:120]}. "
+                            f"Retrying in {wait:.1f}s..."
+                        )
+                        await asyncio.sleep(wait)
+                        wait *= backoff
+                raise last_exc  # type: ignore[misc]
+            return async_wrapper  # type: ignore[return-value]
+        else:
+            @functools.wraps(fn)
+            def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
+                last_exc: Exception | None = None
+                wait = delay
+                for attempt in range(1, max_attempts + 1):
+                    try:
+                        return fn(*args, **kwargs)
+                    except Exception as exc:
+                        err_str = str(exc)
+                        is_transient = any(msg in err_str for msg in _TRANSIENT_MESSAGES)
+                        if not is_transient or attempt == max_attempts:
+                            raise
+                        last_exc = exc
+                        logger.warning(
+                            f"[pxt_retry] {fn.__name__} attempt {attempt}/{max_attempts} "
+                            f"failed with transient error: {err_str[:120]}. "
+                            f"Retrying in {wait:.1f}s..."
+                        )
+                        time.sleep(wait)
+                        wait *= backoff
+                raise last_exc  # type: ignore[misc]
+            return wrapper
     return decorator
 
 

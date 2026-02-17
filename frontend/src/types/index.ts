@@ -500,3 +500,4 @@ export interface TimelineResponse {
   events: TimelineEvent[]
   total: number
 }
+

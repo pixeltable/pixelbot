@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Trash2, Download, Search, Plus, Loader2, Brain, Code, FileText, Clock } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -23,18 +23,31 @@ export function MemoryPage() {
   const [newContent, setNewContent] = useState('')
   const [newType, setNewType] = useState<'text' | 'code'>('text')
   const [newLanguage, setNewLanguage] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Debounce search input - wait 400ms after last keystroke
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => {
+      setDebouncedSearch(search)
+    }, 400)
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+    }
+  }, [search])
 
   const fetchMemory = useCallback(async () => {
     setIsLoading(true)
     try {
-      const data = await api.getMemory(search || undefined)
+      const data = await api.getMemory(debouncedSearch || undefined)
       setItems(data)
     } catch {
       addToast('Failed to load memory', 'error')
     } finally {
       setIsLoading(false)
     }
-  }, [addToast, search])
+  }, [addToast, debouncedSearch])
 
   useEffect(() => {
     fetchMemory()

@@ -16,6 +16,8 @@ import {
   Wrench,
   Brain,
   ArrowRight,
+  ListOrdered,
+  X,
 } from 'lucide-react'
 import { marked } from 'marked'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -65,9 +67,14 @@ export function ChatPage() {
   const [selectedPersona, setSelectedPersona] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
 
+  // ── Message Queue ────────────────────────────────────────────────────────
+  const [queue, setQueue] = useState<string[]>([])
+  const isProcessingRef = useRef(false)
+
   // ── Dictation (Web Speech API) ──────────────────────────────────────────
   const [isListening, setIsListening] = useState(false)
   const recognitionRef = useRef<SpeechRecognition | null>(null)
+  const dictationBaseRef = useRef('')
 
   const hasSpeechApi = typeof window !== 'undefined' && ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)
 
@@ -81,27 +88,24 @@ export function ChatPage() {
     const SpeechRecognitionCtor = window.SpeechRecognition ?? (window as unknown as { webkitSpeechRecognition: typeof SpeechRecognition }).webkitSpeechRecognition
     if (!SpeechRecognitionCtor) return
 
+    // Snapshot whatever is already typed as the frozen base
+    dictationBaseRef.current = input
+
     const recognition = new SpeechRecognitionCtor()
     recognition.continuous = true
     recognition.interimResults = true
     recognition.lang = 'en-US'
 
-    let finalTranscript = ''
-
     recognition.onresult = (event: SpeechRecognitionEvent) => {
-      let interim = ''
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const transcript = event.results[i][0].transcript
-        if (event.results[i].isFinal) {
-          finalTranscript += transcript + ' '
-        } else {
-          interim = transcript
-        }
+      // Rebuild full transcript from all results on every event
+      let full = ''
+      for (let i = 0; i < event.results.length; i++) {
+        full += event.results[i][0].transcript
+        if (event.results[i].isFinal) full += ' '
       }
-      setInput((prev) => {
-        const base = prev.endsWith(' ') ? prev : prev ? prev + ' ' : ''
-        return (base + finalTranscript + interim).replace(/\s+/g, ' ').trimStart()
-      })
+      const base = dictationBaseRef.current
+      const sep = base && !base.endsWith(' ') ? ' ' : ''
+      setInput(base + sep + full.trim())
     }
 
     recognition.onerror = () => {
@@ -115,7 +119,7 @@ export function ChatPage() {
     recognitionRef.current = recognition
     recognition.start()
     setIsListening(true)
-  }, [isListening])
+  }, [isListening, input])
 
   // Stop dictation when component unmounts
   useEffect(() => {
@@ -132,19 +136,12 @@ export function ChatPage() {
     scrollRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  const handleSend = useCallback(async () => {
-    const text = input.trim()
-    if (!text || isLoading) return
-
-    // Stop dictation if active
-    recognitionRef.current?.stop()
-    setIsListening(false)
-
-    setInput('')
+  const processMessage = useCallback(async (text: string) => {
+    isProcessingRef.current = true
     setIsLoading(true)
+    setMessages((prev) => [...prev, { role: 'user', content: text }])
 
     if (mode === 'image') {
-      setMessages((prev) => [...prev, { role: 'user', content: text }])
       try {
         const result = await api.generateImage(text)
         setMessages((prev) => [
@@ -156,14 +153,8 @@ export function ChatPage() {
         ])
       } catch (err) {
         addToast(err instanceof Error ? err.message : 'Image generation failed', 'error')
-      } finally {
-        setIsLoading(false)
       }
-      return
-    }
-
-    if (mode === 'video') {
-      setMessages((prev) => [...prev, { role: 'user', content: text }])
+    } else if (mode === 'video') {
       try {
         const result = await api.generateVideo(text)
         const videoUrl = api.getVideoUrl(result.video_path)
@@ -177,14 +168,8 @@ export function ChatPage() {
         ])
       } catch (err) {
         addToast(err instanceof Error ? err.message : 'Video generation failed', 'error')
-      } finally {
-        setIsLoading(false)
       }
-      return
-    }
-
-    if (mode === 'voice') {
-      setMessages((prev) => [...prev, { role: 'user', content: text }])
+    } else if (mode === 'voice') {
       try {
         const result = await api.generateSpeech(text)
         setMessages((prev) => [
@@ -197,32 +182,52 @@ export function ChatPage() {
         ])
       } catch (err) {
         addToast(err instanceof Error ? err.message : 'Speech generation failed', 'error')
-      } finally {
-        setIsLoading(false)
       }
+    } else {
+      try {
+        const response = await api.sendQuery(text, selectedPersona)
+        const assistantMsg: ChatMessage = {
+          role: 'assistant',
+          content: response.answer,
+          image_context: response.image_context,
+          video_frame_context: response.video_frame_context,
+          follow_up_text: response.follow_up_text,
+          metadata: response.metadata,
+        }
+        setMessages((prev) => [...prev, assistantMsg])
+      } catch (err) {
+        addToast(err instanceof Error ? err.message : 'Query failed', 'error')
+      }
+    }
+
+    setIsLoading(false)
+    isProcessingRef.current = false
+  }, [mode, selectedPersona, addToast])
+
+  // Drain the queue one at a time — only starts the next after isLoading goes false
+  useEffect(() => {
+    if (isLoading || queue.length === 0 || isProcessingRef.current) return
+    const [next, ...rest] = queue
+    setQueue(rest)
+    processMessage(next)
+  }, [isLoading, queue, processMessage])
+
+  const handleSend = useCallback(() => {
+    const text = input.trim()
+    if (!text) return
+
+    // Stop dictation if active
+    recognitionRef.current?.stop()
+    setIsListening(false)
+    setInput('')
+
+    if (isProcessingRef.current) {
+      setQueue((prev) => [...prev, text])
       return
     }
 
-    const userMsg: ChatMessage = { role: 'user', content: text }
-    setMessages((prev) => [...prev, userMsg])
-
-    try {
-      const response = await api.sendQuery(text, selectedPersona)
-      const assistantMsg: ChatMessage = {
-        role: 'assistant',
-        content: response.answer,
-        image_context: response.image_context,
-        video_frame_context: response.video_frame_context,
-        follow_up_text: response.follow_up_text,
-        metadata: response.metadata,
-      }
-      setMessages((prev) => [...prev, assistantMsg])
-    } catch (err) {
-      addToast(err instanceof Error ? err.message : 'Query failed', 'error')
-    } finally {
-      setIsLoading(false)
-    }
-  }, [input, isLoading, mode, selectedPersona, addToast])
+    processMessage(text)
+  }, [input, processMessage])
 
   const handleFollowUp = useCallback((question: string) => {
     setInput(question)
@@ -297,6 +302,32 @@ export function ChatPage() {
 
           {/* Thinking indicator with pipeline stages */}
           {isLoading && <ThinkingIndicator />}
+
+          {/* Queued messages */}
+          {queue.length > 0 && (
+            <div className="space-y-1.5 py-2 pl-10">
+              <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground/50">
+                <ListOrdered className="h-3 w-3" />
+                <span>{queue.length} queued</span>
+              </div>
+              {queue.map((q, idx) => (
+                <div
+                  key={idx}
+                  className="flex items-center gap-2 rounded-lg bg-accent/20 border border-border/30 px-3 py-1.5 text-xs text-muted-foreground/70 group"
+                >
+                  <span className="text-[10px] text-muted-foreground/40 tabular-nums w-4">{idx + 1}</span>
+                  <span className="truncate flex-1">{q}</span>
+                  <button
+                    className="opacity-0 group-hover:opacity-100 text-muted-foreground/40 hover:text-red-400 transition-all shrink-0"
+                    onClick={() => setQueue((prev) => prev.filter((_, i) => i !== idx))}
+                    title="Remove from queue"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
 
           <div ref={scrollRef} />
         </div>
@@ -406,17 +437,25 @@ export function ChatPage() {
                     )}
                   </button>
                 )}
+                {queue.length > 0 && (
+                  <div className="flex items-center gap-1 rounded-lg bg-accent/50 px-2 py-1 text-[10px] text-muted-foreground">
+                    <ListOrdered className="h-3 w-3" />
+                    {queue.length}
+                  </div>
+                )}
                 <button
                   onClick={handleSend}
-                  disabled={isLoading || !input.trim()}
+                  disabled={!input.trim()}
                   className={cn(
                     'flex h-8 w-8 items-center justify-center rounded-lg transition-all',
-                    input.trim() && !isLoading
-                      ? 'bg-foreground text-background hover:opacity-80'
+                    input.trim()
+                      ? isLoading
+                        ? 'bg-accent text-foreground hover:opacity-80'
+                        : 'bg-foreground text-background hover:opacity-80'
                       : 'text-muted-foreground/30 cursor-not-allowed',
                   )}
                 >
-                  {isLoading ? (
+                  {isLoading && !input.trim() ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
                     <Send className="h-3.5 w-3.5" />

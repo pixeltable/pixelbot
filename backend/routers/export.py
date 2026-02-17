@@ -64,9 +64,9 @@ def list_exportable_tables():
     try:
         tables_raw = pxt.list_tables("agents", recursive=True)
         result = []
-        for tbl in tables_raw:
-            path = tbl.get_path() if hasattr(tbl, "get_path") else str(tbl)
+        for path in tables_raw:
             try:
+                tbl = pxt.get_table(path)
                 col_names = tbl.columns()
                 row_count = tbl.count()
                 result.append({

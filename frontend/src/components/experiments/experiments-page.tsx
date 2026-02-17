@@ -7,8 +7,6 @@ import {
   Hash,
   Loader2,
   Trash2,
-  ChevronDown,
-  ChevronRight,
   Copy,
   Check,
   RotateCcw,
@@ -66,7 +64,7 @@ export function ExperimentsPage() {
   const [isRunning, setIsRunning] = useState(false)
   const [currentRun, setCurrentRun] = useState<ExperimentRun | null>(null)
   const [history, setHistory] = useState<ExperimentSummary[]>([])
-  const [isHistoryOpen, setIsHistoryOpen] = useState(false)
+  const [rightTab, setRightTab] = useState<'results' | 'history'>('results')
   const [copiedId, setCopiedId] = useState<string | null>(null)
 
   // Load models and history on mount
@@ -155,7 +153,7 @@ export function ExperimentsPage() {
       setTemperature(data.temperature)
       setMaxTokens(data.max_tokens)
       setSelectedModels(data.results.map((r) => r.model_id))
-      setIsHistoryOpen(false)
+      setRightTab('results')
     } catch (err) {
       addToast('Failed to load experiment', 'error')
     }
@@ -448,7 +446,7 @@ export function ExperimentsPage() {
         </div>
 
         {/* Bottom actions */}
-        <div className="px-5 py-4 border-t border-border/40 space-y-2">
+        <div className="px-5 py-4 border-t border-border/40">
           <button
             className={cn(
               'flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-[13px] font-semibold transition-all',
@@ -470,13 +468,36 @@ export function ExperimentsPage() {
               </>
             )}
           </button>
+        </div>
+      </div>
 
+      {/* Right panel: Results / History tabs */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Tab bar */}
+        <div className="flex items-center gap-0 border-b border-border/60 bg-card/20 shrink-0">
           <button
             className={cn(
-              'flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2 text-[12px] font-medium transition-colors',
-              'border border-border/60 text-muted-foreground hover:bg-accent/50 hover:text-foreground',
+              'flex items-center gap-1.5 px-5 py-3 text-[12px] font-medium transition-colors relative',
+              rightTab === 'results'
+                ? 'text-foreground'
+                : 'text-muted-foreground/60 hover:text-muted-foreground',
             )}
-            onClick={() => setIsHistoryOpen(!isHistoryOpen)}
+            onClick={() => setRightTab('results')}
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            Results
+            {rightTab === 'results' && (
+              <span className="absolute bottom-0 left-4 right-4 h-[2px] bg-violet-500 rounded-full" />
+            )}
+          </button>
+          <button
+            className={cn(
+              'flex items-center gap-1.5 px-5 py-3 text-[12px] font-medium transition-colors relative',
+              rightTab === 'history'
+                ? 'text-foreground'
+                : 'text-muted-foreground/60 hover:text-muted-foreground',
+            )}
+            onClick={() => setRightTab('history')}
           >
             <History className="h-3.5 w-3.5" />
             History
@@ -485,222 +506,211 @@ export function ExperimentsPage() {
                 {history.length}
               </Badge>
             )}
-            {isHistoryOpen ? <ChevronDown className="h-3 w-3 ml-auto" /> : <ChevronRight className="h-3 w-3 ml-auto" />}
+            {rightTab === 'history' && (
+              <span className="absolute bottom-0 left-4 right-4 h-[2px] bg-violet-500 rounded-full" />
+            )}
           </button>
         </div>
-      </div>
 
-      {/* Right panel: Results + History */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Results area */}
+        {/* Tab content */}
         <div className="flex-1 overflow-y-auto">
-          {/* Running state */}
-          {isRunning && !currentRun && (
-            <div className="p-6 space-y-4">
-              <div className="flex items-center gap-2.5 mb-6">
-                <Sparkles className="h-4 w-4 text-violet-400 animate-pulse" />
-                <h2 className="text-[14px] font-semibold text-foreground">Running experiment...</h2>
-              </div>
-              {selectedModels.map((modelId) => {
-                const model = availableModels.find((m) => m.id === modelId)
-                const style = getProviderStyle(model?.provider ?? '')
-                return (
-                  <div
-                    key={modelId}
-                    className={cn(
-                      'rounded-xl border p-5 animate-pulse',
-                      style.border,
-                      style.bg,
-                    )}
-                  >
-                    <div className="flex items-center gap-2.5 mb-3">
-                      <Loader2 className={cn('h-3.5 w-3.5 animate-spin', style.color)} />
-                      <span className={cn('text-[13px] font-semibold', style.text)}>
-                        {model?.name ?? modelId}
-                      </span>
-                      <Badge variant="secondary" className={cn('text-[9px]', style.color)}>
-                        {model?.provider}
-                      </Badge>
-                    </div>
-                    <div className="space-y-2">
-                      <div className="h-3 rounded bg-foreground/5 w-full" />
-                      <div className="h-3 rounded bg-foreground/5 w-4/5" />
-                      <div className="h-3 rounded bg-foreground/5 w-3/5" />
-                    </div>
+          {rightTab === 'results' && (
+            <>
+              {/* Running state */}
+              {isRunning && !currentRun && (
+                <div className="p-6 space-y-4">
+                  <div className="flex items-center gap-2.5 mb-6">
+                    <Sparkles className="h-4 w-4 text-violet-400 animate-pulse" />
+                    <h2 className="text-[14px] font-semibold text-foreground">Running experiment...</h2>
                   </div>
-                )
-              })}
-            </div>
-          )}
-
-          {/* Results */}
-          {currentRun && !isRunning && (
-            <div className="p-6 space-y-4">
-              {/* Results header */}
-              <div className="flex items-center gap-3 mb-2">
-                <div className="flex items-center gap-2">
-                  <FlaskConical className="h-4 w-4 text-violet-400" />
-                  <h2 className="text-[14px] font-semibold text-foreground">{currentRun.task}</h2>
-                </div>
-                <Badge variant="outline" className="text-[9px] px-2 py-0 font-mono">
-                  {currentRun.experiment_id}
-                </Badge>
-                <span className="text-[10px] text-muted-foreground/50 ml-auto">
-                  {new Date(currentRun.timestamp).toLocaleString()}
-                </span>
-                <button
-                  className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
-                  onClick={handleRerun}
-                  title="Re-run experiment"
-                >
-                  <RotateCcw className="h-3 w-3" />
-                  Re-run
-                </button>
-              </div>
-
-              {/* Prompt preview */}
-              <div className="rounded-lg border border-border/40 bg-card/30 px-4 py-3 mb-4">
-                <p className="text-[11px] text-muted-foreground/50 uppercase tracking-wider font-semibold mb-1">
-                  Prompt
-                </p>
-                <p className="text-[12px] text-foreground/80 line-clamp-3">{currentRun.user_prompt}</p>
-              </div>
-
-              {/* Model result cards */}
-              <div className="space-y-4">
-                {currentRun.results.map((result) => (
-                  <ResultCard
-                    key={result.model_id}
-                    result={result}
-                    fastestTime={fastestTime}
-                    copiedId={copiedId}
-                    onCopy={handleCopyResponse}
-                  />
-                ))}
-              </div>
-
-              {/* Comparison summary */}
-              {currentRun.results.length > 1 && (
-                <ComparisonBar results={currentRun.results} />
-              )}
-            </div>
-          )}
-
-          {/* Empty state */}
-          {!currentRun && !isRunning && (
-            <div className="flex items-center justify-center h-full">
-              <div className="text-center max-w-md">
-                <div className="flex justify-center mb-4">
-                  <div className="h-16 w-16 rounded-2xl bg-violet-500/10 flex items-center justify-center">
-                    <FlaskConical className="h-8 w-8 text-violet-400/60" />
-                  </div>
-                </div>
-                <h3 className="text-[15px] font-semibold text-foreground mb-2">
-                  Prompt Engineering Lab
-                </h3>
-                <p className="text-[12px] text-muted-foreground/60 leading-relaxed mb-4">
-                  Compare how different LLMs respond to the same prompt.
-                  Adjust parameters, iterate on prompts, and track every experiment
-                  with Pixeltable's automatic versioning.
-                </p>
-                <div className="flex flex-wrap justify-center gap-2">
-                  {availableModels.filter((m) => m.available).map((m) => {
-                    const style = getProviderStyle(m.provider)
+                  {selectedModels.map((modelId) => {
+                    const model = availableModels.find((m) => m.id === modelId)
+                    const style = getProviderStyle(model?.provider ?? '')
                     return (
-                      <Badge
-                        key={m.id}
-                        variant="secondary"
-                        className={cn('text-[10px]', style.color)}
+                      <div
+                        key={modelId}
+                        className={cn('rounded-xl border p-5 animate-pulse', style.border, style.bg)}
                       >
-                        {m.name}
-                      </Badge>
+                        <div className="flex items-center gap-2.5 mb-3">
+                          <Loader2 className={cn('h-3.5 w-3.5 animate-spin', style.color)} />
+                          <span className={cn('text-[13px] font-semibold', style.text)}>
+                            {model?.name ?? modelId}
+                          </span>
+                          <Badge variant="secondary" className={cn('text-[9px]', style.color)}>
+                            {model?.provider}
+                          </Badge>
+                        </div>
+                        <div className="space-y-2">
+                          <div className="h-3 rounded bg-foreground/5 w-full" />
+                          <div className="h-3 rounded bg-foreground/5 w-4/5" />
+                          <div className="h-3 rounded bg-foreground/5 w-3/5" />
+                        </div>
+                      </div>
                     )
                   })}
                 </div>
-              </div>
-            </div>
-          )}
-        </div>
+              )}
 
-        {/* History drawer */}
-        {isHistoryOpen && (
-          <div className="border-t border-border/60 bg-card/30 max-h-[280px] overflow-y-auto shrink-0">
-            <div className="px-5 py-3 border-b border-border/40 flex items-center justify-between sticky top-0 bg-card/80 backdrop-blur-sm z-10">
-              <div className="flex items-center gap-2">
-                <History className="h-3.5 w-3.5 text-muted-foreground" />
-                <h3 className="text-[12px] font-semibold text-foreground">Experiment History</h3>
-                <Badge variant="secondary" className="text-[9px] px-1.5 py-0">
-                  {history.length}
-                </Badge>
-              </div>
-              <button
-                className="text-muted-foreground hover:text-foreground transition-colors"
-                onClick={() => setIsHistoryOpen(false)}
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </div>
-
-            {history.length === 0 ? (
-              <div className="px-5 py-8 text-center text-[11px] text-muted-foreground/50">
-                No experiments yet. Run one to start tracking.
-              </div>
-            ) : (
-              <div className="divide-y divide-border/30">
-                {history.map((exp) => (
-                  <div
-                    key={exp.experiment_id}
-                    className={cn(
-                      'px-5 py-3 flex items-center gap-3 hover:bg-accent/30 transition-colors cursor-pointer group',
-                      currentRun?.experiment_id === exp.experiment_id && 'bg-accent/20',
-                    )}
-                    onClick={() => handleLoadExperiment(exp.experiment_id)}
-                  >
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-0.5">
-                        <span className="text-[12px] font-medium text-foreground truncate">
-                          {exp.task}
-                        </span>
-                        <Badge variant="outline" className="text-[8px] px-1.5 py-0 font-mono shrink-0">
-                          {exp.experiment_id}
-                        </Badge>
-                      </div>
-                      <p className="text-[10px] text-muted-foreground/60 truncate">
-                        {exp.user_prompt}
-                      </p>
+              {/* Results */}
+              {currentRun && !isRunning && (
+                <div className="p-6 space-y-4">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="flex items-center gap-2">
+                      <FlaskConical className="h-4 w-4 text-violet-400" />
+                      <h2 className="text-[14px] font-semibold text-foreground">{currentRun.task}</h2>
                     </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      {exp.model_ids.map((mid) => {
-                        const model = availableModels.find((m) => m.id === mid)
-                        const style = getProviderStyle(model?.provider ?? '')
+                    <Badge variant="outline" className="text-[9px] px-2 py-0 font-mono">
+                      {currentRun.experiment_id}
+                    </Badge>
+                    <span className="text-[10px] text-muted-foreground/50 ml-auto">
+                      {new Date(currentRun.timestamp).toLocaleString()}
+                    </span>
+                    <button
+                      className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                      onClick={handleRerun}
+                      title="Re-run experiment"
+                    >
+                      <RotateCcw className="h-3 w-3" />
+                      Re-run
+                    </button>
+                  </div>
+
+                  <div className="rounded-lg border border-border/40 bg-card/30 px-4 py-3 mb-4">
+                    <p className="text-[11px] text-muted-foreground/50 uppercase tracking-wider font-semibold mb-1">
+                      Prompt
+                    </p>
+                    <p className="text-[12px] text-foreground/80 line-clamp-3">{currentRun.user_prompt}</p>
+                  </div>
+
+                  <div className="space-y-4">
+                    {currentRun.results.map((result) => (
+                      <ResultCard
+                        key={result.model_id}
+                        result={result}
+                        fastestTime={fastestTime}
+                        copiedId={copiedId}
+                        onCopy={handleCopyResponse}
+                      />
+                    ))}
+                  </div>
+
+                  {currentRun.results.length > 1 && (
+                    <ComparisonBar results={currentRun.results} />
+                  )}
+                </div>
+              )}
+
+              {/* Empty state */}
+              {!currentRun && !isRunning && (
+                <div className="flex items-center justify-center h-full">
+                  <div className="text-center max-w-md">
+                    <div className="flex justify-center mb-4">
+                      <div className="h-16 w-16 rounded-2xl bg-violet-500/10 flex items-center justify-center">
+                        <FlaskConical className="h-8 w-8 text-violet-400/60" />
+                      </div>
+                    </div>
+                    <h3 className="text-[15px] font-semibold text-foreground mb-2">
+                      Prompt Engineering Lab
+                    </h3>
+                    <p className="text-[12px] text-muted-foreground/60 leading-relaxed mb-4">
+                      Compare how different LLMs respond to the same prompt.
+                      Adjust parameters, iterate on prompts, and track every experiment
+                      with Pixeltable's automatic versioning.
+                    </p>
+                    <div className="flex flex-wrap justify-center gap-2">
+                      {availableModels.filter((m) => m.available).map((m) => {
+                        const style = getProviderStyle(m.provider)
                         return (
-                          <div
-                            key={mid}
-                            className={cn('h-2 w-2 rounded-full', style.bg, style.border, 'border')}
-                            title={model?.name ?? mid}
-                          />
+                          <Badge
+                            key={m.id}
+                            variant="secondary"
+                            className={cn('text-[10px]', style.color)}
+                          >
+                            {m.name}
+                          </Badge>
                         )
                       })}
                     </div>
-                    <span className="text-[9px] text-muted-foreground/40 shrink-0">
-                      {new Date(exp.timestamp).toLocaleDateString()}
-                    </span>
-                    <button
-                      className="opacity-0 group-hover:opacity-100 text-muted-foreground/40 hover:text-destructive transition-all shrink-0"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        handleDeleteExperiment(exp.experiment_id)
-                      }}
-                      title="Delete experiment"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </button>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
+                </div>
+              )}
+            </>
+          )}
+
+          {rightTab === 'history' && (
+            <div className="h-full">
+              {history.length === 0 ? (
+                <div className="flex items-center justify-center h-full">
+                  <div className="text-center">
+                    <div className="flex justify-center mb-3">
+                      <div className="h-12 w-12 rounded-xl bg-muted flex items-center justify-center">
+                        <History className="h-6 w-6 text-muted-foreground/30" />
+                      </div>
+                    </div>
+                    <p className="text-[12px] text-muted-foreground/60">No experiments yet</p>
+                    <p className="text-[11px] text-muted-foreground/40 mt-1">Run one to start tracking</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="divide-y divide-border/30">
+                  {history.map((exp) => (
+                    <div
+                      key={exp.experiment_id}
+                      className={cn(
+                        'px-5 py-4 flex items-center gap-3 hover:bg-accent/30 transition-colors cursor-pointer group',
+                        currentRun?.experiment_id === exp.experiment_id && 'bg-violet-500/5 border-l-2 border-l-violet-500',
+                      )}
+                      onClick={() => handleLoadExperiment(exp.experiment_id)}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-[13px] font-medium text-foreground truncate">
+                            {exp.task}
+                          </span>
+                          <Badge variant="outline" className="text-[8px] px-1.5 py-0 font-mono shrink-0">
+                            {exp.experiment_id}
+                          </Badge>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground/60 truncate mb-1.5">
+                          {exp.user_prompt}
+                        </p>
+                        <div className="flex items-center gap-2">
+                          {exp.model_ids.map((mid) => {
+                            const model = availableModels.find((m) => m.id === mid)
+                            const style = getProviderStyle(model?.provider ?? '')
+                            return (
+                              <Badge
+                                key={mid}
+                                variant="secondary"
+                                className={cn('text-[8px] px-1.5 py-0', style.color)}
+                              >
+                                {model?.name ?? mid}
+                              </Badge>
+                            )
+                          })}
+                          <span className="text-[10px] text-muted-foreground/40 ml-auto flex items-center gap-1">
+                            <Clock className="h-2.5 w-2.5" />
+                            {new Date(exp.timestamp).toLocaleString()}
+                          </span>
+                        </div>
+                      </div>
+                      <button
+                        className="opacity-0 group-hover:opacity-100 text-muted-foreground/40 hover:text-destructive transition-all shrink-0"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleDeleteExperiment(exp.experiment_id)
+                        }}
+                        title="Delete experiment"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )

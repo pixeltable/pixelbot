@@ -148,10 +148,10 @@ OPERATIONS_CATALOG = {
         {"id": "detect_scenes", "label": "Detect Scenes", "description": "Find scene cuts with timestamps", "category": "analyze",
          "params": [{"name": "threshold", "type": "number", "default": 27.0, "min": 5.0, "max": 80.0, "step": 1.0}]},
         {"id": "extract_frame", "label": "Extract Frame", "description": "Extract a single frame at a timestamp", "category": "transform",
-         "params": [{"name": "timestamp", "type": "number", "default": 0.0, "min": 0.0, "max": 9999, "step": 0.1}]},
+         "params": [{"name": "timestamp", "type": "time", "default": 0.0, "min": 0.0}]},
         {"id": "clip_video", "label": "Clip Video", "description": "Extract a portion of the video", "category": "transform",
-         "params": [{"name": "start", "type": "number", "default": 0.0, "min": 0.0, "max": 9999, "step": 0.1},
-                    {"name": "duration", "type": "number", "default": 10.0, "min": 0.5, "max": 9999, "step": 0.5}]},
+         "params": [{"name": "start", "type": "time", "default": 0.0, "min": 0.0},
+                    {"name": "duration", "type": "time", "default": 10.0, "min": 0.5}]},
         {"id": "overlay_text", "label": "Overlay Text", "description": "Add text overlay to the video", "category": "transform",
          "params": [{"name": "text", "type": "string", "default": "Hello World"},
                     {"name": "font_size", "type": "number", "default": 32, "min": 8, "max": 128},
@@ -496,12 +496,13 @@ def _sync_registry_row_count(table_name: str, user_id: str):
     return actual_count
 
 
-def _get_col_schema(tbl) -> dict[str, object]:
-    """Get column name → ColumnType mapping from a Pixeltable table."""
-    return tbl._get_schema()
+def _get_col_schema(tbl) -> dict[str, str]:
+    """Get column name → type string mapping via the public get_metadata() API."""
+    meta = tbl.get_metadata()
+    return {name: info.get("type_", "String") for name, info in meta.get("columns", {}).items()}
 
 
-def _coerce_value(val, col_name: str, schema: dict[str, object]):
+def _coerce_value(val, col_name: str, schema: dict[str, str]):
     """Coerce a JSON value to the Pixeltable column's expected type.
 
     Args:
@@ -509,10 +510,7 @@ def _coerce_value(val, col_name: str, schema: dict[str, object]):
     """
     if val is None:
         return None
-    col_type = schema.get(col_name)
-    if col_type is None:
-        return val
-    type_name = str(col_type)
+    type_name = schema.get(col_name, "")
     if "Int" in type_name:
         try:
             return int(val)

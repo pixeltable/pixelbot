@@ -41,6 +41,8 @@ import {
   History,
   ChevronDown,
   GitCommitVertical,
+  Upload,
+  Link,
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -160,6 +162,91 @@ export function StudioPage() {
   const [csvData, setCsvData] = useState<CsvRowsResponse | null>(null)
   const [isLoadingCsv, setIsLoadingCsv] = useState(false)
   const [isDeletingCsv, setIsDeletingCsv] = useState(false)
+
+  // File nickname state (persisted to localStorage)
+  const [fileNicknames, setFileNicknames] = useState<Record<string, string>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('pixelbot_file_nicknames') || '{}')
+    } catch {
+      return {}
+    }
+  })
+  const [renamingUuid, setRenamingUuid] = useState<string | null>(null)
+  const [renameValue, setRenameValue] = useState('')
+
+  const getDisplayName = useCallback(
+    (file: StudioFile) => fileNicknames[file.uuid] || file.summary?.title || file.name,
+    [fileNicknames],
+  )
+
+  const handleRename = useCallback((uuid: string, newName: string) => {
+    const trimmed = newName.trim()
+    setFileNicknames((prev) => {
+      const next = { ...prev }
+      if (trimmed) {
+        next[uuid] = trimmed
+      } else {
+        delete next[uuid]
+      }
+      localStorage.setItem('pixelbot_file_nicknames', JSON.stringify(next))
+      return next
+    })
+    setRenamingUuid(null)
+  }, [])
+
+  // Upload state
+  const [isUploading, setIsUploading] = useState(false)
+  const [isDragging, setIsDragging] = useState(false)
+  const [showUrlInput, setShowUrlInput] = useState(false)
+  const [urlInput, setUrlInput] = useState('')
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const refreshFiles = useCallback(async () => {
+    try {
+      const filesData = await api.getStudioFiles()
+      setFiles(filesData)
+    } catch {
+      // silent
+    }
+  }, [])
+
+  const handleUpload = useCallback(async (fileList: FileList | null) => {
+    if (!fileList || fileList.length === 0) return
+    setIsUploading(true)
+    try {
+      for (const file of Array.from(fileList)) {
+        await api.uploadFile(file)
+        addToast(`Uploaded ${file.name}`, 'success')
+      }
+      await refreshFiles()
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : 'Upload failed', 'error')
+    } finally {
+      setIsUploading(false)
+    }
+  }, [addToast, refreshFiles])
+
+  const handleAddUrl = useCallback(async () => {
+    if (!urlInput.trim()) return
+    setIsUploading(true)
+    try {
+      await api.addUrl(urlInput.trim())
+      addToast('URL added', 'success')
+      setUrlInput('')
+      setShowUrlInput(false)
+      await refreshFiles()
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : 'Failed to add URL', 'error')
+    } finally {
+      setIsUploading(false)
+    }
+  }, [urlInput, addToast, refreshFiles])
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+    handleUpload(e.dataTransfer.files)
+  }, [handleUpload])
 
   // Load files and operations on mount
   useEffect(() => {
@@ -522,10 +609,72 @@ export function StudioPage() {
           <Wand2 className="h-10 w-10 text-muted-foreground/30" />
         </div>
         <h2 className="text-lg font-semibold mb-1">Studio</h2>
-        <p className="text-sm text-muted-foreground max-w-md">
-          Upload files using the Files panel to start exploring and transforming your data.
-          The Studio supports image transforms, document analysis, audio transcription, and video frame extraction.
+        <p className="text-sm text-muted-foreground max-w-md mb-6">
+          Upload documents, images, videos, or audio to explore, transform, and analyze your data.
         </p>
+
+        <div className="w-full max-w-sm space-y-3">
+          <div
+            className={cn(
+              'border-2 border-dashed rounded-xl p-6 text-center transition-all cursor-pointer',
+              isDragging
+                ? 'border-k-yellow bg-k-yellow/5'
+                : 'border-border hover:border-muted-foreground/30',
+              isUploading && 'opacity-60 pointer-events-none',
+            )}
+            onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }}
+            onDragLeave={() => setIsDragging(false)}
+            onDrop={handleDrop}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            {isUploading ? (
+              <Loader2 className="h-6 w-6 mx-auto mb-2 text-k-yellow animate-spin" />
+            ) : (
+              <Upload className="h-6 w-6 mx-auto mb-2 text-muted-foreground" />
+            )}
+            <p className="text-xs text-muted-foreground">
+              {isUploading ? 'Uploading...' : 'Drop files or click to upload'}
+            </p>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              className="hidden"
+              onChange={(e) => handleUpload(e.target.files)}
+            />
+          </div>
+          {!showUrlInput ? (
+            <button
+              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors w-full justify-center py-1"
+              onClick={() => setShowUrlInput(true)}
+            >
+              <Link className="h-3 w-3" /> Add from URL
+            </button>
+          ) : (
+            <div className="flex gap-1.5">
+              <Input
+                placeholder="https://..."
+                value={urlInput}
+                onChange={(e) => setUrlInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleAddUrl()}
+                className="text-xs h-8 rounded-lg flex-1"
+                autoFocus
+              />
+              <button
+                className="h-8 w-8 shrink-0 flex items-center justify-center rounded-lg bg-primary text-primary-foreground hover:opacity-90"
+                onClick={handleAddUrl}
+              >
+                <Link className="h-3.5 w-3.5" />
+              </button>
+              <button
+                className="h-8 w-8 shrink-0 flex items-center justify-center rounded-lg text-muted-foreground hover:bg-accent"
+                onClick={() => { setShowUrlInput(false); setUrlInput('') }}
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     )
   }
@@ -535,12 +684,80 @@ export function StudioPage() {
       {/* ── Left Panel: File Browser ─────────────────────────────────── */}
       <div className="w-72 border-r border-border flex flex-col bg-card/30">
         {/* Header */}
-        <div className="px-4 pt-4 pb-3">
+        <div className="px-4 pt-4 pb-2">
           <h2 className="text-sm font-semibold tracking-tight">Studio</h2>
           <p className="text-[10px] text-muted-foreground mt-0.5">
             {totalFiles} file{totalFiles !== 1 ? 's' : ''} available
           </p>
         </div>
+
+        {/* Upload Zone */}
+        <div className="px-3 pb-2 space-y-1.5">
+          <div
+            className={cn(
+              'border border-dashed rounded-lg px-3 py-2.5 text-center transition-all cursor-pointer',
+              isDragging
+                ? 'border-k-yellow bg-k-yellow/5'
+                : 'border-border/60 hover:border-muted-foreground/30',
+              isUploading && 'opacity-60 pointer-events-none',
+            )}
+            onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }}
+            onDragLeave={() => setIsDragging(false)}
+            onDrop={handleDrop}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            {isUploading ? (
+              <Loader2 className="h-4 w-4 mx-auto text-k-yellow animate-spin" />
+            ) : (
+              <Upload className="h-4 w-4 mx-auto text-muted-foreground/50" />
+            )}
+            <p className="text-[10px] text-muted-foreground mt-1">
+              {isUploading ? 'Uploading...' : 'Drop or click to upload'}
+            </p>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              className="hidden"
+              onChange={(e) => handleUpload(e.target.files)}
+            />
+          </div>
+          {!showUrlInput ? (
+            <button
+              className="flex items-center gap-1 text-[10px] text-muted-foreground/50 hover:text-muted-foreground transition-colors w-full justify-center py-0.5"
+              onClick={() => setShowUrlInput(true)}
+            >
+              <Link className="h-2.5 w-2.5" /> Add from URL
+            </button>
+          ) : (
+            <div className="flex gap-1">
+              <Input
+                placeholder="https://..."
+                value={urlInput}
+                onChange={(e) => setUrlInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleAddUrl()}
+                className="text-[10px] h-7 rounded-md flex-1"
+                autoFocus
+              />
+              <button
+                className="h-7 w-7 shrink-0 flex items-center justify-center rounded-md bg-primary text-primary-foreground hover:opacity-90"
+                onClick={handleAddUrl}
+                disabled={isUploading}
+              >
+                <Link className="h-3 w-3" />
+              </button>
+              <button
+                className="h-7 w-7 shrink-0 flex items-center justify-center rounded-md text-muted-foreground hover:bg-accent"
+                onClick={() => { setShowUrlInput(false); setUrlInput('') }}
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Divider */}
+        <div className="mx-3 border-t border-border/50" />
 
         {/* File Type Filters */}
         <div className="px-3 pb-3 space-y-0.5">
@@ -640,6 +857,8 @@ export function StudioPage() {
               filesList.map((file) => {
                 const Icon = FILE_TYPE_ICON[file.type]
                 const isSelected = selectedFile?.uuid === file.uuid
+                const isRenaming = renamingUuid === file.uuid
+                const displayName = getDisplayName(file)
                 return (
                   <button
                     key={file.uuid}
@@ -654,7 +873,7 @@ export function StudioPage() {
                     {file.thumbnail ? (
                       <img
                         src={file.thumbnail}
-                        alt={file.name}
+                        alt={displayName}
                         className="h-9 w-9 rounded-md object-cover shrink-0 border border-border/50"
                       />
                     ) : (
@@ -668,15 +887,35 @@ export function StudioPage() {
                       </div>
                     )}
                     <div className="flex-1 min-w-0 overflow-hidden">
-                      <p
-                        className={cn(
-                          'text-xs font-medium leading-snug line-clamp-2',
+                      {isRenaming ? (
+                        <input
+                          autoFocus
+                          className="w-full text-xs font-medium bg-transparent border-b border-primary outline-none py-0.5 text-foreground"
+                          value={renameValue}
+                          onChange={(e) => setRenameValue(e.target.value)}
+                          onBlur={() => handleRename(file.uuid, renameValue)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleRename(file.uuid, renameValue)
+                            if (e.key === 'Escape') setRenamingUuid(null)
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      ) : (
+                        <p
+                          className={cn(
+                          'text-xs font-medium leading-snug truncate',
                           isSelected ? 'text-foreground' : 'text-muted-foreground',
-                        )}
-                        title={file.summary?.title || file.name}
-                      >
-                        {file.summary?.title || file.name}
-                      </p>
+                          )}
+                          title={`${displayName} (double-click to rename)`}
+                          onDoubleClick={(e) => {
+                            e.stopPropagation()
+                            setRenamingUuid(file.uuid)
+                            setRenameValue(displayName)
+                          }}
+                        >
+                          {displayName}
+                        </p>
+                      )}
                       {file.type === 'csv' && file.row_count != null ? (
                         <p className="text-[10px] text-muted-foreground/60 mt-0.5">
                           {file.row_count} rows &middot; {file.columns?.length ?? 0} cols
@@ -828,7 +1067,14 @@ export function StudioPage() {
                         <label className="text-[11px] text-muted-foreground capitalize whitespace-nowrap">
                           {param.name}:
                         </label>
-                        {param.step !== undefined ? (
+                        {param.type === 'time' ? (
+                          <TimeInput
+                            value={Number(operationParams[param.name] ?? param.default)}
+                            onChange={(secs) =>
+                              setOperationParams((prev) => ({ ...prev, [param.name]: secs }))
+                            }
+                          />
+                        ) : param.step !== undefined ? (
                           <div className="flex items-center gap-2">
                             <Slider
                               value={[Number(operationParams[param.name] ?? param.default)]}
@@ -2061,6 +2307,49 @@ function CsvWorkspace({
           <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
         </div>
       )}
+    </div>
+  )
+}
+
+// ── Time Input (MM:SS.s) ────────────────────────────────────────────────────
+
+function TimeInput({ value, onChange }: { value: number; onChange: (secs: number) => void }) {
+  const totalSecs = Math.max(0, value)
+  const mins = Math.floor(totalSecs / 60)
+  const secs = totalSecs % 60
+
+  const handleMinChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const m = Math.max(0, parseInt(e.target.value) || 0)
+    onChange(m * 60 + secs)
+  }
+
+  const handleSecChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value
+    const s = Math.max(0, Math.min(59.9, parseFloat(raw) || 0))
+    onChange(mins * 60 + s)
+  }
+
+  return (
+    <div className="flex items-center gap-1">
+      <Input
+        type="number"
+        value={mins}
+        min={0}
+        max={999}
+        className="w-14 h-7 text-xs text-center font-mono"
+        onChange={handleMinChange}
+      />
+      <span className="text-[11px] text-muted-foreground font-medium">m</span>
+      <Input
+        type="number"
+        value={parseFloat(secs.toFixed(1))}
+        min={0}
+        max={59.9}
+        step={0.1}
+        className="w-16 h-7 text-xs text-center font-mono"
+        onChange={handleSecChange}
+      />
+      <span className="text-[11px] text-muted-foreground font-medium">s</span>
     </div>
   )
 }
