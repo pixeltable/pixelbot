@@ -1,12 +1,10 @@
 <div align="center">
 
-<img src="https://github.com/user-attachments/assets/29c6b22c-60cf-4d5e-8e72-58c6ca746dac" alt="Pixelbot" width="600"/>
-
 **A vibe-coded playground for exploring everything [Pixeltable](https://github.com/pixeltable/pixeltable) can do**
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-0530AD.svg)](https://opensource.org/licenses/Apache-2.0) [![Discord](https://img.shields.io/badge/Discord-%235865F2.svg)](https://discord.gg/QPyqFYx2UN)
 
-[Live Demo](http://agent.pixeltable.com/) · [Pixeltable Docs](https://docs.pixeltable.com/) · [Cookbooks](https://docs.pixeltable.com/docs/howto/cookbooks)
+[Pixeltable Docs](https://docs.pixeltable.com/) · [Use Cases & Deployments](https://docs.pixeltable.com/use-cases/ml-data-wrangling)
 
 </div>
 
@@ -14,7 +12,7 @@
 
 Pixelbot is an open-source sandbox built to explore, stress-test, and iterate on [Pixeltable](https://github.com/pixeltable/pixeltable) features. It's intentionally vibe-coded — we build fast, break things, and use the result to figure out what works, what's missing, and how to make Pixeltable better.
 
-The app itself combines a **multimodal AI agent**, an interactive **data studio**, and **media generation** — all powered end-to-end by Pixeltable's declarative data infrastructure. Upload documents, images, videos, and audio, then chat with an agent that reasons across all of them, transform files hands-on in the Studio, or generate images and video with state-of-the-art models.
+The app combines a **multimodal AI agent**, an interactive **data studio** with on-demand ML inference, **media generation**, and a **database explorer** — all powered end-to-end by Pixeltable's declarative data infrastructure. Upload documents, images, videos, and audio, then chat with an agent that reasons across all of them; run object detection or image classification on any file in the Studio; generate images and video with state-of-the-art models; or browse the full Pixeltable catalog to inspect schemas, computed columns, and row-level data across every table and view.
 
 ![Overview](docs/images/overview.png)
 
@@ -25,7 +23,7 @@ Pixeltable is building open-source AI data infrastructure that handles storage, 
 - **Exercise every feature** — tables, views, computed columns, iterators, embedding indexes, UDFs, tool calling, `@pxt.query`, similarity search, version control — all wired up in one app
 - **Discover rough edges** — if something is awkward to use, we find it here first
 - **Prototype use cases** — each feature in Pixelbot maps to a real Pixeltable use case (RAG, agents, media processing, data wrangling) that we can refine and document
-- **Ship cookbooks** — patterns that work here become [official cookbooks](https://docs.pixeltable.com/docs/howto/cookbooks) and [use-case guides](https://docs.pixeltable.com/docs/use-cases/ai-applications)
+- **Ship cookbooks** — patterns that work here become [official cookbooks](https://docs.pixeltable.com/howto/cookbooks) and [use-case guides](https://docs.pixeltable.com/use-cases/ai-applications)
 
 ## What We're Exploring
 
@@ -33,36 +31,41 @@ Pixeltable is building open-source AI data infrastructure that handles storage, 
 
 | Pixeltable Feature | How Pixelbot Uses It | Cookbook Reference |
 |---|---|---|
-| **Tables & multimodal types** | `pxt.Document`, `pxt.Image`, `pxt.Video`, `pxt.Audio`, `pxt.Json` for all uploads | [Tables & Data Ops](https://docs.pixeltable.com/docs/tutorials/tables-and-data-operations) |
-| **Computed columns** | 11-step agent pipeline, thumbnails, audio extraction, auto-summarization — all triggered on insert | [Computed Columns](https://docs.pixeltable.com/docs/tutorials/computed-columns) |
-| **Views & iterators** | `DocumentSplitter` (page+sentence), `FrameIterator` (keyframes), `AudioSplitter` (30s/60s chunks), `StringSplitter` | [Iterators](https://docs.pixeltable.com/docs/platform/iterators) |
-| **Embedding indexes** | E5-large-instruct (text), CLIP (images, video frames) — `.similarity()` across all media | [Embedding Indexes](https://docs.pixeltable.com/docs/platform/embedding-indexes) |
-| **`@pxt.udf` functions** | News API, financial data, context assembly, text extraction, multimodal message building | [UDFs](https://docs.pixeltable.com/docs/platform/udfs-in-pixeltable) |
-| **`@pxt.query` functions** | `search_documents`, `search_images`, `search_video_frames`, `search_memory`, `search_chat_history` | [RAG Pipeline](https://docs.pixeltable.com/docs/howto/cookbooks/agents/pattern-rag-pipeline) |
-| **`pxt.tools()` + `invoke_tools()`** | Agent tool selection with Claude Sonnet 4, automatic tool execution | [Tool Calling](https://docs.pixeltable.com/docs/howto/cookbooks/agents/llm-tool-calling) |
-| **Agent memory** | Chat history table + memory bank with semantic search over past conversations | [Agent Memory](https://docs.pixeltable.com/docs/howto/cookbooks/agents/pattern-agent-memory) |
-| **LLM integrations** | Anthropic (Claude Sonnet 4), Google (Gemini 2.5 Flash, Imagen 4.0, Veo 3.0), OpenAI (Whisper, DALL-E 3) | [Integrations](https://docs.pixeltable.com/docs/integrations/frameworks) |
-| **PIL image transforms** | Resize, rotate, flip, blur, sharpen, edge detect, grayscale, brightness, contrast, saturation | [PIL Transforms](https://docs.pixeltable.com/docs/howto/cookbooks/images/img-pil-transforms) |
-| **Video UDFs** | `get_metadata`, `extract_frame`, `clip`, `overlay_text`, `scene_detect_content` | [Video Cookbooks](https://docs.pixeltable.com/docs/howto/cookbooks/video/video-extract-frames) |
-| **Document processing** | Auto-summarization (Gemini structured JSON), chunking, text extraction from Office formats | [Doc Chunking](https://docs.pixeltable.com/docs/howto/cookbooks/text/doc-chunk-for-rag) |
-| **CSV/tabular data** | Dynamic table creation, inline CRUD, type coercion via `tbl._get_schema()` | [Import CSV](https://docs.pixeltable.com/docs/howto/cookbooks/data/data-import-csv) |
+| **Tables & multimodal types** | `pxt.Document`, `pxt.Image`, `pxt.Video`, `pxt.Audio`, `pxt.Json` for all uploads | [Tables & Data Ops](https://docs.pixeltable.com/tutorials/tables-and-data-operations) |
+| **Computed columns** | 11-step agent pipeline, thumbnails, audio extraction, auto-summarization — all triggered on insert | [Computed Columns](https://docs.pixeltable.com/tutorials/computed-columns) |
+| **Views & iterators** | `DocumentSplitter` (page+sentence), `FrameIterator` (keyframes), `AudioSplitter` (30s/60s chunks), `StringSplitter` | [Iterators](https://docs.pixeltable.com/platform/iterators) |
+| **Embedding indexes** | E5-large-instruct (text), CLIP (images, video frames) — `.similarity()` across all media | [Embedding Indexes](https://docs.pixeltable.com/platform/embedding-indexes) |
+| **`@pxt.udf` functions** | News API, financial data, context assembly, text extraction, multimodal message building | [UDFs](https://docs.pixeltable.com/platform/udfs-in-pixeltable) |
+| **`@pxt.query` functions** | `search_documents`, `search_images`, `search_video_frames`, `search_memory`, `search_chat_history` | [RAG Pipeline](https://docs.pixeltable.com/howto/cookbooks/agents/pattern-rag-pipeline) |
+| **`pxt.tools()` + `invoke_tools()`** | Agent tool selection with Claude Sonnet 4, automatic tool execution | [Tool Calling](https://docs.pixeltable.com/howto/cookbooks/agents/llm-tool-calling) |
+| **Agent memory** | Chat history table + memory bank with semantic search over past conversations | [Agent Memory](https://docs.pixeltable.com/howto/cookbooks/agents/pattern-agent-memory) |
+| **LLM integrations** | Anthropic (Claude Sonnet 4), Google (Gemini 2.5 Flash, Imagen 4.0, Veo 3.0), OpenAI (Whisper, DALL-E 3) | [Integrations](https://docs.pixeltable.com/integrations/frameworks) |
+| **PIL image transforms** | Resize, rotate, flip, blur, sharpen, edge detect, grayscale, brightness, contrast, saturation | [PIL Transforms](https://docs.pixeltable.com/howto/cookbooks/images/img-pil-transforms) |
+| **Video UDFs** | `get_metadata`, `extract_frame`, `clip`, `overlay_text`, `scene_detect_content` | [Video Cookbooks](https://docs.pixeltable.com/howto/cookbooks/video/video-extract-frames) |
+| **Document processing** | Auto-summarization (Gemini structured JSON), chunking, text extraction from Office formats | [Doc Chunking](https://docs.pixeltable.com/howto/cookbooks/text/doc-chunk-for-rag) |
+| **CSV/tabular data** | Dynamic table creation, inline CRUD, type coercion via `tbl._get_schema()` | [Import CSV](https://docs.pixeltable.com/howto/cookbooks/data/data-import-csv) |
+| **Object detection (DETR)** | On-demand bounding box detection on images and video frames with SVG overlay | [Object Detection](https://docs.pixeltable.com/howto/cookbooks/images/img-detect-objects) |
+| **Image classification (ViT)** | On-demand top-k classification via HuggingFace transformers with confidence bars | — |
+| **Catalog introspection** | `pxt.list_tables()`, `tbl.columns()`, `tbl._get_schema()`, `tbl.count()`, `tbl.get_base_table()` for full database browsing | [Tables & Data Ops](https://docs.pixeltable.com/tutorials/tables-and-data-operations) |
+| **Table versioning** | `tbl.revert()` for single-step undo on CSV edits | [Version Control](https://docs.pixeltable.com/howto/cookbooks/core/version-control-history) |
+| **Structured LLM output** | Gemini `response_schema` with Pydantic models for validated JSON (summaries, follow-ups) | [Structured Output](https://docs.pixeltable.com/howto/cookbooks/agents/llm-tool-calling) |
 
 ### What's Still on the Roadmap
 
 Pixeltable features and cookbook patterns we haven't wired up yet — contributions welcome:
 
-- [ ] **Object detection** — YOLOX / DETR on images and video frames ([cookbook](https://docs.pixeltable.com/docs/howto/cookbooks/images/img-detect-objects))
-- [ ] **Image captioning** — auto-generate descriptions ([cookbook](https://docs.pixeltable.com/docs/howto/cookbooks/images/img-generate-captions))
-- [ ] **Vision structured output** — extract structured data from images ([cookbook](https://docs.pixeltable.com/docs/howto/cookbooks/images/vision-structured-output))
-- [ ] **Image-to-image** — style transfer and editing ([cookbook](https://docs.pixeltable.com/docs/howto/cookbooks/images/img-image-to-image))
-- [ ] **Text-to-speech** — audio generation from text ([cookbook](https://docs.pixeltable.com/docs/howto/cookbooks/audio/audio-text-to-speech))
-- [ ] **Podcast summarization** — transcribe + summarize long audio ([cookbook](https://docs.pixeltable.com/docs/howto/cookbooks/audio/audio-summarize-podcast))
-- [ ] **Data export** — PyTorch DataLoader, Parquet, S3 push ([cookbooks](https://docs.pixeltable.com/docs/howto/cookbooks/data/data-export-pytorch))
-- [ ] **Version control** — snapshots and history tracking ([guide](https://docs.pixeltable.com/docs/howto/cookbooks/core/version-control-history))
-- [ ] **MCP integration** — expose Pixeltable tables as MCP tools ([guide](https://docs.pixeltable.com/docs/use-cases/agents-mcp))
-- [ ] **Label Studio / FiftyOne** — annotation workflows ([guide](https://docs.pixeltable.com/docs/howto/using-label-studio-with-pixeltable))
-- [ ] **Custom embedding models** — Voyage, Jina, OpenAI embeddings ([guide](https://docs.pixeltable.com/docs/integrations/embedding-model))
-- [ ] **Local models** — Ollama, Llama.cpp, WhisperX ([guide](https://docs.pixeltable.com/docs/howto/providers/working-with-ollama))
+- [x] **Object detection** — DETR on images and video frames with SVG bounding box overlay ([cookbook](https://docs.pixeltable.com/howto/cookbooks/images/img-detect-objects))
+- [ ] **Image captioning** — auto-generate descriptions ([cookbook](https://docs.pixeltable.com/howto/cookbooks/images/img-generate-captions))
+- [ ] **Vision structured output** — extract structured data from images ([cookbook](https://docs.pixeltable.com/howto/cookbooks/images/vision-structured-output))
+- [ ] **Image-to-image** — style transfer and editing ([cookbook](https://docs.pixeltable.com/howto/cookbooks/images/img-image-to-image))
+- [ ] **Text-to-speech** — audio generation from text ([cookbook](https://docs.pixeltable.com/howto/cookbooks/audio/audio-text-to-speech))
+- [ ] **Podcast summarization** — transcribe + summarize long audio ([cookbook](https://docs.pixeltable.com/howto/cookbooks/audio/audio-summarize-podcast))
+- [ ] **Data export** — PyTorch DataLoader, Parquet, S3 push ([cookbooks](https://docs.pixeltable.com/howto/cookbooks/data/data-export-pytorch))
+- [ ] **Version control** — snapshots and history tracking ([guide](https://docs.pixeltable.com/howto/cookbooks/core/version-control-history))
+- [ ] **MCP integration** — expose Pixeltable tables as MCP tools ([guide](https://docs.pixeltable.com/use-cases/agents-mcp))
+- [ ] **Label Studio / FiftyOne** — annotation workflows ([guide](https://docs.pixeltable.com/howto/using-label-studio-with-pixeltable))
+- [ ] **Custom embedding models** — Voyage, Jina, OpenAI embeddings ([guide](https://docs.pixeltable.com/integrations/embedding-model))
+- [ ] **Local models** — Ollama, Llama.cpp, WhisperX ([guide](https://docs.pixeltable.com/howto/providers/working-with-ollama))
 
 ## The App
 
@@ -87,8 +90,9 @@ Browse uploaded files and apply operations powered by Pixeltable UDFs:
 - **Videos**: Keyframe extraction, clip creation, text overlay, scene detection, metadata inspection, transcriptions
 - **Audio**: Transcriptions with sentence-level breakdown
 - **CSV**: Inline cell editing, add/delete rows — all via Pixeltable `insert()`/`update()`/`delete()` primitives
+- **AI analysis**: On-demand object detection (DETR ResNet-50/101) with bounding box overlays, and image classification (ViT) with confidence bars — on any image or video frame
 - **Cross-modal search**: Semantic search across all file types via `.similarity()` on embedding indexes
-- **Embedding map**: Interactive 2D t-SNE visualization of text and visual embedding spaces
+- **Embedding map**: Interactive 2D UMAP visualization of text and visual embedding spaces
 
 ### Media — Image & Video Generation
 
@@ -100,9 +104,18 @@ Browse uploaded files and apply operations powered by Pixeltable UDFs:
 
 A full React Flow diagram of the Pixeltable schema (38 nodes, 40 edges) showing every table, view, index, model, UDF, and data flow. Click any node to highlight its connections. Organized into swim lanes: Documents, Images, Video, Audio, Agent Pipeline, Knowledge, Config, Generation.
 
-### History — Debug & Export
+### Database — Catalog Explorer
 
-- Workflow history with search and detail view
+Browse the full Pixeltable schema organized into collapsible groups (Agent Pipeline, Documents, Images, Videos, Audio, Generation, Memory & Config, Data Tables):
+
+- Tables and views listed with column counts, row counts, and type badges
+- Click any table to see its schema (computed vs. insertable columns) and browse paginated row data
+- Tables shown with green icons, views with blue — grouped by domain for quick navigation
+
+### History — Timeline & Debug
+
+- **Conversations** tab: searchable history list with workflow detail dialog
+- **Timeline** tab: unified chronological feed across all Pixeltable tables (queries, chat, uploads, generation, memory) with color-coded event types and date grouping
 - **Debug Export** — download the full `agents.tools` table with all 21 columns (prompts, tool outputs, LLM responses, contexts, follow-ups) for row-level pipeline inspection
 
 ## How Pixeltable Powers Everything
@@ -129,7 +142,7 @@ Pixeltable replaces the need for separate vector databases, object stores, ETL p
   - [OpenAI](https://platform.openai.com/api-keys) — transcription & optional image gen (Whisper, DALL-E 3)
   - [NewsAPI](https://newsapi.org/) — optional, 100 req/day free
 
-> All LLM providers are swappable. Pixeltable supports [local runtimes](https://docs.pixeltable.com/docs/howto/providers/working-with-ollama) (Ollama, Llama.cpp, WhisperX) and [20+ integrations](https://docs.pixeltable.com/docs/integrations/frameworks). You can make this entirely local.
+> All LLM providers are swappable. Pixeltable supports [local runtimes](https://docs.pixeltable.com/howto/providers/working-with-ollama) (Ollama, Llama.cpp, WhisperX) and [20+ integrations](https://docs.pixeltable.com/integrations/frameworks). You can make this entirely local.
 
 ### Installation
 
@@ -195,6 +208,8 @@ cd ../backend && python main.py # serves everything at :8000
 | Transcription | OpenAI Whisper |
 | Image generation | Google Imagen 4.0 / OpenAI DALL-E 3 (configurable) |
 | Video generation | Google Veo 3.0 |
+| Object detection | Facebook DETR (ResNet-50/101) |
+| Image classification | Google ViT Base (patch16-224) |
 | Text embeddings | E5-large-instruct (multilingual) |
 | Visual embeddings | CLIP ViT-B/32 |
 
@@ -216,14 +231,16 @@ cd ../backend && python main.py # serves everything at :8000
 │       ├── images.py          # Image/video generation, save to collection
 │       ├── memory.py          # Memory bank CRUD + export
 │       ├── personas.py        # Persona CRUD
-│       └── studio.py          # File browsing, transforms, chunks, frames, transcripts, CSV CRUD
+│       ├── studio.py          # File browsing, transforms, detection, CSV CRUD, embeddings
+│       └── database.py        # Catalog browser, table introspection, timeline
 ├── frontend/                  # React + TypeScript + Tailwind
 │   └── src/
 │       ├── components/
 │       │   ├── chat/          # Chat page (messages, personas, follow-ups, markdown rendering)
-│       │   ├── studio/        # Studio (file browser, transforms, search, embedding map, CSV editor)
+│       │   ├── studio/        # Studio (file browser, transforms, detection, search, embeddings, CSV)
+│       │   ├── database/      # Database catalog explorer (grouped tables/views, row browser)
 │       │   ├── architecture/  # React Flow architecture diagram (manual grid layout, swim lanes)
-│       │   ├── history/       # Workflow history + debug export
+│       │   ├── history/       # Workflow history + timeline + debug export
 │       │   ├── images/        # Media generation (images + videos) with save to collection
 │       │   ├── memory/        # Memory bank with semantic search
 │       │   └── settings/      # Persona editor
