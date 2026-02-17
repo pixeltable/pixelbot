@@ -10,70 +10,138 @@
 
 ---
 
-Pixelbot is a vibe-coded playground that wires up tables, views, computed columns, embedding indexes, UDFs, tool calling, similarity search, version control, and model orchestration into a single app — so we can stress-test Pixeltable's declarative AI data infrastructure and ship what we learn as [cookbooks](https://docs.pixeltable.com/howto/cookbooks) and [use-case guides](https://docs.pixeltable.com/use-cases/ai-applications).
+Pixelbot wires up tables, views, computed columns, embedding indexes, UDFs, tool calling, similarity search, version control, and model orchestration into a single full-stack app — so we can stress-test [Pixeltable](https://github.com/pixeltable/pixeltable) and ship what we learn as [cookbooks](https://docs.pixeltable.com/howto/cookbooks).
 
 ![Overview](docs/images/overview.png)
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────────────┐
-│  React / TypeScript / Tailwind CSS                                                  │
-│                                                                                     │
-│  ┌─────────┐ ┌───────────┐ ┌────────┐ ┌───────┐ ┌──────────┐ ┌─────┐ ┌─────────┐  │
-│  │  Chat   │ │ Prompt Lab│ │ Studio │ │ Media │ │ Database │ │ Dev │ │  Arch   │  │
-│  │         │ │           │ │        │ │Library│ │ Explorer │ │     │ │ Diagram │  │
-│  └────┬────┘ └─────┬─────┘ └───┬────┘ └───┬───┘ └────┬─────┘ └──┬──┘ └─────────┘  │
-│       │             │           │          │          │          │                   │
-├───────┴─────────────┴───────────┴──────────┴──────────┴──────────┴───────────────────┤
-│  FastAPI  /api/*                                                                    │
-│                                                                                     │
-│  chat.py → 11-step agent pipeline      images.py → Imagen/DALL-E/Veo generation    │
-│  files.py → upload, URL import         studio.py → transforms, detection, CSV, Reve │
-│  experiments.py → parallel LLM calls   database.py → catalog introspection          │
-│  export.py → JSON/CSV/Parquet          history.py, memory.py, personas.py           │
-│                                                                                     │
-├─────────────────────────────────────────────────────────────────────────────────────┤
-│  Pixeltable  (~/.pixeltable/)                                                       │
-│                                                                                     │
-│  agents.tools ──────────── 11 computed cols (tool select → RAG → answer → follow-up)│
-│  agents.chunks ─────────── DocumentSplitter + E5-large embedding index              │
-│  agents.images ─────────── CLIP embedding + 96×96 thumbnail (computed)              │
-│  agents.video_frames ───── FrameIterator + CLIP embedding index                     │
-│  agents.audio_sentences ── AudioSplitter + E5-large embedding index                 │
-│  agents.memory ─────────── E5-large embedding index for semantic recall             │
-│  agents.generated_images ─ Imagen 4.0 / DALL-E 3 outputs                           │
-│  agents.generated_videos ─ Veo 3.0 outputs                                         │
-│  agents.prompt_experiments  multi-model comparison results                          │
-│  agents.csv_registry ───── dynamic CSV table tracking                               │
-│  + views, snapshots, user-uploaded CSV tables                                       │
-│                                                                                     │
-│  Storage │ Versioning │ Computed Columns │ Embedding Indexes │ UDFs │ @pxt.query    │
-└─────────────────────────────────────────────────────────────────────────────────────┘
-     │              │                │                │
-     ▼              ▼                ▼                ▼
-  ┌──────┐   ┌───────────┐   ┌────────────┐   ┌──────────────┐
-  │Claude│   │  Gemini   │   │   OpenAI   │   │   Mistral    │
-  │Sonnet│   │2.5 Flash  │   │  Whisper   │   │ Small/Large  │
-  │  4   │   │Imagen/Veo │   │  DALL-E 3  │   │              │
-  └──────┘   └───────────┘   └────────────┘   └──────────────┘
-  reasoning   summarization    transcription    prompt lab
-  tool calls  image/video gen  image gen        experiments
-              follow-ups       embeddings
+                          ┌─────────────────────────────────────┐
+                          │     React · TypeScript · Tailwind    │
+                          │                                     │
+                          │  Chat · Prompt Lab · Studio · Media │
+                          │  Database · Developer · Architecture│
+                          └──────────────┬──────────────────────┘
+                                         │ /api/*
+                          ┌──────────────▼──────────────────────┐
+                          │           FastAPI                    │
+                          │                                     │
+                          │  chat ─── 11-step agent pipeline    │
+                          │  studio ─ transforms · detection    │
+                          │           CSV · Reve · embeddings   │
+                          │  images ─ Imagen · DALL-E · Veo     │
+                          │  export ─ JSON · CSV · Parquet      │
+                          │  experiments · database · memory    │
+                          └──────────────┬──────────────────────┘
+                                         │
+              ┌──────────────────────────▼──────────────────────────────┐
+              │                   Pixeltable                            │
+              │                   ~/.pixeltable/                        │
+              │                                                        │
+              │  ┌─ Agent ────────────────────────────────────────┐    │
+              │  │ tools          11 computed cols per row         │    │
+              │  │                prompt → tool_select → RAG →     │    │
+              │  │                context → answer → follow_ups    │    │
+              │  │ chat_history   conversation log                 │    │
+              │  │ memory_bank   E5-large embedding index          │    │
+              │  └────────────────────────────────────────────────┘    │
+              │                                                        │
+              │  ┌─ Ingestion ────────────────────────────────────┐    │
+              │  │ collection     → chunks (DocumentSplitter)     │    │
+              │  │ images         → CLIP embedding + thumbnail    │    │
+              │  │ videos         → video_frames (FrameIterator)  │    │
+              │  │ audios         → audio_sentences (AudioSplitter│)   │
+              │  └────────────────────────────────────────────────┘    │
+              │                                                        │
+              │  ┌─ Generation ───────────────────────────────────┐    │
+              │  │ generated_images    Imagen 4.0 / DALL-E 3      │    │
+              │  │ generated_videos    Veo 3.0                     │    │
+              │  │ prompt_experiments  multi-model comparison       │    │
+              │  └────────────────────────────────────────────────┘    │
+              │                                                        │
+              │  ┌─ Data ─────────────────────────────────────────┐    │
+              │  │ csv_registry   dynamic CSV table tracking       │    │
+              │  │ user_personas  system prompts + LLM params      │    │
+              │  └────────────────────────────────────────────────┘    │
+              │                                                        │
+              │  Storage · Versioning · Computed Columns                │
+              │  Embedding Indexes · UDFs · @pxt.query                 │
+              └──────┬─────────┬───────────┬───────────┬───────────────┘
+                     │         │           │           │
+                     ▼         ▼           ▼           ▼
+                  Claude    Gemini      OpenAI     Mistral
+                  Sonnet 4  2.5 Flash   Whisper    Small/Large
+                            Imagen/Veo  DALL-E 3
 ```
 
 ## Features
 
-| Page | What it does |
-|---|---|
-| **Chat** | Multimodal RAG agent — semantic search across docs, images, video frames, audio; tool calling (NewsAPI, yfinance, DuckDuckGo); inline image gen (Imagen 4.0 / DALL-E 3) and video gen (Veo 3.0); follow-up suggestions via Gemini structured output; personas; persistent history + memory bank |
-| **Prompt Lab** | Side-by-side multi-model comparison — Claude, Gemini, Mistral, GPT-4o with editable model IDs, parallel execution via `ThreadPoolExecutor`, response time / word count / char count metrics, normalized comparison bars, experiment history stored in Pixeltable |
-| **Studio** | File explorer + data wrangler — document summaries and chunks, PIL image transforms, video ops (keyframes, clips, overlay, scene detect), audio transcriptions, CSV workspace with inline CRUD + infinite undo (`table.revert()`) + version history (`table.get_versions()`), on-demand DETR object detection and ViT classification with SVG overlays, cross-modal semantic search, interactive 2D UMAP embedding map |
-| **Media Library** | Gallery for generated images/videos — save to collection (triggers CLIP + RAG indexing), Reve AI edit (`reve.edit()`) and remix (`reve.remix()`) with side-by-side preview |
-| **Database** | Catalog explorer — tables/views grouped by type with schema inspection, paginated rows, client-side search + filter, CSV download |
-| **Developer** | Data export (JSON/CSV/Parquet for any table), categorized API reference with curl examples, Python SDK snippets, MCP server config for Claude/Cursor |
-| **Architecture** | Interactive React Flow diagram — 38 nodes, 40 edges, swim-lane layout, click-to-highlight connections |
-| **History & Memory** | Searchable conversation history, unified timeline across all tables, memory bank with semantic search |
+<details>
+<summary><b>Chat</b> — Multimodal RAG agent</summary>
+<br>
+
+Semantic search across documents, images, video frames, and audio via `.similarity()` on embedding indexes. Tool calling with external APIs (NewsAPI, yfinance, DuckDuckGo). Inline image generation (Imagen 4.0 / DALL-E 3) and video generation (Veo 3.0). Follow-up suggestions via Gemini structured output with `response_schema`. Personas with adjustable system prompts and LLM parameters. Persistent chat history and memory bank.
+</details>
+
+<details>
+<summary><b>Prompt Lab</b> — Multi-model experimentation</summary>
+<br>
+
+Run the same prompt against Claude, Gemini, Mistral, and GPT-4o in parallel via `ThreadPoolExecutor`. Editable model IDs — override presets or add custom models. Response time, word count, and character count metrics with "Fastest" highlight and normalized comparison bars. Every experiment stored in `agents.prompt_experiments` for replay.
+</details>
+
+<details>
+<summary><b>Studio</b> — File explorer + data wrangler</summary>
+<br>
+
+- **Documents**: Auto-summaries (Gemini structured JSON), sentence-level chunks
+- **Images**: PIL transforms with live preview, save or download
+- **Videos**: Keyframe extraction, clip creation, text overlay, scene detection, transcriptions
+- **Audio**: Transcriptions with sentence-level breakdown
+- **CSV**: Inline CRUD, infinite undo via `table.revert()`, version history via `table.get_versions()`
+- **Detection**: On-demand DETR (ResNet-50/101) with SVG bounding boxes, ViT classification with confidence bars
+- **Search**: Cross-modal semantic search via `.similarity()` on embedding indexes
+- **Embedding map**: Interactive 2D UMAP projection of text/visual embedding spaces
+</details>
+
+<details>
+<summary><b>Media Library</b> — Gallery + AI editing</summary>
+<br>
+
+Gallery for generated images and videos. Save to collection triggers CLIP embedding, keyframe extraction, transcription, and RAG indexing automatically. Reve AI editing via `reve.edit()` (natural language instructions) and `reve.remix()` (creative blending) with side-by-side preview.
+</details>
+
+<details>
+<summary><b>Developer</b> — Export, API reference, SDK, MCP</summary>
+<br>
+
+- **Export**: Download any table as JSON, CSV, or Parquet with row-limit control and live preview
+- **API**: Categorized endpoint browser with method badges and expandable curl examples
+- **SDK**: Python code snippets — connect, query, semantic search, export to Pandas, versioning
+- **Connect**: MCP server config for Claude/Cursor, direct Python access, REST API examples
+</details>
+
+<details>
+<summary><b>Database</b> — Catalog explorer</summary>
+<br>
+
+Tables and views grouped by type (Agent Pipeline, Documents, Images, Videos, Audio, Generation, Memory, Data Tables). Schema inspection with computed vs. insertable column badges. Paginated row browser with client-side search, row filter, and CSV download.
+</details>
+
+<details>
+<summary><b>Architecture</b> — Interactive diagram</summary>
+<br>
+
+React Flow diagram with 38 nodes and 40 edges in swim-lane layout. Click any node to highlight its connections. Covers the full data flow: document chunking, image CLIP, video dual pipeline, audio transcription, 11-step agent pipeline, generation, and feedback edges.
+</details>
+
+<details>
+<summary><b>History & Memory</b></summary>
+<br>
+
+Searchable conversation history with workflow detail dialog and JSON export. Unified timeline across all timestamped Pixeltable tables. Memory bank with semantic search and manual entry.
+</details>
 
 ## Pixeltable Coverage
 
@@ -81,68 +149,50 @@ Every row maps to a Pixeltable feature exercised in this app:
 
 | Feature | Usage | Docs |
 |---|---|---|
-| Tables + multimodal types | `Document`, `Image`, `Video`, `Audio`, `Json` columns | [Tables](https://docs.pixeltable.com/tutorials/tables-and-data-operations) |
-| Computed columns | 11-step agent pipeline, thumbnails, audio extraction, summarization | [Computed Columns](https://docs.pixeltable.com/tutorials/computed-columns) |
-| Views + iterators | `DocumentSplitter`, `FrameIterator`, `AudioSplitter`, `StringSplitter` | [Iterators](https://docs.pixeltable.com/platform/iterators) |
-| Embedding indexes | E5-large-instruct (text), CLIP ViT-B/32 (visual) → `.similarity()` | [Embedding Indexes](https://docs.pixeltable.com/platform/embedding-indexes) |
-| `@pxt.udf` | News API, financial data, context assembly, text extraction | [UDFs](https://docs.pixeltable.com/platform/udfs-in-pixeltable) |
-| `@pxt.query` | `search_documents`, `search_images`, `search_video_frames`, `search_memory` | [RAG](https://docs.pixeltable.com/howto/cookbooks/agents/pattern-rag-pipeline) |
-| `pxt.tools()` + `invoke_tools()` | Agent tool selection + execution (Claude Sonnet 4) | [Tool Calling](https://docs.pixeltable.com/howto/cookbooks/agents/llm-tool-calling) |
+| Tables + multimodal types | `Document`, `Image`, `Video`, `Audio`, `Json` | [Tables](https://docs.pixeltable.com/tutorials/tables-and-data-operations) |
+| Computed columns | 11-step agent pipeline, thumbnails, summarization | [Computed Columns](https://docs.pixeltable.com/tutorials/computed-columns) |
+| Views + iterators | `DocumentSplitter`, `FrameIterator`, `AudioSplitter` | [Iterators](https://docs.pixeltable.com/platform/iterators) |
+| Embedding indexes | E5-large-instruct, CLIP ViT-B/32 → `.similarity()` | [Embedding Indexes](https://docs.pixeltable.com/platform/embedding-indexes) |
+| `@pxt.udf` | News API, financial data, context assembly | [UDFs](https://docs.pixeltable.com/platform/udfs-in-pixeltable) |
+| `@pxt.query` | `search_documents`, `search_images`, `search_video_frames` | [RAG](https://docs.pixeltable.com/howto/cookbooks/agents/pattern-rag-pipeline) |
+| `pxt.tools()` + `invoke_tools()` | Agent tool selection + execution | [Tool Calling](https://docs.pixeltable.com/howto/cookbooks/agents/llm-tool-calling) |
 | Agent memory | Chat history + memory bank with embedding search | [Memory](https://docs.pixeltable.com/howto/cookbooks/agents/pattern-agent-memory) |
-| LLM integrations | Anthropic, Google, OpenAI, Mistral — agent + Prompt Lab | [Integrations](https://docs.pixeltable.com/integrations/frameworks) |
+| LLM integrations | Anthropic, Google, OpenAI, Mistral | [Integrations](https://docs.pixeltable.com/integrations/frameworks) |
 | Reve AI | `reve.edit()` / `reve.remix()` for image editing | [Reve](https://docs.pixeltable.com/howto/providers/working-with-reve) |
-| PIL transforms | Resize, rotate, flip, blur, sharpen, edge detect, grayscale | [PIL](https://docs.pixeltable.com/howto/cookbooks/images/img-pil-transforms) |
-| Video UDFs | `get_metadata`, `extract_frame`, `clip`, `overlay_text`, `scene_detect_content` | [Video](https://docs.pixeltable.com/howto/cookbooks/video/video-extract-frames) |
-| Document processing | Gemini structured-JSON summarization, sentence-level chunking | [Chunking](https://docs.pixeltable.com/howto/cookbooks/text/doc-chunk-for-rag) |
+| PIL transforms | Resize, rotate, blur, sharpen, edge detect | [PIL](https://docs.pixeltable.com/howto/cookbooks/images/img-pil-transforms) |
+| Video UDFs | `extract_frame`, `clip`, `overlay_text`, `scene_detect_content` | [Video](https://docs.pixeltable.com/howto/cookbooks/video/video-extract-frames) |
+| Document processing | Gemini structured-JSON summarization, chunking | [Chunking](https://docs.pixeltable.com/howto/cookbooks/text/doc-chunk-for-rag) |
 | CSV / tabular data | Dynamic table creation, inline CRUD, type coercion | [CSV Import](https://docs.pixeltable.com/howto/cookbooks/data/data-import-csv) |
-| Object detection | On-demand DETR (ResNet-50/101) with bounding box overlay | [Detection](https://docs.pixeltable.com/howto/cookbooks/images/img-detect-objects) |
-| Table versioning | `tbl.revert()` for undo, `tbl.get_versions()` for history | [Versioning](https://docs.pixeltable.com/howto/cookbooks/core/version-control-history) |
-| Structured output | Gemini `response_schema` with Pydantic models | [Structured Output](https://docs.pixeltable.com/howto/cookbooks/agents/llm-tool-calling) |
-| Catalog introspection | `pxt.list_tables()`, `tbl.columns()`, `tbl._get_schema()`, `tbl.count()` | [Tables](https://docs.pixeltable.com/tutorials/tables-and-data-operations) |
+| Object detection | On-demand DETR with bounding box overlay | [Detection](https://docs.pixeltable.com/howto/cookbooks/images/img-detect-objects) |
+| Table versioning | `tbl.revert()`, `tbl.get_versions()` | [Versioning](https://docs.pixeltable.com/howto/cookbooks/core/version-control-history) |
+| Structured output | Gemini `response_schema` + Pydantic models | [Structured Output](https://docs.pixeltable.com/howto/cookbooks/agents/llm-tool-calling) |
+| Catalog introspection | `pxt.list_tables()`, `tbl.columns()`, `tbl.count()` | [Tables](https://docs.pixeltable.com/tutorials/tables-and-data-operations) |
 | Data export | JSON, CSV, Parquet via `/api/export/` | [Export](https://docs.pixeltable.com/howto/cookbooks/data/data-export-pytorch) |
-| MCP | Developer page config for Claude, Cursor, AI IDEs | [MCP](https://docs.pixeltable.com/use-cases/agents-mcp) |
+| MCP | Config for Claude, Cursor, AI IDEs | [MCP](https://docs.pixeltable.com/use-cases/agents-mcp) |
 
 ### Not Yet Wired Up
 
 - [ ] Image captioning ([cookbook](https://docs.pixeltable.com/howto/cookbooks/images/img-generate-captions))
 - [ ] Vision structured output ([cookbook](https://docs.pixeltable.com/howto/cookbooks/images/vision-structured-output))
 - [ ] Text-to-speech ([cookbook](https://docs.pixeltable.com/howto/cookbooks/audio/audio-text-to-speech))
-- [ ] Podcast summarization ([cookbook](https://docs.pixeltable.com/howto/cookbooks/audio/audio-summarize-podcast))
-- [ ] Label Studio / FiftyOne annotation ([guide](https://docs.pixeltable.com/howto/using-label-studio-with-pixeltable))
+- [ ] Label Studio / FiftyOne ([guide](https://docs.pixeltable.com/howto/using-label-studio-with-pixeltable))
 - [ ] Local models — Ollama, Llama.cpp, WhisperX ([guide](https://docs.pixeltable.com/howto/providers/working-with-ollama))
 
 ## Getting Started
 
-### Prerequisites
+**Prerequisites:** Python 3.10+, Node.js 18+
 
-- Python 3.10+, Node.js 18+
-- Required: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GOOGLE_API_KEY`
-- Optional: `MISTRAL_API_KEY`, `REVE_API_KEY`, `NEWS_API_KEY`
+**Required:** `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GOOGLE_API_KEY`
+**Optional:** `MISTRAL_API_KEY`, `REVE_API_KEY`, `NEWS_API_KEY`
 
-> All providers are swappable. Pixeltable supports [local runtimes](https://docs.pixeltable.com/howto/providers/working-with-ollama) (Ollama, Llama.cpp, WhisperX) and [20+ integrations](https://docs.pixeltable.com/integrations/frameworks).
-
-### Install & Run
+> All providers are swappable. Pixeltable supports [local runtimes](https://docs.pixeltable.com/howto/providers/working-with-ollama) and [20+ integrations](https://docs.pixeltable.com/integrations/frameworks).
 
 ```bash
-# Backend
-cd backend
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-
-# Frontend
+# Install
+cd backend && python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
 cd ../frontend && npm install
 
-# Configure
-cat > backend/.env << 'EOF'
-ANTHROPIC_API_KEY=sk-ant-...
-OPENAI_API_KEY=sk-...
-GOOGLE_API_KEY=...
-# MISTRAL_API_KEY=...
-# REVE_API_KEY=...
-# NEWS_API_KEY=...
-IMAGE_GEN_PROVIDER=gemini
-VIDEO_GEN_PROVIDER=gemini
-EOF
+# Configure — create backend/.env with your API keys
 
 # Run
 cd backend && python setup_pixeltable.py   # first time only
@@ -150,39 +200,39 @@ python main.py                             # :8000
 cd ../frontend && npm run dev              # :5173 → proxies /api to :8000
 ```
 
-Production: `cd frontend && npm run build` outputs to `backend/static/`, then `python main.py` serves everything at `:8000`.
+**Production:** `cd frontend && npm run build` → `backend/static/`, then `python main.py` serves at `:8000`.
 
 ## Project Structure
 
 ```
 backend/
-├── main.py                 FastAPI app + CORS + static serving
-├── config.py               model IDs, system prompts, LLM params
-├── models.py               Pydantic request/response models
-├── functions.py            @pxt.udf / @pxt.query definitions
-├── setup_pixeltable.py     full schema: tables, views, columns, indexes
+├── main.py                 FastAPI app, CORS, static serving
+├── config.py               model IDs, system prompts, LLM parameters
+├── models.py               Pydantic request/response schemas
+├── functions.py            @pxt.udf and @pxt.query definitions
+├── setup_pixeltable.py     full schema (tables, views, columns, indexes)
 └── routers/
-    ├── chat.py             POST /query         — 11-step agent workflow
-    ├── files.py            POST /upload         — file + URL ingestion
-    ├── studio.py           /api/studio/*        — transforms, detection, CSV, Reve, embeddings
-    ├── images.py           /api/generate_*      — Imagen/DALL-E/Veo + save to collection
-    ├── experiments.py      /api/experiments/*   — parallel multi-model prompt runs
-    ├── export.py           /api/export/*        — JSON/CSV/Parquet for any table
-    ├── database.py         /api/db/*            — catalog introspection + timeline
-    ├── history.py          /api/history/*       — conversation detail + debug export
-    ├── memory.py           /api/memory/*        — memory bank CRUD
-    └── personas.py         /api/personas/*      — persona CRUD
+    ├── chat.py             11-step agent workflow
+    ├── studio.py           transforms, detection, CSV, Reve, embeddings
+    ├── images.py           Imagen/DALL-E/Veo generation
+    ├── experiments.py      parallel multi-model prompt runs
+    ├── export.py           JSON/CSV/Parquet for any table
+    ├── database.py         catalog introspection, timeline
+    ├── files.py            upload, URL import
+    ├── history.py          conversation detail, debug export
+    ├── memory.py           memory bank CRUD
+    └── personas.py         persona CRUD
 
 frontend/src/
 ├── components/
 │   ├── chat/               agent UI, personas, image/video modes
-│   ├── experiments/        prompt lab: model select, metrics, history
+│   ├── experiments/        prompt lab, model select, metrics
 │   ├── studio/             file browser, transforms, CSV, detection, embedding map
 │   ├── developer/          export, API reference, SDK snippets, MCP config
-│   ├── database/           catalog browser, search, filter, CSV download
+│   ├── database/           catalog browser, search, filter, download
 │   ├── architecture/       React Flow diagram (38 nodes, swim lanes)
-│   ├── images/             media library, Reve edit/remix dialog
-│   ├── history/            conversations + timeline
+│   ├── images/             media library, Reve edit/remix
+│   ├── history/            conversations, timeline
 │   ├── memory/             memory bank
 │   └── settings/           persona editor
 ├── lib/api.ts              typed fetch wrapper
@@ -191,14 +241,16 @@ frontend/src/
 
 ## Related Projects
 
-- [**Pixeltable**](https://github.com/pixeltable/pixeltable) — the core library
-- [**Pixelagent**](https://github.com/pixeltable/pixelagent) — lightweight agent framework with built-in memory
-- [**Pixelmemory**](https://github.com/pixeltable/pixelmemory) — persistent memory layer for AI apps
-- [**MCP Server**](https://github.com/pixeltable/mcp-server-pixeltable-developer) — Model Context Protocol server for Claude, Cursor, and AI IDEs
+| Project | Description |
+|:--------|:------------|
+| [**Pixeltable**](https://github.com/pixeltable/pixeltable) | The core library — declarative AI data infrastructure |
+| [**Pixelagent**](https://github.com/pixeltable/pixelagent) | Lightweight agent framework with built-in memory |
+| [**Pixelmemory**](https://github.com/pixeltable/pixelmemory) | Persistent memory layer for AI apps |
+| [**MCP Server**](https://github.com/pixeltable/mcp-server-pixeltable-developer) | Model Context Protocol server for Claude, Cursor, AI IDEs |
 
 ## Contributing
 
-This is a playground — rough edges are expected. If you find a Pixeltable feature that's missing or awkward, open an issue or PR.
+Rough edges are expected. If you find a Pixeltable feature that's missing or awkward, open an issue or PR.
 
 ## License
 
