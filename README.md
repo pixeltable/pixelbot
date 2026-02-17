@@ -170,14 +170,6 @@ Every row maps to a Pixeltable feature exercised in this app:
 | Data export | JSON, CSV, Parquet via `/api/export/` | [Export](https://docs.pixeltable.com/howto/cookbooks/data/data-export-pytorch) |
 | MCP | Config for Claude, Cursor, AI IDEs | [MCP](https://docs.pixeltable.com/use-cases/agents-mcp) |
 
-### Not Yet Wired Up
-
-- [ ] Image captioning ([cookbook](https://docs.pixeltable.com/howto/cookbooks/images/img-generate-captions))
-- [ ] Vision structured output ([cookbook](https://docs.pixeltable.com/howto/cookbooks/images/vision-structured-output))
-- [ ] Text-to-speech ([cookbook](https://docs.pixeltable.com/howto/cookbooks/audio/audio-text-to-speech))
-- [ ] Label Studio / FiftyOne ([guide](https://docs.pixeltable.com/howto/using-label-studio-with-pixeltable))
-- [ ] Local models — Ollama, Llama.cpp, WhisperX ([guide](https://docs.pixeltable.com/howto/providers/working-with-ollama))
-
 ## Getting Started
 
 **Prerequisites:** Python 3.10+, Node.js 18+
