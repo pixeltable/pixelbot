@@ -384,6 +384,25 @@ video_gen_tasks.add_computed_column(
 )
 print(f"Video generation: Gemini Veo ({config.VEO_MODEL_ID})")
 
+# ── Speech Generation (TTS) ───────────────────────────────────────────────────
+
+speech_tasks = pxt.create_table(
+    "agents.speech_tasks",
+    {
+        "input_text": pxt.String,
+        "voice": pxt.String,
+        "timestamp": pxt.Timestamp,
+        "user_id": pxt.String,
+    },
+    if_exists="ignore",
+)
+
+speech_tasks.add_computed_column(
+    audio=openai.speech(speech_tasks.input_text, model="tts-1", voice=speech_tasks.voice),
+    if_exists="ignore",
+)
+print("Speech generation: OpenAI TTS (tts-1)")
+
 # ── CSV Tables Registry ───────────────────────────────────────────────────────
 
 csv_registry = pxt.create_table(

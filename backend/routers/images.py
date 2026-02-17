@@ -444,3 +444,88 @@ def save_generated_video_to_collection(body: SaveToCollectionRequest):
     except Exception as e:
         logger.error(f"Error saving generated video to collection: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Text-to-Speech (OpenAI TTS) ──────────────────────────────────────────────
+
+TTS_VOICES = ["alloy", "echo", "fable", "onyx", "nova", "shimmer"]
+
+
+class GenerateSpeechRequest(BaseModel):
+    text: str
+    voice: str = "alloy"
+
+
+class GenerateSpeechResponse(BaseModel):
+    audio_url: str
+    audio_path: str
+    timestamp: str
+    voice: str
+
+
+@router.post("/generate_speech", response_model=GenerateSpeechResponse)
+@pxt_retry()
+def generate_speech(body: GenerateSpeechRequest):
+    """Generate speech from text using OpenAI TTS via Pixeltable computed column."""
+    user_id = config.DEFAULT_USER_ID
+    current_timestamp = datetime.now()
+
+    voice = body.voice if body.voice in TTS_VOICES else "alloy"
+
+    try:
+        speech_table = pxt.get_table("agents.speech_tasks")
+        speech_table.insert([{
+            "input_text": body.text,
+            "voice": voice,
+            "timestamp": current_timestamp,
+            "user_id": user_id,
+        }])
+
+        result = (
+            speech_table.where(
+                (speech_table.timestamp == current_timestamp) & (speech_table.user_id == user_id)
+            )
+            .select(audio=speech_table.audio)
+            .collect()
+        )
+
+        if len(result) == 0 or result[0].get("audio") is None:
+            raise HTTPException(status_code=500, detail="Speech generation failed")
+
+        audio_path = str(result[0]["audio"])
+        if not os.path.exists(audio_path):
+            raise HTTPException(status_code=500, detail="Audio file not found on disk")
+
+        return GenerateSpeechResponse(
+            audio_url=f"/api/serve_audio?path={audio_path}",
+            audio_path=audio_path,
+            timestamp=current_timestamp.isoformat(),
+            voice=voice,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error generating speech: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/serve_audio")
+def serve_audio(path: str):
+    """Serve a generated audio file by path."""
+    if not os.path.exists(path):
+        raise HTTPException(status_code=404, detail="Audio file not found")
+    return FileResponse(path, media_type="audio/wav", filename=os.path.basename(path))
+
+
+@router.get("/tts_voices")
+def get_tts_voices():
+    """Return available TTS voice options."""
+    return [
+        {"id": "alloy", "label": "Alloy", "style": "Neutral, balanced"},
+        {"id": "echo", "label": "Echo", "style": "Warm, conversational"},
+        {"id": "fable", "label": "Fable", "style": "Expressive, storytelling"},
+        {"id": "onyx", "label": "Onyx", "style": "Deep, authoritative"},
+        {"id": "nova", "label": "Nova", "style": "Friendly, upbeat"},
+        {"id": "shimmer", "label": "Shimmer", "style": "Clear, professional"},
+    ]

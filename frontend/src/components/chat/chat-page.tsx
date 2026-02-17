@@ -3,6 +3,9 @@ import {
   Send,
   ImageIcon,
   Film,
+  Volume2,
+  Mic,
+  MicOff,
   Loader2,
   Bookmark,
   User,
@@ -57,10 +60,69 @@ export function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  const [mode, setMode] = useState<'chat' | 'image' | 'video'>('chat')
+  const [mode, setMode] = useState<'chat' | 'image' | 'video' | 'voice'>('chat')
   const [personas, setPersonas] = useState<Persona[]>([])
   const [selectedPersona, setSelectedPersona] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
+
+  // ── Dictation (Web Speech API) ──────────────────────────────────────────
+  const [isListening, setIsListening] = useState(false)
+  const recognitionRef = useRef<SpeechRecognition | null>(null)
+
+  const hasSpeechApi = typeof window !== 'undefined' && ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)
+
+  const toggleDictation = useCallback(() => {
+    if (isListening) {
+      recognitionRef.current?.stop()
+      setIsListening(false)
+      return
+    }
+
+    const SpeechRecognitionCtor = window.SpeechRecognition ?? (window as unknown as { webkitSpeechRecognition: typeof SpeechRecognition }).webkitSpeechRecognition
+    if (!SpeechRecognitionCtor) return
+
+    const recognition = new SpeechRecognitionCtor()
+    recognition.continuous = true
+    recognition.interimResults = true
+    recognition.lang = 'en-US'
+
+    let finalTranscript = ''
+
+    recognition.onresult = (event: SpeechRecognitionEvent) => {
+      let interim = ''
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript
+        if (event.results[i].isFinal) {
+          finalTranscript += transcript + ' '
+        } else {
+          interim = transcript
+        }
+      }
+      setInput((prev) => {
+        const base = prev.endsWith(' ') ? prev : prev ? prev + ' ' : ''
+        return (base + finalTranscript + interim).replace(/\s+/g, ' ').trimStart()
+      })
+    }
+
+    recognition.onerror = () => {
+      setIsListening(false)
+    }
+
+    recognition.onend = () => {
+      setIsListening(false)
+    }
+
+    recognitionRef.current = recognition
+    recognition.start()
+    setIsListening(true)
+  }, [isListening])
+
+  // Stop dictation when component unmounts
+  useEffect(() => {
+    return () => {
+      recognitionRef.current?.stop()
+    }
+  }, [])
 
   useEffect(() => {
     api.getPersonas().then(setPersonas).catch(() => {})
@@ -73,6 +135,10 @@ export function ChatPage() {
   const handleSend = useCallback(async () => {
     const text = input.trim()
     if (!text || isLoading) return
+
+    // Stop dictation if active
+    recognitionRef.current?.stop()
+    setIsListening(false)
 
     setInput('')
     setIsLoading(true)
@@ -111,6 +177,26 @@ export function ChatPage() {
         ])
       } catch (err) {
         addToast(err instanceof Error ? err.message : 'Video generation failed', 'error')
+      } finally {
+        setIsLoading(false)
+      }
+      return
+    }
+
+    if (mode === 'voice') {
+      setMessages((prev) => [...prev, { role: 'user', content: text }])
+      try {
+        const result = await api.generateSpeech(text)
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: 'assistant',
+            content: `Generated speech (${result.voice})`,
+            audio_url: result.audio_url,
+          },
+        ])
+      } catch (err) {
+        addToast(err instanceof Error ? err.message : 'Speech generation failed', 'error')
       } finally {
         setIsLoading(false)
       }
@@ -227,7 +313,9 @@ export function ChatPage() {
                     ? 'Describe the image you want to generate...'
                     : mode === 'video'
                       ? 'Describe the video you want to generate...'
-                      : 'Ask anything...'
+                      : mode === 'voice'
+                        ? 'Type the text to convert to speech...'
+                        : 'Ask anything...'
                 }
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
@@ -285,24 +373,56 @@ export function ChatPage() {
                   <Film className="h-3 w-3" />
                   {mode === 'video' ? 'Video mode' : 'Video'}
                 </button>
+                <button
+                  className={cn(
+                    'flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-medium transition-colors',
+                    mode === 'voice'
+                      ? 'bg-emerald-500/10 text-emerald-400'
+                      : 'text-muted-foreground hover:bg-accent hover:text-foreground',
+                  )}
+                  onClick={() => setMode(mode === 'voice' ? 'chat' : 'voice')}
+                >
+                  <Volume2 className="h-3 w-3" />
+                  {mode === 'voice' ? 'Voice mode' : 'Voice'}
+                </button>
               </div>
 
-              <button
-                onClick={handleSend}
-                disabled={isLoading || !input.trim()}
-                className={cn(
-                  'flex h-8 w-8 items-center justify-center rounded-lg transition-all',
-                  input.trim() && !isLoading
-                    ? 'bg-foreground text-background hover:opacity-80'
-                    : 'text-muted-foreground/30 cursor-not-allowed',
+              <div className="flex items-center gap-1">
+                {hasSpeechApi && (
+                  <button
+                    onClick={toggleDictation}
+                    className={cn(
+                      'flex h-8 w-8 items-center justify-center rounded-lg transition-all',
+                      isListening
+                        ? 'bg-red-500/10 text-red-400 animate-pulse'
+                        : 'text-muted-foreground/50 hover:text-foreground hover:bg-accent',
+                    )}
+                    title={isListening ? 'Stop dictation' : 'Start dictation'}
+                  >
+                    {isListening ? (
+                      <MicOff className="h-3.5 w-3.5" />
+                    ) : (
+                      <Mic className="h-3.5 w-3.5" />
+                    )}
+                  </button>
                 )}
-              >
-                {isLoading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Send className="h-3.5 w-3.5" />
-                )}
-              </button>
+                <button
+                  onClick={handleSend}
+                  disabled={isLoading || !input.trim()}
+                  className={cn(
+                    'flex h-8 w-8 items-center justify-center rounded-lg transition-all',
+                    input.trim() && !isLoading
+                      ? 'bg-foreground text-background hover:opacity-80'
+                      : 'text-muted-foreground/30 cursor-not-allowed',
+                  )}
+                >
+                  {isLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Send className="h-3.5 w-3.5" />
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -327,11 +447,12 @@ function MessageBubble({
   const isUser = message.role === 'user'
   const isImage = message.content.startsWith('![')
   const isVideo = !!message.video_url
+  const isAudio = !!message.audio_url
 
   const renderedHtml = useMemo(() => {
-    if (isUser || isImage || isVideo) return ''
+    if (isUser || isImage || isVideo || isAudio) return ''
     return renderMarkdown(message.content)
-  }, [message.content, isUser, isImage, isVideo])
+  }, [message.content, isUser, isImage, isVideo, isAudio])
 
   const sources = useMemo(() => {
     if (!message.metadata) return []
@@ -375,7 +496,14 @@ function MessageBubble({
       {/* Content */}
       <div className="flex-1 min-w-0 space-y-3">
         {/* Main answer */}
-        {isVideo ? (
+        {isAudio ? (
+          <div className="space-y-2">
+            <p className="text-sm text-muted-foreground">{message.content}</p>
+            <div className="rounded-xl border border-border/60 overflow-hidden bg-card/40 p-3 max-w-sm">
+              <audio src={message.audio_url} controls className="w-full h-8" />
+            </div>
+          </div>
+        ) : isVideo ? (
           <div className="space-y-2">
             <p className="text-sm text-muted-foreground">{message.content}</p>
             <div className="rounded-xl border border-border overflow-hidden bg-black max-w-lg">

@@ -649,7 +649,7 @@ function ExportTab({ copyToClipboard }: { copyToClipboard: (text: string, label?
             >
               {tables.map((t) => (
                 <option key={t.path} value={t.path}>
-                  {t.path} ({t.row_count} rows, {t.columns.length} cols)
+                  {t.path}
                 </option>
               ))}
             </select>

@@ -12,7 +12,6 @@ import {
   FolderPlus,
   Check,
   Pencil,
-  Shuffle,
   Sparkles,
   ArrowRight,
   Save,
@@ -35,7 +34,7 @@ import type { GeneratedImage, GeneratedVideo, GenerationConfig } from '@/types'
 import { cn } from '@/lib/utils'
 
 type ActiveTab = 'images' | 'videos'
-type ReveMode = 'edit' | 'remix'
+type ReveMode = 'edit'
 
 export function ImagesPage() {
   const { addToast } = useToast()
@@ -62,7 +61,7 @@ export function ImagesPage() {
   const [isSavingToCollection, setIsSavingToCollection] = useState(false)
   const [savedToCollection, setSavedToCollection] = useState<Set<string>>(new Set())
 
-  // Reve edit/remix state
+  // Reve edit state
   const [reveImage, setReveImage] = useState<GeneratedImage | null>(null)
   const [reveMode, setReveMode] = useState<ReveMode>('edit')
 
@@ -182,11 +181,7 @@ export function ImagesPage() {
     setReveMode('edit')
   }, [])
 
-  const handleRemixImage = useCallback((image: GeneratedImage) => {
-    setSelectedImage(null)
-    setReveImage(image)
-    setReveMode('remix')
-  }, [])
+
 
   const handleEditVideo = useCallback(() => {
     addToast('Video editing coming soon — RunwayML integration', 'info')
@@ -344,12 +339,6 @@ export function ImagesPage() {
                   <Pencil className="h-3 w-3" /> Edit
                 </button>
                 <button
-                  className="flex items-center gap-1.5 rounded-lg border border-amber-500/30 px-3 py-1.5 text-xs font-medium text-amber-400 hover:bg-amber-500/10 transition-colors"
-                  onClick={() => handleRemixImage(selectedImage)}
-                >
-                  <Shuffle className="h-3 w-3" /> Remix
-                </button>
-                <button
                   className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
                   onClick={() => handleDownloadImage(selectedImage)}
                 >
@@ -438,7 +427,7 @@ export function ImagesPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Reve Edit / Remix Dialog */}
+      {/* Reve Edit Dialog */}
       <ReveEditDialog
         image={reveImage}
         mode={reveMode}
@@ -456,7 +445,7 @@ export function ImagesPage() {
   )
 }
 
-// ── Reve Edit / Remix Dialog ────────────────────────────────────────────────
+// ── Reve Edit Dialog ────────────────────────────────────────────────────────
 
 function ReveEditDialog({
   image,
@@ -502,23 +491,13 @@ function ReveEditDialog({
     setResultTempPath(null)
 
     try {
-      if (mode === 'edit') {
-        const result = await api.reveEdit({
-          timestamp: image.timestamp,
-          instruction: instruction.trim(),
-        })
-        setResultPreview(result.preview)
-        setResultTempPath(result.temp_path)
-        setResultDimensions({ width: result.width, height: result.height })
-      } else {
-        const result = await api.reveRemix({
-          prompt: instruction.trim(),
-          timestamps: [image.timestamp],
-        })
-        setResultPreview(result.preview)
-        setResultTempPath(result.temp_path)
-        setResultDimensions({ width: result.width, height: result.height })
-      }
+      const result = await api.reveEdit({
+        timestamp: image.timestamp,
+        instruction: instruction.trim(),
+      })
+      setResultPreview(result.preview)
+      setResultTempPath(result.temp_path)
+      setResultDimensions({ width: result.width, height: result.height })
     } catch (err) {
       addToast(
         err instanceof Error ? err.message : `Reve ${mode} failed`,
@@ -559,8 +538,6 @@ function ReveEditDialog({
 
   if (!image) return null
 
-  const isEdit = mode === 'edit'
-  const accentColor = isEdit ? 'violet' : 'amber'
   const hasResult = !!resultPreview
 
   return (
@@ -568,59 +545,17 @@ function ReveEditDialog({
       <DialogContent className="max-w-4xl overflow-y-auto max-h-[90vh]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            {isEdit ? (
-              <Pencil className="h-4 w-4 text-violet-400" />
-            ) : (
-              <Shuffle className="h-4 w-4 text-amber-400" />
-            )}
-            {isEdit ? 'Edit with Reve AI' : 'Remix with Reve AI'}
+            <Pencil className="h-4 w-4 text-violet-400" />
+            Edit with Reve AI
             <Badge variant="secondary" className="text-[9px] ml-1">
               <Sparkles className="h-2.5 w-2.5 mr-0.5" />
               Reve
             </Badge>
           </DialogTitle>
           <DialogDescription className="text-sm">
-            {isEdit
-              ? 'Describe how you want to modify this image using natural language.'
-              : 'Create a new image inspired by this reference with a creative prompt.'}
+            Describe how you want to modify this image using natural language.
           </DialogDescription>
         </DialogHeader>
-
-        {/* Mode toggle */}
-        <div className="flex gap-1 p-0.5 rounded-lg bg-muted/50 w-fit">
-          <button
-            className={cn(
-              'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all',
-              mode === 'edit'
-                ? 'bg-violet-500/10 text-violet-400 ring-1 ring-violet-500/20'
-                : 'text-muted-foreground hover:text-foreground',
-            )}
-            onClick={() => {
-              onModeChange('edit')
-              handleRetry()
-            }}
-            disabled={isProcessing}
-          >
-            <Pencil className="h-3 w-3" />
-            Edit
-          </button>
-          <button
-            className={cn(
-              'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all',
-              mode === 'remix'
-                ? 'bg-amber-500/10 text-amber-400 ring-1 ring-amber-500/20'
-                : 'text-muted-foreground hover:text-foreground',
-            )}
-            onClick={() => {
-              onModeChange('remix')
-              handleRetry()
-            }}
-            disabled={isProcessing}
-          >
-            <Shuffle className="h-3 w-3" />
-            Remix
-          </button>
-        </div>
 
         {/* Image comparison */}
         <div className="grid grid-cols-2 gap-4">
@@ -647,9 +582,7 @@ function ReveEditDialog({
             <div className="flex items-center gap-1.5">
               <div className={cn(
                 'h-1.5 w-1.5 rounded-full',
-                hasResult
-                  ? isEdit ? 'bg-violet-400' : 'bg-amber-400'
-                  : 'bg-muted-foreground/30',
+                hasResult ? 'bg-violet-400' : 'bg-muted-foreground/30',
               )} />
               <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
                 Result
@@ -662,25 +595,23 @@ function ReveEditDialog({
             </div>
             <div className={cn(
               'rounded-xl border overflow-hidden min-h-[200px] flex items-center justify-center',
-              hasResult
-                ? isEdit ? 'border-violet-500/20 bg-violet-500/5' : 'border-amber-500/20 bg-amber-500/5'
-                : 'border-dashed border-border bg-muted/20',
+                hasResult
+                  ? 'border-violet-500/20 bg-violet-500/5'
+                  : 'border-dashed border-border bg-muted/20',
             )}>
               {isProcessing ? (
                 <div className="flex flex-col items-center gap-3 py-12">
                   <div className="relative">
                     <Loader2 className={cn(
-                      'h-8 w-8 animate-spin',
-                      isEdit ? 'text-violet-400' : 'text-amber-400',
+                      'h-8 w-8 animate-spin text-violet-400',
                     )} />
                     <Sparkles className={cn(
-                      'absolute -top-1 -right-1 h-3.5 w-3.5 animate-pulse',
-                      isEdit ? 'text-violet-300' : 'text-amber-300',
+                      'absolute -top-1 -right-1 h-3.5 w-3.5 animate-pulse text-violet-300',
                     )} />
                   </div>
                   <div className="text-center">
                     <p className="text-xs font-medium text-muted-foreground">
-                      {isEdit ? 'Applying edit...' : 'Creating remix...'}
+                      Applying edit...
                     </p>
                     <p className="text-[10px] text-muted-foreground/50 mt-0.5">
                       Reve AI is processing your image
@@ -697,9 +628,7 @@ function ReveEditDialog({
                 <div className="flex flex-col items-center gap-2 py-12 text-center px-4">
                   <ArrowRight className="h-5 w-5 text-muted-foreground/30" />
                   <p className="text-xs text-muted-foreground/50">
-                    {isEdit
-                      ? 'Enter an edit instruction and click Apply'
-                      : 'Enter a creative prompt and click Create'}
+                    Enter an edit instruction and click Apply
                   </p>
                 </div>
               )}
@@ -710,24 +639,14 @@ function ReveEditDialog({
         {/* Instruction input */}
         <div className="space-y-2">
           <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
-            {isEdit ? 'Edit instruction' : 'Remix prompt'}
+            Edit instruction
           </label>
           <div className="relative">
             <textarea
               value={instruction}
               onChange={(e) => setInstruction(e.target.value)}
-              placeholder={
-                isEdit
-                  ? 'e.g. "Make the sky more dramatic", "Add a warm sunset glow", "Remove the background"'
-                  : 'e.g. "Reimagine as a watercolor painting", "Transform into cyberpunk style", "Make it look like a vintage photograph"'
-              }
-              className={cn(
-                'w-full rounded-xl border bg-background px-4 py-3 text-sm resize-none',
-                'placeholder:text-muted-foreground/40 focus:outline-none focus:ring-2',
-                isEdit
-                  ? 'border-violet-500/20 focus:ring-violet-500/30'
-                  : 'border-amber-500/20 focus:ring-amber-500/30',
-              )}
+              placeholder='e.g. "Make the sky more dramatic", "Add a warm sunset glow", "Remove the background"'
+              className="w-full rounded-xl border border-violet-500/20 bg-background px-4 py-3 text-sm resize-none placeholder:text-muted-foreground/40 focus:outline-none focus:ring-2 focus:ring-violet-500/30"
               rows={2}
               disabled={isProcessing}
               onKeyDown={(e) => {
@@ -738,12 +657,6 @@ function ReveEditDialog({
               }}
             />
           </div>
-          {mode === 'remix' && (
-            <p className="text-[10px] text-muted-foreground/50">
-              Tip: Use <code className="px-1 py-0.5 rounded bg-muted text-[9px]">&lt;img&gt;0&lt;/img&gt;</code> in
-              your prompt to reference the source image explicitly.
-            </p>
-          )}
         </div>
 
         {/* Actions */}
@@ -778,9 +691,7 @@ function ReveEditDialog({
                 <button
                   className={cn(
                     'flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-xs font-semibold transition-colors',
-                    isEdit
-                      ? 'bg-violet-500 text-white hover:bg-violet-600'
-                      : 'bg-amber-500 text-white hover:bg-amber-600',
+                    'bg-violet-500 text-white hover:bg-violet-600',
                     isSaving && 'opacity-50 pointer-events-none',
                   )}
                   onClick={handleSave}
@@ -800,9 +711,7 @@ function ReveEditDialog({
               <button
                 className={cn(
                   'flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-xs font-semibold transition-colors',
-                  isEdit
-                    ? 'bg-violet-500 text-white hover:bg-violet-600'
-                    : 'bg-amber-500 text-white hover:bg-amber-600',
+                  'bg-violet-500 text-white hover:bg-violet-600',
                   (!instruction.trim() || isProcessing) && 'opacity-50 pointer-events-none',
                 )}
                 onClick={handleGenerate}
@@ -813,9 +722,7 @@ function ReveEditDialog({
                 ) : (
                   <Sparkles className="h-3 w-3" />
                 )}
-                {isProcessing
-                  ? isEdit ? 'Editing...' : 'Remixing...'
-                  : isEdit ? 'Apply Edit' : 'Create Remix'}
+                {isProcessing ? 'Editing...' : 'Apply Edit'}
               </button>
             )}
           </div>

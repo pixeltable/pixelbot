@@ -1244,6 +1244,11 @@ DETECTION_MODELS = {
         "type": "detection",
         "label": "DETR ResNet-101 (Object Detection)",
     },
+    "detr-resnet-50-panoptic": {
+        "id": "facebook/detr-resnet-50-panoptic",
+        "type": "segmentation",
+        "label": "DETR ResNet-50 Panoptic (Segmentation)",
+    },
     "vit-base": {
         "id": "google/vit-base-patch16-224",
         "type": "classification",
@@ -1268,6 +1273,10 @@ def _get_detection_model(model_key: str):
         from transformers import DetrForObjectDetection, DetrImageProcessor
         processor = DetrImageProcessor.from_pretrained(model_id)
         model = DetrForObjectDetection.from_pretrained(model_id)
+    elif model_type == "segmentation":
+        from transformers import DetrForSegmentation, DetrImageProcessor
+        processor = DetrImageProcessor.from_pretrained(model_id)
+        model = DetrForSegmentation.from_pretrained(model_id)
     else:
         from transformers import ViTForImageClassification, ViTImageProcessor
         processor = ViTImageProcessor.from_pretrained(model_id)
@@ -1384,6 +1393,54 @@ def detect_objects(body: DetectRequest):
                 "image_height": img_height,
                 "count": len(detections),
                 "detections": detections,
+            }
+
+        elif model_info["type"] == "segmentation":
+            inputs = processor(images=img, return_tensors="pt")
+            with torch.no_grad():
+                outputs = model(**inputs)
+
+            result = processor.post_process_panoptic_segmentation(
+                outputs, threshold=body.threshold, target_sizes=[(img_height, img_width)]
+            )[0]
+
+            seg_array = result["segmentation"].cpu().numpy()
+            segments = []
+            for seg_info in result.get("segments_info", []):
+                seg_id = seg_info["id"]
+                label_id = seg_info["label_id"]
+                label_text = model.config.id2label.get(label_id, f"class_{label_id}")
+                score = round(seg_info.get("score", 0.0), 3)
+
+                # Compute bounding box from segment mask
+                mask = seg_array == seg_id
+                ys, xs = mask.nonzero()
+                if len(ys) == 0:
+                    continue
+
+                segments.append({
+                    "id": int(seg_id),
+                    "label": label_text,
+                    "score": score,
+                    "is_thing": seg_info.get("isthing", True),
+                    "box": {
+                        "x1": round(float(xs.min()), 1),
+                        "y1": round(float(ys.min()), 1),
+                        "x2": round(float(xs.max()), 1),
+                        "y2": round(float(ys.max()), 1),
+                    },
+                    "pixel_count": int(mask.sum()),
+                })
+
+            segments.sort(key=lambda s: s["score"], reverse=True)
+
+            return {
+                "type": "segmentation",
+                "model": body.model,
+                "image_width": img_width,
+                "image_height": img_height,
+                "count": len(segments),
+                "segments": segments,
             }
 
         else:

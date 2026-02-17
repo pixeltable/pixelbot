@@ -123,6 +123,24 @@ export interface ChatMessage {
   follow_up_text?: string | null
   metadata?: QueryMetadata
   video_url?: string
+  audio_url?: string
+}
+
+export interface TtsVoice {
+  id: string
+  label: string
+  style: string
+}
+
+export interface JoinResult {
+  left_table: string
+  right_table: string
+  join_type: string
+  left_column: string
+  right_column: string
+  columns: string[]
+  rows: Record<string, unknown>[]
+  count: number
 }
 
 // ── CSV Version History ─────────────────────────────────────────────────────
@@ -326,7 +344,7 @@ export interface EmbeddingResponse {
 
 export interface DetectionModel {
   key: string
-  type: 'detection' | 'classification'
+  type: 'detection' | 'classification' | 'segmentation'
   label: string
 }
 
@@ -348,14 +366,24 @@ export interface ClassificationItem {
   score: number
 }
 
+export interface SegmentItem {
+  id: number
+  label: string
+  score: number
+  is_thing: boolean
+  box: BoundingBox
+  pixel_count: number
+}
+
 export interface DetectionResponse {
-  type: 'detection' | 'classification'
+  type: 'detection' | 'classification' | 'segmentation'
   model: string
   image_width: number
   image_height: number
   count: number
   detections?: DetectionItem[]
   classifications?: ClassificationItem[]
+  segments?: SegmentItem[]
 }
 
 // ── Reve AI Edit / Remix ────────────────────────────────────────────────

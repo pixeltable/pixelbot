@@ -188,6 +188,39 @@ export function getVideoUrl(path: string): string {
   return `${BASE}/serve_video?path=${encodeURIComponent(path)}`
 }
 
+// ── Text-to-Speech ──────────────────────────────────────────────────────────
+
+export async function generateSpeech(text: string, voice: string = 'alloy') {
+  return request<{ audio_url: string; audio_path: string; timestamp: string; voice: string }>('/generate_speech', {
+    method: 'POST',
+    body: JSON.stringify({ text, voice }),
+  })
+}
+
+export async function getTtsVoices() {
+  return request<import('@/types').TtsVoice[]>('/tts_voices')
+}
+
+export function getAudioUrl(path: string): string {
+  return `${BASE}/serve_audio?path=${encodeURIComponent(path)}`
+}
+
+// ── Cross-Table Join ────────────────────────────────────────────────────────
+
+export async function joinTables(params: {
+  left_table: string
+  right_table: string
+  left_column: string
+  right_column: string
+  join_type?: string
+  limit?: number
+}) {
+  return request<import('@/types').JoinResult>('/db/join', {
+    method: 'POST',
+    body: JSON.stringify(params),
+  })
+}
+
 // ── Save Generated Media to Collection ──────────────────────────────────────
 
 export async function saveGeneratedImageToCollection(timestamp: string) {

@@ -2,8 +2,8 @@
 
 import logging
 from datetime import datetime
-
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 import pixeltable as pxt
 
 from utils import pxt_retry
@@ -191,6 +191,7 @@ def get_timeline(limit: int = 100):
         ("agents/audios", "audio", "Audio"),
         ("agents/image_generation_tasks", "prompt", "ImageGen"),
         ("agents/video_generation_tasks", "prompt", "VideoGen"),
+        ("agents/speech_tasks", "input_text", "Speech"),
         ("agents/csv_registry", "display_name", "CSV"),
         ("agents/user_personas", "persona_name", "Persona"),
     ]
@@ -239,3 +240,90 @@ def get_timeline(limit: int = 100):
     events.sort(key=lambda e: e.get("timestamp") or "", reverse=True)
 
     return {"events": events[:limit], "total": len(events)}
+
+
+# ── Cross-Table Join ─────────────────────────────────────────────────────────
+
+class JoinRequest(BaseModel):
+    left_table: str
+    right_table: str
+    left_column: str
+    right_column: str
+    join_type: str = "inner"  # inner, left, cross
+    limit: int = 50
+
+
+@router.post("/join")
+@pxt_retry()
+def join_tables(body: JoinRequest):
+    """Join two Pixeltable tables and return the combined result."""
+    try:
+        left = pxt.get_table(body.left_table)
+    except Exception:
+        raise HTTPException(status_code=404, detail=f"Table not found: {body.left_table}")
+    try:
+        right = pxt.get_table(body.right_table)
+    except Exception:
+        raise HTTPException(status_code=404, detail=f"Table not found: {body.right_table}")
+
+    # Validate columns exist
+    left_cols = left.columns()
+    right_cols = right.columns()
+    if body.left_column not in left_cols:
+        raise HTTPException(status_code=400, detail=f"Column '{body.left_column}' not in {body.left_table}")
+    if body.right_column not in right_cols:
+        raise HTTPException(status_code=400, detail=f"Column '{body.right_column}' not in {body.right_table}")
+
+    if body.join_type not in ("inner", "left", "cross"):
+        raise HTTPException(status_code=400, detail=f"Unsupported join type: {body.join_type}")
+
+    try:
+        left_col_ref = getattr(left, body.left_column)
+        right_col_ref = getattr(right, body.right_column)
+
+        # Build join
+        if body.join_type == "cross":
+            joined = left.join(right, how="cross")
+        else:
+            joined = left.join(right, on=left_col_ref == right_col_ref, how=body.join_type)
+
+        # Select all columns from both tables (prefix to avoid collisions)
+        select_kwargs = {}
+        for col in left_cols:
+            key = f"l_{col}"
+            try:
+                select_kwargs[key] = getattr(left, col)
+            except Exception:
+                pass
+        for col in right_cols:
+            key = f"r_{col}"
+            try:
+                select_kwargs[key] = getattr(right, col)
+            except Exception:
+                pass
+
+        raw_rows = joined.select(**select_kwargs).limit(body.limit).collect()
+
+        rows = []
+        for raw in raw_rows:
+            row = {}
+            for k, v in raw.items():
+                row[k] = _safe_value(v)
+            rows.append(row)
+
+        return {
+            "left_table": body.left_table,
+            "right_table": body.right_table,
+            "join_type": body.join_type,
+            "left_column": body.left_column,
+            "right_column": body.right_column,
+            "columns": list(select_kwargs.keys()),
+            "rows": rows,
+            "count": len(rows),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Join error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))

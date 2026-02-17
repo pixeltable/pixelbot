@@ -23,13 +23,14 @@ import {
   Download,
   Filter,
   X,
+  Merge,
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { useToast } from '@/components/ui/toast'
 import * as api from '@/lib/api'
-import type { TableInfo, TableRowsResponse } from '@/types'
+import type { TableInfo, TableRowsResponse, JoinResult } from '@/types'
 
 // ── Grouping logic ──────────────────────────────────────────────────────────
 
@@ -75,7 +76,7 @@ const GROUPS: TableGroup[] = [
     label: 'Generation',
     icon: Sparkles,
     color: 'text-pink-400',
-    match: (n) => n.includes('generation_tasks'),
+    match: (n) => n.includes('generation_tasks') || n === 'speech_tasks',
   },
   {
     label: 'Memory & Config',
@@ -147,6 +148,14 @@ export function DatabasePage() {
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
   const [tableSearch, setTableSearch] = useState('')
   const [rowFilter, setRowFilter] = useState('')
+  const [showJoin, setShowJoin] = useState(false)
+  const [joinLeft, setJoinLeft] = useState('')
+  const [joinRight, setJoinRight] = useState('')
+  const [joinLeftCol, setJoinLeftCol] = useState('')
+  const [joinRightCol, setJoinRightCol] = useState('')
+  const [joinType, setJoinType] = useState<'inner' | 'left' | 'cross'>('inner')
+  const [joinResult, setJoinResult] = useState<JoinResult | null>(null)
+  const [isJoining, setIsJoining] = useState(false)
 
   const filteredTables = useMemo(() => {
     if (!tableSearch.trim()) return tables
@@ -237,6 +246,30 @@ export function DatabasePage() {
     [selectedTable, addToast],
   )
 
+  const leftTableInfo = useMemo(() => tables.find((t) => t.path === joinLeft), [tables, joinLeft])
+  const rightTableInfo = useMemo(() => tables.find((t) => t.path === joinRight), [tables, joinRight])
+
+  const handleJoin = useCallback(async () => {
+    if (!joinLeft || !joinRight || (!joinLeftCol && joinType !== 'cross') || (!joinRightCol && joinType !== 'cross')) return
+    setIsJoining(true)
+    setJoinResult(null)
+    try {
+      const result = await api.joinTables({
+        left_table: joinLeft,
+        right_table: joinRight,
+        left_column: joinLeftCol,
+        right_column: joinRightCol,
+        join_type: joinType,
+        limit: 50,
+      })
+      setJoinResult(result)
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : 'Join failed', 'error')
+    } finally {
+      setIsJoining(false)
+    }
+  }, [joinLeft, joinRight, joinLeftCol, joinRightCol, joinType, addToast])
+
   const toggleGroup = useCallback((label: string) => {
     setCollapsedGroups((prev) => {
       const next = new Set(prev)
@@ -274,6 +307,18 @@ export function DatabasePage() {
             <Eye className="h-2.5 w-2.5 mr-1" />
             {viewCount} views
           </Badge>
+          <button
+            className={cn(
+              'ml-auto flex items-center gap-1 rounded-md px-2 py-0.5 text-[9px] font-medium transition-colors',
+              showJoin
+                ? 'bg-k-yellow/10 text-k-yellow'
+                : 'text-muted-foreground hover:bg-accent hover:text-foreground',
+            )}
+            onClick={() => setShowJoin(!showJoin)}
+          >
+            <Merge className="h-2.5 w-2.5" />
+            Join
+          </button>
         </div>
 
         {/* Table search */}
@@ -366,9 +411,28 @@ export function DatabasePage() {
         </div>
       </div>
 
-      {/* Right panel: table details + rows */}
+      {/* Right panel: table details + rows OR join view */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {!selectedTable ? (
+        {showJoin ? (
+          <JoinPanel
+            tables={tables}
+            joinLeft={joinLeft}
+            joinRight={joinRight}
+            joinLeftCol={joinLeftCol}
+            joinRightCol={joinRightCol}
+            joinType={joinType}
+            joinResult={joinResult}
+            isJoining={isJoining}
+            leftTableInfo={leftTableInfo ?? null}
+            rightTableInfo={rightTableInfo ?? null}
+            onLeftChange={(v) => { setJoinLeft(v); setJoinLeftCol(''); setJoinResult(null) }}
+            onRightChange={(v) => { setJoinRight(v); setJoinRightCol(''); setJoinResult(null) }}
+            onLeftColChange={setJoinLeftCol}
+            onRightColChange={setJoinRightCol}
+            onTypeChange={setJoinType}
+            onJoin={handleJoin}
+          />
+        ) : !selectedTable ? (
           <div className="flex flex-col items-center justify-center h-full gap-3">
             <Database className="h-12 w-12 text-muted-foreground/15" />
             <div className="text-center">
@@ -634,4 +698,213 @@ function escapeCsvField(value: string): string {
     return `"${value.replace(/"/g, '""')}"`
   }
   return value
+}
+
+// ── Join Panel ──────────────────────────────────────────────────────────────
+
+function JoinPanel({
+  tables,
+  joinLeft,
+  joinRight,
+  joinLeftCol,
+  joinRightCol,
+  joinType,
+  joinResult,
+  isJoining,
+  leftTableInfo,
+  rightTableInfo,
+  onLeftChange,
+  onRightChange,
+  onLeftColChange,
+  onRightColChange,
+  onTypeChange,
+  onJoin,
+}: {
+  tables: TableInfo[]
+  joinLeft: string
+  joinRight: string
+  joinLeftCol: string
+  joinRightCol: string
+  joinType: 'inner' | 'left' | 'cross'
+  joinResult: JoinResult | null
+  isJoining: boolean
+  leftTableInfo: TableInfo | null
+  rightTableInfo: TableInfo | null
+  onLeftChange: (v: string) => void
+  onRightChange: (v: string) => void
+  onLeftColChange: (v: string) => void
+  onRightColChange: (v: string) => void
+  onTypeChange: (v: 'inner' | 'left' | 'cross') => void
+  onJoin: () => void
+}) {
+  return (
+    <div className="flex flex-col h-full">
+      {/* Join config */}
+      <div className="px-5 pt-4 pb-3 border-b border-border/60 shrink-0 space-y-3">
+        <div className="flex items-center gap-2 mb-1">
+          <Merge className="h-4 w-4 text-k-yellow" />
+          <h3 className="text-sm font-semibold text-foreground">Cross-Table Join</h3>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          {/* Left table */}
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-medium text-muted-foreground">Left Table</label>
+            <select
+              className="w-full rounded-lg border border-border bg-card px-2.5 py-1.5 text-[11px] font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-k-yellow/40"
+              value={joinLeft}
+              onChange={(e) => onLeftChange(e.target.value)}
+            >
+              <option value="">Select table...</option>
+              {tables.map((t) => (
+                <option key={t.path} value={t.path}>
+                  {getShortName(t.path)} ({t.row_count})
+                </option>
+              ))}
+            </select>
+            {leftTableInfo && (
+              <select
+                className="w-full rounded-lg border border-border bg-card px-2.5 py-1.5 text-[11px] font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-k-yellow/40"
+                value={joinLeftCol}
+                onChange={(e) => onLeftColChange(e.target.value)}
+              >
+                <option value="">Join column...</option>
+                {leftTableInfo.columns.map((c) => (
+                  <option key={c.name} value={c.name}>
+                    {c.name} ({c.type})
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+
+          {/* Right table */}
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-medium text-muted-foreground">Right Table</label>
+            <select
+              className="w-full rounded-lg border border-border bg-card px-2.5 py-1.5 text-[11px] font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-k-yellow/40"
+              value={joinRight}
+              onChange={(e) => onRightChange(e.target.value)}
+            >
+              <option value="">Select table...</option>
+              {tables.map((t) => (
+                <option key={t.path} value={t.path}>
+                  {getShortName(t.path)} ({t.row_count})
+                </option>
+              ))}
+            </select>
+            {rightTableInfo && (
+              <select
+                className="w-full rounded-lg border border-border bg-card px-2.5 py-1.5 text-[11px] font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-k-yellow/40"
+                value={joinRightCol}
+                onChange={(e) => onRightColChange(e.target.value)}
+              >
+                <option value="">Join column...</option>
+                {rightTableInfo.columns.map((c) => (
+                  <option key={c.name} value={c.name}>
+                    {c.name} ({c.type})
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+        </div>
+
+        {/* Join type + run */}
+        <div className="flex items-center gap-2">
+          <div className="flex rounded-lg border border-border overflow-hidden">
+            {(['inner', 'left', 'cross'] as const).map((jt) => (
+              <button
+                key={jt}
+                className={cn(
+                  'px-2.5 py-1 text-[10px] font-medium transition-colors',
+                  joinType === jt
+                    ? 'bg-k-yellow/10 text-k-yellow'
+                    : 'text-muted-foreground hover:bg-accent',
+                )}
+                onClick={() => onTypeChange(jt)}
+              >
+                {jt.toUpperCase()}
+              </button>
+            ))}
+          </div>
+          <button
+            className={cn(
+              'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all ml-auto',
+              'bg-gradient-to-r from-k-yellow to-amber-500 text-black hover:brightness-110',
+              (isJoining || (!joinLeft || !joinRight)) && 'opacity-50 pointer-events-none',
+            )}
+            onClick={onJoin}
+            disabled={isJoining || !joinLeft || !joinRight}
+          >
+            {isJoining ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <Merge className="h-3 w-3" />
+            )}
+            {isJoining ? 'Joining...' : 'Run Join'}
+          </button>
+        </div>
+      </div>
+
+      {/* Join results */}
+      <div className="flex-1 overflow-auto">
+        {joinResult ? (
+          <div className="min-w-full">
+            <div className="px-5 py-2 border-b border-border/40 text-[10px] text-muted-foreground">
+              {joinResult.count} rows &middot; {joinResult.join_type.toUpperCase()} JOIN on{' '}
+              <span className="font-mono text-foreground">{joinResult.left_column}</span> ={' '}
+              <span className="font-mono text-foreground">{joinResult.right_column}</span>
+            </div>
+            <table className="w-full text-[11px]">
+              <thead className="sticky top-0 bg-card/90 backdrop-blur-sm z-10">
+                <tr className="border-b border-border">
+                  <th className="px-3 py-2 text-left font-medium text-muted-foreground/60 text-[9px] w-10">
+                    #
+                  </th>
+                  {joinResult.columns.map((col) => (
+                    <th
+                      key={col}
+                      className="px-3 py-2 text-left font-medium text-muted-foreground font-mono whitespace-nowrap"
+                    >
+                      {col}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {joinResult.rows.map((row, idx) => (
+                  <tr
+                    key={idx}
+                    className="border-b border-border/30 hover:bg-accent/30 transition-colors"
+                  >
+                    <td className="px-3 py-1.5 text-muted-foreground/40 tabular-nums">
+                      {idx + 1}
+                    </td>
+                    {joinResult.columns.map((col) => (
+                      <td
+                        key={col}
+                        className="px-3 py-1.5 text-foreground/80 max-w-[300px] truncate font-mono"
+                        title={String(row[col] ?? '')}
+                      >
+                        {formatCellValue(row[col])}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center h-full gap-2">
+            <Merge className="h-8 w-8 text-muted-foreground/15" />
+            <p className="text-xs text-muted-foreground">Select two tables and run a join</p>
+            <p className="text-[10px] text-muted-foreground/50 max-w-xs text-center">
+              Combine data from any two Pixeltable tables using inner, left, or cross join
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  )
 }

@@ -15,6 +15,7 @@ import type {
   DetectionResponse,
   DetectionItem,
   ClassificationItem,
+  SegmentItem,
 } from '@/types'
 
 // Colors for bounding box labels (cycles through)
@@ -97,6 +98,7 @@ export function DetectionPanel({
 
   const detections = result?.detections ?? []
   const classifications = result?.classifications ?? []
+  const segments = result?.segments ?? []
 
   return (
     <div className="space-y-3">
@@ -118,8 +120,8 @@ export function DetectionPanel({
           <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground pointer-events-none" />
         </div>
 
-        {/* Threshold slider (detection only) */}
-        {currentModelType === 'detection' && (
+        {/* Threshold slider (detection + segmentation) */}
+        {(currentModelType === 'detection' || currentModelType === 'segmentation') && (
           <div className="flex items-center gap-1.5">
             <span className="text-[10px] text-muted-foreground">Threshold</span>
             <input
@@ -154,7 +156,7 @@ export function DetectionPanel({
         </button>
 
         {/* Toggle overlay */}
-        {result && result.type === 'detection' && (
+        {result && (result.type === 'detection' || result.type === 'segmentation') && (
           <button
             className="flex items-center gap-1 rounded-lg border border-border px-2 py-1.5 text-[10px] text-muted-foreground hover:bg-accent transition-colors"
             onClick={() => setShowOverlay(!showOverlay)}
@@ -231,6 +233,99 @@ export function DetectionPanel({
         </div>
       )}
 
+      {/* Segmentation overlay */}
+      {result?.type === 'segmentation' && segments.length > 0 && (
+        <div className="relative rounded-xl border border-border overflow-hidden bg-muted/30">
+          <img src={imageSrc} alt="Segmentation" className="w-full h-auto block" />
+          {showOverlay && (
+            <svg
+              className="absolute inset-0 w-full h-full"
+              viewBox={`0 0 ${result.image_width} ${result.image_height}`}
+              preserveAspectRatio="xMidYMid meet"
+            >
+              {segments.map((seg, idx) => (
+                <g
+                  key={seg.id}
+                  onMouseEnter={() => setHoveredIdx(idx)}
+                  onMouseLeave={() => setHoveredIdx(null)}
+                  className="cursor-pointer"
+                  style={{ pointerEvents: 'all' }}
+                >
+                  <rect
+                    x={seg.box.x1}
+                    y={seg.box.y1}
+                    width={seg.box.x2 - seg.box.x1}
+                    height={seg.box.y2 - seg.box.y1}
+                    fill={getColor(idx)}
+                    fillOpacity={hoveredIdx === idx ? 0.35 : 0.2}
+                    stroke={getColor(idx)}
+                    strokeWidth={hoveredIdx === idx ? 2.5 : 1.5}
+                    strokeOpacity={hoveredIdx === idx ? 1 : 0.7}
+                    rx={3}
+                  />
+                  <rect
+                    x={seg.box.x1}
+                    y={seg.box.y1 - 16}
+                    width={seg.label.length * 7 + 40}
+                    height={16}
+                    fill={getColor(idx)}
+                    fillOpacity={hoveredIdx === idx ? 0.95 : 0.8}
+                    rx={2}
+                  />
+                  <text
+                    x={seg.box.x1 + 3}
+                    y={seg.box.y1 - 4}
+                    fontSize={10}
+                    fill="#000"
+                    fontWeight="600"
+                    fontFamily="system-ui, sans-serif"
+                  >
+                    {seg.label} {(seg.score * 100).toFixed(0)}%
+                  </text>
+                </g>
+              ))}
+            </svg>
+          )}
+        </div>
+      )}
+
+      {/* Segmentation labels list */}
+      {result?.type === 'segmentation' && segments.length > 0 && (
+        <div className="space-y-1">
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <Tag className="h-3 w-3 text-muted-foreground" />
+            <span className="text-[11px] font-medium text-muted-foreground">
+              {segments.length} segment{segments.length !== 1 ? 's' : ''} found
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {segments.map((seg, idx) => (
+              <button
+                key={seg.id}
+                className={cn(
+                  'flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium transition-all border',
+                  hoveredIdx === idx
+                    ? 'bg-foreground/10 border-foreground/20'
+                    : 'bg-card border-border hover:bg-accent',
+                )}
+                onMouseEnter={() => setHoveredIdx(idx)}
+                onMouseLeave={() => setHoveredIdx(null)}
+              >
+                <span
+                  className="h-2 w-2 rounded-full shrink-0"
+                  style={{ backgroundColor: getColor(idx) }}
+                />
+                <span className="text-foreground">{seg.label}</span>
+                <span className="text-muted-foreground">{(seg.score * 100).toFixed(0)}%</span>
+                {!seg.is_thing && (
+                  <span className="text-[9px] text-muted-foreground/50">stuff</span>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Classification results */}
       {result?.type === 'classification' && classifications.length > 0 && (
         <div className="space-y-2">
@@ -247,10 +342,10 @@ export function DetectionPanel({
       )}
 
       {/* Empty state after detection */}
-      {result && detections.length === 0 && classifications.length === 0 && (
+      {result && detections.length === 0 && classifications.length === 0 && segments.length === 0 && (
         <div className="text-center py-4">
           <p className="text-xs text-muted-foreground">
-            No {result.type === 'detection' ? 'objects detected' : 'classifications'} at this
+            No {result.type === 'detection' ? 'objects detected' : result.type === 'segmentation' ? 'segments found' : 'classifications'} at this
             threshold. Try lowering the threshold.
           </p>
         </div>

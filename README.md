@@ -14,74 +14,13 @@ Pixelbot wires up tables, views, computed columns, embedding indexes, UDFs, tool
 
 ![Overview](docs/images/overview.png)
 
-## Architecture
-
-```
-                          ┌─────────────────────────────────────┐
-                          │     React · TypeScript · Tailwind    │
-                          │                                     │
-                          │  Chat · Prompt Lab · Studio · Media │
-                          │  Database · Developer · Architecture│
-                          └──────────────┬──────────────────────┘
-                                         │ /api/*
-                          ┌──────────────▼──────────────────────┐
-                          │           FastAPI                    │
-                          │                                     │
-                          │  chat ─── 11-step agent pipeline    │
-                          │  studio ─ transforms · detection    │
-                          │           CSV · Reve · embeddings   │
-                          │  images ─ Imagen · DALL-E · Veo     │
-                          │  export ─ JSON · CSV · Parquet      │
-                          │  experiments · database · memory    │
-                          └──────────────┬──────────────────────┘
-                                         │
-              ┌──────────────────────────▼──────────────────────────────┐
-              │                   Pixeltable                            │
-              │                   ~/.pixeltable/                        │
-              │                                                        │
-              │  ┌─ Agent ────────────────────────────────────────┐    │
-              │  │ tools          11 computed cols per row         │    │
-              │  │                prompt → tool_select → RAG →     │    │
-              │  │                context → answer → follow_ups    │    │
-              │  │ chat_history   conversation log                 │    │
-              │  │ memory_bank   E5-large embedding index          │    │
-              │  └────────────────────────────────────────────────┘    │
-              │                                                        │
-              │  ┌─ Ingestion ────────────────────────────────────┐    │
-              │  │ collection     → chunks (DocumentSplitter)     │    │
-              │  │ images         → CLIP embedding + thumbnail    │    │
-              │  │ videos         → video_frames (FrameIterator)  │    │
-              │  │ audios         → audio_sentences (AudioSplitter│)   │
-              │  └────────────────────────────────────────────────┘    │
-              │                                                        │
-              │  ┌─ Generation ───────────────────────────────────┐    │
-              │  │ generated_images    Imagen 4.0 / DALL-E 3      │    │
-              │  │ generated_videos    Veo 3.0                     │    │
-              │  │ prompt_experiments  multi-model comparison       │    │
-              │  └────────────────────────────────────────────────┘    │
-              │                                                        │
-              │  ┌─ Data ─────────────────────────────────────────┐    │
-              │  │ csv_registry   dynamic CSV table tracking       │    │
-              │  │ user_personas  system prompts + LLM params      │    │
-              │  └────────────────────────────────────────────────┘    │
-              │                                                        │
-              │  Storage · Versioning · Computed Columns                │
-              │  Embedding Indexes · UDFs · @pxt.query                 │
-              └──────┬─────────┬───────────┬───────────┬───────────────┘
-                     │         │           │           │
-                     ▼         ▼           ▼           ▼
-                  Claude    Gemini      OpenAI     Mistral
-                  Sonnet 4  2.5 Flash   Whisper    Small/Large
-                            Imagen/Veo  DALL-E 3
-```
-
 ## Features
 
 <details>
 <summary><b>Chat</b> — Multimodal RAG agent</summary>
 <br>
 
-Semantic search across documents, images, video frames, and audio via `.similarity()` on embedding indexes. Tool calling with external APIs (NewsAPI, yfinance, DuckDuckGo). Inline image generation (Imagen 4.0 / DALL-E 3) and video generation (Veo 3.0). Follow-up suggestions via Gemini structured output with `response_schema`. Personas with adjustable system prompts and LLM parameters. Persistent chat history and memory bank.
+Semantic search across documents, images, video frames, and audio via `.similarity()` on embedding indexes. Tool calling with external APIs (NewsAPI, yfinance, DuckDuckGo). Inline image generation (Imagen 4.0 / DALL-E 3), video generation (Veo 3.0), and text-to-speech (OpenAI TTS with 6 voice options). Follow-up suggestions via Gemini structured output with `response_schema`. Personas with adjustable system prompts and LLM parameters. Persistent chat history and memory bank.
 </details>
 
 <details>
@@ -100,7 +39,7 @@ Run the same prompt against Claude, Gemini, Mistral, and GPT-4o in parallel via 
 - **Videos**: Keyframe extraction, clip creation, text overlay, scene detection, transcriptions
 - **Audio**: Transcriptions with sentence-level breakdown
 - **CSV**: Inline CRUD, infinite undo via `table.revert()`, version history via `table.get_versions()`
-- **Detection**: On-demand DETR (ResNet-50/101) with SVG bounding boxes, ViT classification with confidence bars
+- **Detection & Segmentation**: On-demand DETR (ResNet-50/101) with SVG bounding boxes, DETR Panoptic segmentation with color-coded regions, ViT classification with confidence bars
 - **Search**: Cross-modal semantic search via `.similarity()` on embedding indexes
 - **Embedding map**: Interactive 2D UMAP projection of text/visual embedding spaces
 </details>
@@ -126,7 +65,7 @@ Gallery for generated images and videos. Save to collection triggers CLIP embedd
 <summary><b>Database</b> — Catalog explorer</summary>
 <br>
 
-Tables and views grouped by type (Agent Pipeline, Documents, Images, Videos, Audio, Generation, Memory, Data Tables). Schema inspection with computed vs. insertable column badges. Paginated row browser with client-side search, row filter, and CSV download.
+Tables and views grouped by type (Agent Pipeline, Documents, Images, Videos, Audio, Generation, Memory, Data Tables). Schema inspection with computed vs. insertable column badges. Paginated row browser with client-side search, row filter, and CSV download. Cross-table join panel (INNER/LEFT/CROSS) with table/column pickers and result preview.
 </details>
 
 <details>
@@ -164,6 +103,9 @@ Every row maps to a Pixeltable feature exercised in this app:
 | Document processing | Gemini structured-JSON summarization, chunking | [Chunking](https://docs.pixeltable.com/howto/cookbooks/text/doc-chunk-for-rag) |
 | CSV / tabular data | Dynamic table creation, inline CRUD, type coercion | [CSV Import](https://docs.pixeltable.com/howto/cookbooks/data/data-import-csv) |
 | Object detection | On-demand DETR with bounding box overlay | [Detection](https://docs.pixeltable.com/howto/cookbooks/images/img-detect-objects) |
+| Panoptic segmentation | DETR Panoptic with color-coded segment regions | [Segmentation](https://docs.pixeltable.com/howto/cookbooks/images/img-detection-vs-segmentation) |
+| Text-to-speech | OpenAI TTS computed column with 6 voice options | [TTS](https://docs.pixeltable.com/howto/cookbooks/audio/audio-text-to-speech) |
+| Cross-table joins | `table.join()` with inner/left/cross modes | [Joins](https://docs.pixeltable.com/howto/cookbooks/core/query-join-tables) |
 | Table versioning | `tbl.revert()`, `tbl.get_versions()` | [Versioning](https://docs.pixeltable.com/howto/cookbooks/core/version-control-history) |
 | Structured output | Gemini `response_schema` + Pydantic models | [Structured Output](https://docs.pixeltable.com/howto/cookbooks/agents/llm-tool-calling) |
 | Catalog introspection | `pxt.list_tables()`, `tbl.columns()`, `tbl.count()` | [Tables](https://docs.pixeltable.com/tutorials/tables-and-data-operations) |
@@ -205,11 +147,11 @@ backend/
 ├── setup_pixeltable.py     full schema (tables, views, columns, indexes)
 └── routers/
     ├── chat.py             11-step agent workflow
-    ├── studio.py           transforms, detection, CSV, Reve, embeddings
-    ├── images.py           Imagen/DALL-E/Veo generation
+    ├── studio.py           transforms, detection, segmentation, CSV, Reve, embeddings
+    ├── images.py           Imagen/DALL-E/Veo generation, TTS
     ├── experiments.py      parallel multi-model prompt runs
     ├── export.py           JSON/CSV/Parquet for any table
-    ├── database.py         catalog introspection, timeline
+    ├── database.py         catalog introspection, timeline, joins
     ├── files.py            upload, URL import
     ├── history.py          conversation detail, debug export
     ├── memory.py           memory bank CRUD
@@ -217,11 +159,11 @@ backend/
 
 frontend/src/
 ├── components/
-│   ├── chat/               agent UI, personas, image/video modes
+│   ├── chat/               agent UI, personas, image/video/voice modes
 │   ├── experiments/        prompt lab, model select, metrics
-│   ├── studio/             file browser, transforms, CSV, detection, embedding map
+│   ├── studio/             file browser, transforms, CSV, detection, segmentation, embedding map
 │   ├── developer/          export, API reference, SDK snippets, MCP config
-│   ├── database/           catalog browser, search, filter, download
+│   ├── database/           catalog browser, search, filter, download, joins
 │   ├── architecture/       React Flow diagram (38 nodes, swim lanes)
 │   ├── images/             media library, Reve edit/remix
 │   ├── history/            conversations, timeline
