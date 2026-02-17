@@ -7,6 +7,7 @@ import pixeltable as pxt
 
 import config
 from models import ToolAgentRow, ChatHistoryRow
+from utils import pxt_retry
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["chat"])
@@ -36,6 +37,7 @@ class QueryResponse(BaseModel):
 
 
 @router.post("/query", response_model=QueryResponse)
+@pxt_retry()
 def query(body: QueryRequest):
     """Process a user query through the Pixeltable agent workflow."""
     user_id = config.DEFAULT_USER_ID

@@ -36,13 +36,13 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { to: '/images', icon: ImageIcon, label: 'Media Library' },
       { to: '/studio', icon: Wand2, label: 'Studio' },
-      { to: '/database', icon: Database, label: 'Database' },
       { to: '/experiments', icon: FlaskConical, label: 'Prompt Lab' },
     ],
   },
   {
     label: 'System',
     items: [
+      { to: '/database', icon: Database, label: 'Database' },
       { to: '/developer', icon: Code2, label: 'Developer' },
       { to: '/architecture', icon: GitBranch, label: 'Architecture' },
     ],

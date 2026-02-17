@@ -6,6 +6,8 @@ from datetime import datetime
 from fastapi import APIRouter, HTTPException
 import pixeltable as pxt
 
+from utils import pxt_retry
+
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/db", tags=["database"])
 
@@ -57,6 +59,7 @@ def _column_info(tbl) -> list[dict]:
 
 
 @router.get("/tables")
+@pxt_retry()
 def list_all_tables():
     """List all tables and views in the agents namespace with schema info."""
     try:
@@ -103,6 +106,7 @@ def list_all_tables():
 
 
 @router.get("/table/{path:path}/rows")
+@pxt_retry()
 def get_table_rows(path: str, limit: int = 50, offset: int = 0):
     """Fetch rows from a table with pagination."""
     try:
@@ -141,6 +145,7 @@ def get_table_rows(path: str, limit: int = 50, offset: int = 0):
 
 
 @router.get("/table/{path:path}/schema")
+@pxt_retry()
 def get_table_schema(path: str):
     """Get detailed schema for a specific table."""
     try:
@@ -170,6 +175,7 @@ def get_table_schema(path: str):
 
 
 @router.get("/timeline")
+@pxt_retry()
 def get_timeline(limit: int = 100):
     """Unified chronological feed across all timestamped tables."""
     events: list[dict] = []

@@ -10,6 +10,7 @@ from pydantic import BaseModel
 import pixeltable as pxt
 
 import config
+from utils import pxt_retry
 import queries
 from models import MemoryBankRow
 
@@ -81,6 +82,7 @@ def add_memory_manual(body: SaveMemoryRequest):
 # ── Get Memory ────────────────────────────────────────────────────────────────
 
 @router.get("/memory")
+@pxt_retry()
 def get_memory(search: str | None = Query(default=None)):
     """Retrieve memory items, optionally filtering by semantic search.
 

@@ -9,6 +9,7 @@ from pydantic import BaseModel
 import pixeltable as pxt
 
 import config
+from utils import pxt_retry
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["history"])
@@ -27,6 +28,7 @@ def _parse_timestamp(ts_str: str) -> datetime:
 # ── Workflow Detail ───────────────────────────────────────────────────────────
 
 @router.get("/workflow_detail/{timestamp_str:path}")
+@pxt_retry()
 def get_workflow_detail(timestamp_str: str):
     """Get full detail for a specific workflow entry."""
     user_id = config.DEFAULT_USER_ID
@@ -101,6 +103,7 @@ def delete_history_entry(timestamp_str: str):
 # ── Download History ──────────────────────────────────────────────────────────
 
 @router.get("/download_history")
+@pxt_retry()
 def download_chat_history():
     """Download the full chat history as JSON (direct iteration, no pandas)."""
     user_id = config.DEFAULT_USER_ID
@@ -156,6 +159,7 @@ def _safe_serialize(obj: object) -> object:
 
 
 @router.get("/debug_export")
+@pxt_retry()
 def debug_export():
     """Export the full agents.tools table with every column for debugging."""
     user_id = config.DEFAULT_USER_ID

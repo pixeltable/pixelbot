@@ -13,7 +13,7 @@ import pixeltable as pxt
 
 import config
 from models import ImageGenRow, ImageRow, VideoGenRow, VideoRow
-from utils import encode_image_base64, create_thumbnail_base64
+from utils import encode_image_base64, create_thumbnail_base64, pxt_retry
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["images"])
@@ -97,6 +97,7 @@ def generate_image(body: GenerateImageRequest):
 # ── Image History ────────────────────────────────────────────────────────────
 
 @router.get("/image_history")
+@pxt_retry()
 def get_image_history():
     """Get history of generated images with provider metadata."""
     user_id = config.DEFAULT_USER_ID
@@ -248,6 +249,7 @@ def generate_video(body: GenerateVideoRequest):
 # ── Video History ────────────────────────────────────────────────────────────
 
 @router.get("/video_history")
+@pxt_retry()
 def get_video_history():
     """Get history of generated videos."""
     user_id = config.DEFAULT_USER_ID

@@ -11,6 +11,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 import config
+from utils import pxt_retry
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/experiments", tags=["experiments"])
@@ -265,6 +266,7 @@ def _compute_metrics(text: str) -> dict:
 
 
 @router.get("/models", response_model=list[ModelInfo])
+@pxt_retry()
 def get_available_models():
     """Return the list of supported models with availability status."""
     result = []
@@ -275,6 +277,7 @@ def get_available_models():
 
 
 @router.post("/run", response_model=RunExperimentResponse)
+@pxt_retry()
 def run_experiment(body: RunExperimentRequest):
     """Run a prompt against multiple models in parallel and store results."""
     if not body.user_prompt.strip():
@@ -389,6 +392,7 @@ def run_experiment(body: RunExperimentRequest):
 
 
 @router.get("/history", response_model=list[ExperimentSummary])
+@pxt_retry()
 def get_experiment_history():
     """Return a list of past experiments, grouped by experiment_id."""
     try:
@@ -441,6 +445,7 @@ def get_experiment_history():
 
 
 @router.get("/{experiment_id}", response_model=RunExperimentResponse)
+@pxt_retry()
 def get_experiment(experiment_id: str):
     """Return full results for a specific experiment."""
     try:

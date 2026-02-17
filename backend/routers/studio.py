@@ -16,6 +16,7 @@ from pydantic import BaseModel
 from umap import UMAP
 import pixeltable as pxt
 from pixeltable.functions.huggingface import sentence_transformer, clip
+from utils import pxt_retry
 from pixeltable.functions import image as pxt_image
 from pixeltable.functions import video as pxt_video
 
@@ -168,6 +169,7 @@ def get_operations():
 # ── File Listing ─────────────────────────────────────────────────────────────
 
 @router.get("/files")
+@pxt_retry()
 def get_studio_files():
     """Get all uploaded files with preview thumbnails for the studio."""
     user_id = config.DEFAULT_USER_ID
@@ -314,6 +316,7 @@ class CsvRowsRequest(BaseModel):
 
 
 @router.post("/csv/rows")
+@pxt_retry()
 def get_csv_rows(body: CsvRowsRequest):
     """Return paginated rows from a CSV table."""
     user_id = config.DEFAULT_USER_ID
@@ -736,6 +739,7 @@ class SearchRequest(BaseModel):
 
 
 @router.post("/search")
+@pxt_retry()
 def search_studio(body: SearchRequest):
     """Cross-modal semantic search across all file types using embedding indexes."""
     user_id = config.DEFAULT_USER_ID
@@ -919,6 +923,7 @@ EMBED_CLIP_FN = clip.using(model_id=config.CLIP_MODEL_ID)
 
 
 @router.get("/embeddings")
+@pxt_retry()
 def get_embeddings(space: str = "text", limit: int = 200):
     """
     Return 2-D UMAP-projected embeddings for visualization.
@@ -2036,6 +2041,7 @@ def reve_save_result(body: ReveSaveRequest):
 # ── Document Summary ─────────────────────────────────────────────────────────
 
 @router.get("/summary/{uuid}")
+@pxt_retry()
 def get_document_summary(uuid: str):
     """Get the auto-generated summary for a document."""
     user_id = config.DEFAULT_USER_ID
@@ -2076,6 +2082,7 @@ def get_document_summary(uuid: str):
 # ── Document Chunks ──────────────────────────────────────────────────────────
 
 @router.get("/chunks/{uuid}")
+@pxt_retry()
 def get_document_chunks(uuid: str, limit: int = 50):
     """Get extracted text chunks for a document."""
     user_id = config.DEFAULT_USER_ID
@@ -2107,6 +2114,7 @@ def get_document_chunks(uuid: str, limit: int = 50):
 # ── Video Frames ─────────────────────────────────────────────────────────────
 
 @router.get("/frames/{uuid}")
+@pxt_retry()
 def get_video_frames(uuid: str, limit: int = 12):
     """Get extracted frames from a video as base64 thumbnails."""
     user_id = config.DEFAULT_USER_ID
@@ -2138,6 +2146,7 @@ def get_video_frames(uuid: str, limit: int = 12):
 # ── Transcription ────────────────────────────────────────────────────────────
 
 @router.get("/transcription/{uuid}/{media_type}")
+@pxt_retry()
 def get_transcription(uuid: str, media_type: str):
     """Get transcription for an audio or video file."""
     user_id = config.DEFAULT_USER_ID

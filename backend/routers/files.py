@@ -11,6 +11,8 @@ from pydantic import BaseModel
 from PIL import Image
 import pixeltable as pxt
 
+from utils import pxt_retry
+
 import config
 import functions
 from models import MEDIA_ROW_MODELS
@@ -403,6 +405,7 @@ def _pxt_thumbnail_to_data_uri(raw: str | bytes | None) -> str | None:
 
 
 @router.get("/context_info")
+@pxt_retry()
 def get_context_info():
     """Get application context: files, tools, prompts, workflow history.
 

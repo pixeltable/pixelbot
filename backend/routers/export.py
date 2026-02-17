@@ -9,6 +9,8 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
 import pixeltable as pxt
 
+from utils import pxt_retry
+
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/export", tags=["export"])
 
@@ -56,6 +58,7 @@ def _collect_rows(table_path: str, limit: int, columns: list[str] | None) -> tup
 # ── List exportable tables ───────────────────────────────────────────────────
 
 @router.get("/tables")
+@pxt_retry()
 def list_exportable_tables():
     """Return all tables with their column info for the export picker."""
     try:
@@ -82,6 +85,7 @@ def list_exportable_tables():
 # ── Export as JSON ───────────────────────────────────────────────────────────
 
 @router.get("/json/{table_path:path}")
+@pxt_retry()
 def export_json(
     table_path: str,
     limit: int = Query(default=1000, le=50000),
@@ -104,6 +108,7 @@ def export_json(
 # ── Export as CSV ────────────────────────────────────────────────────────────
 
 @router.get("/csv/{table_path:path}")
+@pxt_retry()
 def export_csv(
     table_path: str,
     limit: int = Query(default=1000, le=50000),
@@ -138,6 +143,7 @@ def export_csv(
 # ── Export as Parquet ────────────────────────────────────────────────────────
 
 @router.get("/parquet/{table_path:path}")
+@pxt_retry()
 def export_parquet(
     table_path: str,
     limit: int = Query(default=1000, le=50000),
@@ -175,6 +181,7 @@ def export_parquet(
 # ── Preview (first N rows as JSON for the UI) ───────────────────────────────
 
 @router.get("/preview/{table_path:path}")
+@pxt_retry()
 def preview_table(
     table_path: str,
     limit: int = Query(default=5, le=50),
