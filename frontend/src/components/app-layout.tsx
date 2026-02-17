@@ -14,6 +14,7 @@ import {
   GitBranch,
   Database,
   FlaskConical,
+  Code2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { FileSidebar } from '@/components/files/file-sidebar'
@@ -42,6 +43,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: 'System',
     items: [
+      { to: '/developer', icon: Code2, label: 'Developer' },
       { to: '/architecture', icon: GitBranch, label: 'Architecture' },
     ],
   },
