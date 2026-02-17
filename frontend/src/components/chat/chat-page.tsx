@@ -18,6 +18,7 @@ import {
   ArrowRight,
   ListOrdered,
   X,
+  Music,
 } from 'lucide-react'
 import { marked } from 'marked'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -178,6 +179,7 @@ export function ChatPage() {
             role: 'assistant',
             content: `Generated speech (${result.voice})`,
             audio_url: result.audio_url,
+            audio_path: result.audio_path,
           },
         ])
       } catch (err) {
@@ -245,6 +247,18 @@ export function ChatPage() {
     [addToast],
   )
 
+  const handleSaveAudio = useCallback(
+    async (audioPath: string) => {
+      try {
+        await api.saveGeneratedSpeechToCollection(audioPath)
+        addToast('Audio saved to library — transcription & RAG indexing will run', 'success')
+      } catch (err) {
+        addToast(err instanceof Error ? err.message : 'Failed to save audio', 'error')
+      }
+    },
+    [addToast],
+  )
+
   const handleCopy = useCallback(
     (content: string) => {
       navigator.clipboard.writeText(content)
@@ -296,6 +310,7 @@ export function ChatPage() {
                 const userMsg = messages[i - 1]
                 handleSaveToMemory(content, userMsg?.content ?? 'Chat response')
               }}
+              onSaveAudio={handleSaveAudio}
               onFollowUp={handleFollowUp}
             />
           ))}
@@ -476,11 +491,13 @@ function MessageBubble({
   message,
   onCopy,
   onSave,
+  onSaveAudio,
   onFollowUp,
 }: {
   message: ChatMessage
   onCopy: (content: string) => void
   onSave: (content: string) => void
+  onSaveAudio?: (audioPath: string) => void
   onFollowUp: (question: string) => void
 }) {
   const isUser = message.role === 'user'
@@ -628,22 +645,32 @@ function MessageBubble({
         )}
 
         {/* Actions */}
-        {!isImage && !isVideo && (
-          <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+          {!isImage && !isVideo && (
+            <>
+              <button
+                className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                onClick={() => onCopy(message.content)}
+              >
+                <Copy className="h-3 w-3" /> Copy
+              </button>
+              <button
+                className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                onClick={() => onSave(message.content)}
+              >
+                <Bookmark className="h-3 w-3" /> Save
+              </button>
+            </>
+          )}
+          {isAudio && message.audio_path && onSaveAudio && (
             <button
               className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-              onClick={() => onCopy(message.content)}
+              onClick={() => onSaveAudio(message.audio_path!)}
             >
-              <Copy className="h-3 w-3" /> Copy
+              <Music className="h-3 w-3" /> Save to Library
             </button>
-            <button
-              className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-              onClick={() => onSave(message.content)}
-            >
-              <Bookmark className="h-3 w-3" /> Save
-            </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   )

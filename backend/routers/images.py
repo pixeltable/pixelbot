@@ -12,7 +12,7 @@ from PIL import Image
 import pixeltable as pxt
 
 import config
-from models import ImageGenRow, ImageRow, VideoGenRow, VideoRow
+from models import AudioRow, ImageGenRow, ImageRow, VideoGenRow, VideoRow
 from utils import encode_image_base64, create_thumbnail_base64, pxt_retry
 
 logger = logging.getLogger(__name__)
@@ -507,6 +507,41 @@ def generate_speech(body: GenerateSpeechRequest):
         raise
     except Exception as e:
         logger.error(f"Error generating speech: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class SaveSpeechRequest(BaseModel):
+    audio_path: str
+
+
+@router.post("/save_generated_speech", response_model=SaveToCollectionResponse)
+@pxt_retry()
+def save_generated_speech_to_collection(body: SaveSpeechRequest):
+    """Save a TTS audio file into agents.audios so it enters the transcription + RAG pipeline."""
+    user_id = config.DEFAULT_USER_ID
+
+    if not os.path.exists(body.audio_path):
+        raise HTTPException(status_code=404, detail="Audio file not found on disk")
+
+    try:
+        file_uuid = str(uuid.uuid4())
+        audios_table = pxt.get_table("agents.audios")
+        audios_table.insert([AudioRow(
+            audio=body.audio_path,
+            uuid=file_uuid,
+            timestamp=datetime.now(),
+            user_id=user_id,
+        )])
+
+        return SaveToCollectionResponse(
+            message="Audio saved to collection — transcription and RAG indexing will run automatically",
+            uuid=file_uuid,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error saving speech to collection: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 

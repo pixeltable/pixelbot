@@ -124,6 +124,7 @@ export interface ChatMessage {
   metadata?: QueryMetadata
   video_url?: string
   audio_url?: string
+  audio_path?: string
 }
 
 export interface TtsVoice {

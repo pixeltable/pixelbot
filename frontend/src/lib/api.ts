@@ -205,6 +205,13 @@ export function getAudioUrl(path: string): string {
   return `${BASE}/serve_audio?path=${encodeURIComponent(path)}`
 }
 
+export async function saveGeneratedSpeechToCollection(audioPath: string) {
+  return request<{ message: string; uuid: string }>('/save_generated_speech', {
+    method: 'POST',
+    body: JSON.stringify({ audio_path: audioPath }),
+  })
+}
+
 // ── Cross-Table Join ────────────────────────────────────────────────────────
 
 export async function joinTables(params: {
