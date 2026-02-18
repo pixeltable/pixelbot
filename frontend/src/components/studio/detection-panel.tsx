@@ -141,7 +141,7 @@ export function DetectionPanel({
         <button
           className={cn(
             'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all',
-            'bg-gradient-to-r from-violet-600 to-indigo-600 text-white hover:from-violet-500 hover:to-indigo-500',
+            'bg-k-yellow text-black hover:bg-k-yellow-hover',
             isDetecting && 'opacity-70 pointer-events-none',
           )}
           onClick={handleDetect}
@@ -444,7 +444,7 @@ function ClassificationBar({ item, rank }: { item: ClassificationItem; rank: num
           className={cn(
             'h-full rounded-full transition-all duration-500',
             isTop
-              ? 'bg-gradient-to-r from-violet-500 to-indigo-500'
+              ? 'bg-k-yellow'
               : 'bg-muted-foreground/30',
           )}
           style={{ width: `${pct}%` }}

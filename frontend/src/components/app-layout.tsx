@@ -169,7 +169,7 @@ export function AppLayout() {
             )}
             title="Powered by Pixeltable — View on GitHub"
           >
-            <div className="flex h-4 w-4 shrink-0 items-center justify-center rounded-sm bg-gradient-to-br from-emerald-500 to-teal-600">
+            <div className="flex h-4 w-4 shrink-0 items-center justify-center rounded-sm bg-muted-foreground/20">
               <svg viewBox="0 0 16 16" fill="none" className="h-2.5 w-2.5">
                 <rect x="1" y="1" width="6" height="6" rx="1" fill="white" fillOpacity="0.9" />
                 <rect x="9" y="1" width="6" height="6" rx="1" fill="white" fillOpacity="0.6" />

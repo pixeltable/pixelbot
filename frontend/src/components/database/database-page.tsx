@@ -861,7 +861,7 @@ function JoinPanel({
           <button
             className={cn(
               'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all ml-auto',
-              'bg-gradient-to-r from-k-yellow to-amber-500 text-black hover:brightness-110',
+              'bg-k-yellow text-black hover:bg-k-yellow-hover',
               (isJoining || (!joinLeft || !joinRight)) && 'opacity-50 pointer-events-none',
             )}
             onClick={onJoin}
