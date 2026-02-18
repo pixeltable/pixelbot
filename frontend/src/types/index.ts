@@ -511,6 +511,8 @@ export interface PipelineColumn {
   computed_with: string | null
   defined_in: string | null
   defined_in_self: boolean
+  func_name: string | null
+  func_type: 'builtin' | 'custom_udf' | 'query' | 'unknown' | null
   error_count: number
   depends_on?: string[]
 }

@@ -311,13 +311,62 @@ def join_tables(body: JoinRequest):
 # ── Pipeline Inspector ────────────────────────────────────────────────────────
 
 _COL_REF_RE = re.compile(r"\b([a-z_][a-z0-9_]*)\b")
+_FUNC_CALL_RE = re.compile(r"\b([a-z_][a-z0-9_]*)\s*\(")
 
-_ITERATOR_HINTS: list[tuple[str, str]] = [
-    ("FrameIterator", "FrameIterator"),
-    ("AudioSplitter", "AudioSplitter"),
-    ("DocumentSplitter", "DocumentSplitter"),
-    ("StringSplitter", "StringSplitter"),
-]
+# Built-in Pixeltable functions (from pixeltable.functions.*)
+_BUILTIN_FUNCS: set[str] = {
+    "transcriptions", "speech",
+    "messages",
+    "generate_content", "generate_images", "generate_videos",
+    "extract_audio",
+    "resize", "b64_encode",
+    "clip",
+    "map", "lambda",
+}
+
+# Custom @pxt.udf from functions.py
+_CUSTOM_UDFS: set[str] = {
+    "get_latest_news", "search_news", "fetch_financial_data",
+    "extract_document_text",
+    "assemble_multimodal_context", "assemble_final_messages",
+    "assemble_follow_up_prompt",
+}
+
+# @pxt.query from setup_pixeltable.py — maps query name to the table it searches
+_QUERY_TABLE_MAP: dict[str, str] = {
+    "search_documents": "agents/chunks",
+    "search_images": "agents/images",
+    "search_video_frames": "agents/video_frames",
+    "search_video_transcripts": "agents/video_transcript_sentences",
+    "search_audio_transcripts": "agents/audio_transcript_sentences",
+    "search_memory": "agents/memory_bank",
+    "search_chat_history": "agents/chat_history",
+    "get_recent_chat_history": "agents/chat_history",
+    "get_all_memory": "agents/memory_bank",
+}
+
+
+def _classify_func(name: str) -> str:
+    """Classify a function name as builtin, custom, or query."""
+    if name in _QUERY_TABLE_MAP:
+        return "query"
+    if name in _CUSTOM_UDFS:
+        return "custom_udf"
+    if name in _BUILTIN_FUNCS:
+        return "builtin"
+    return "unknown"
+
+
+def _extract_func_name(computed_with: str | None) -> str | None:
+    """Extract the primary function name from a computed_with expression."""
+    if not computed_with:
+        return None
+    skip = {"model", "config", "type", "object", "items", "str", "get", "text"}
+    for match in _FUNC_CALL_RE.finditer(computed_with):
+        name = match.group(1)
+        if name not in skip:
+            return name
+    return None
 
 
 def _parse_deps(computed_with: str | None, all_cols: set[str]) -> list[str]:
@@ -389,13 +438,19 @@ def get_pipeline():
                         insertable_cols.add(col_name)
                     defined_in = info.get("defined_in")
 
+                    cw_str = str(cw)[:200] if cw else None
+                    func_name = _extract_func_name(cw_str) if is_computed else None
+                    func_type = _classify_func(func_name) if func_name else None
+
                     col_entry = {
                         "name": col_name,
                         "type": info.get("type_", "unknown"),
                         "is_computed": is_computed,
-                        "computed_with": str(cw)[:200] if cw else None,
+                        "computed_with": cw_str,
                         "defined_in": defined_in,
                         "defined_in_self": defined_in == short_name,
+                        "func_name": func_name,
+                        "func_type": func_type,
                     }
                     columns.append(col_entry)
                     if is_computed:
@@ -473,6 +528,22 @@ def get_pipeline():
                         "type": "view",
                         "label": iterator_type or "view",
                     })
+
+                # Cross-table query edges (e.g., tools -> chunks via search_documents)
+                seen_query_targets: set[str] = set()
+                for col in columns:
+                    fn = col.get("func_name")
+                    if fn and fn in _QUERY_TABLE_MAP:
+                        target_table = _QUERY_TABLE_MAP[fn]
+                        edge_key = f"{path}->{target_table}"
+                        if edge_key not in seen_query_targets:
+                            seen_query_targets.add(edge_key)
+                            edges.append({
+                                "source": target_table,
+                                "target": path,
+                                "type": "query",
+                                "label": fn,
+                            })
 
             except Exception as e:
                 logger.warning(f"Pipeline: could not inspect {path}: {e}")

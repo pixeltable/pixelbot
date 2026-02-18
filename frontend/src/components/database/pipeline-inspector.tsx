@@ -98,7 +98,7 @@ function getDomain(name: string): DomainGroup | null {
   return DOMAINS.find((d) => d.match(name)) ?? null
 }
 
-// ── Iterator badge colors ────────────────────────────────────────────────────
+// ── Colors ───────────────────────────────────────────────────────────────────
 
 const ITERATOR_COLORS: Record<string, { bg: string; text: string; border: string }> = {
   FrameIterator: { bg: 'bg-rose-500/15', text: 'text-rose-300', border: 'border-rose-500/30' },
@@ -106,6 +106,22 @@ const ITERATOR_COLORS: Record<string, { bg: string; text: string; border: string
   DocumentSplitter: { bg: 'bg-amber-500/15', text: 'text-amber-300', border: 'border-amber-500/30' },
   StringSplitter: { bg: 'bg-cyan-500/15', text: 'text-cyan-300', border: 'border-cyan-500/30' },
   view: { bg: 'bg-blue-500/15', text: 'text-blue-300', border: 'border-blue-500/30' },
+}
+
+const FUNC_TYPE_STYLES: Record<string, { bg: string; text: string; border: string; label: string }> = {
+  builtin: { bg: 'bg-sky-500/10', text: 'text-sky-300', border: 'border-sky-500/20', label: 'built-in' },
+  custom_udf: { bg: 'bg-violet-500/10', text: 'text-violet-300', border: 'border-violet-500/20', label: 'UDF' },
+  query: { bg: 'bg-teal-500/10', text: 'text-teal-300', border: 'border-teal-500/20', label: 'query' },
+  unknown: { bg: 'bg-muted', text: 'text-muted-foreground', border: 'border-border', label: 'fn' },
+}
+
+const QUERY_EDGE_COLORS: Record<string, string> = {
+  search_documents: '#f59e0b',
+  search_images: '#10b981',
+  search_video_frames: '#f43f5e',
+  search_memory: '#a855f7',
+  search_chat_history: '#3b82f6',
+  get_recent_chat_history: '#3b82f6',
 }
 
 // ── Custom Edge ──────────────────────────────────────────────────────────────
@@ -131,12 +147,30 @@ function LabeledEdge({
     borderRadius: 16,
   })
 
-  const label = (data as { label?: string })?.label
-  const colors = ITERATOR_COLORS[label ?? ''] ?? ITERATOR_COLORS.view
+  const edgeData = data as { label?: string; edgeType?: string } | undefined
+  const label = edgeData?.label
+  const isQuery = edgeData?.edgeType === 'query'
+  const colors = isQuery
+    ? { bg: 'bg-teal-500/15', text: 'text-teal-300', border: 'border-teal-500/30' }
+    : (ITERATOR_COLORS[label ?? ''] ?? ITERATOR_COLORS.view)
+
+  const strokeColor = isQuery
+    ? (QUERY_EDGE_COLORS[label ?? ''] ?? '#14b8a6')
+    : '#555'
 
   return (
     <>
-      <BaseEdge id={id} path={edgePath} markerEnd={markerEnd} style={{ stroke: '#555', strokeWidth: 1.5 }} />
+      <BaseEdge
+        id={id}
+        path={edgePath}
+        markerEnd={markerEnd}
+        style={{
+          stroke: strokeColor,
+          strokeWidth: isQuery ? 1 : 1.5,
+          strokeDasharray: isQuery ? '6 3' : undefined,
+          opacity: isQuery ? 0.6 : 1,
+        }}
+      />
       {label && (
         <EdgeLabelRenderer>
           <div
@@ -148,7 +182,7 @@ function LabeledEdge({
               colors.border,
             )}
           >
-            {label}
+            {isQuery ? `@query ${label}` : label}
           </div>
         </EdgeLabelRenderer>
       )}
@@ -245,20 +279,28 @@ function TableNode({ data }: { data: PipelineNode & { isSelected: boolean; onSel
             {insertableCols.length > 0 && (
               <div className="border-t border-amber-500/10 my-1" />
             )}
-            {computedCols.slice(0, 5).map((col) => (
-              <div key={col.name} className="flex items-center gap-1.5">
-                <Zap className={cn('h-2 w-2 shrink-0', col.error_count > 0 ? 'text-red-400' : 'text-amber-400/70')} />
-                <span className={cn(
-                  'text-[9px] truncate font-medium',
-                  col.error_count > 0 ? 'text-red-300/80' : 'text-amber-300/80',
-                )}>
-                  {col.name}
-                </span>
-                <span className="text-[7px] text-amber-400/25 ml-auto shrink-0">
-                  {col.type.replace('Required[', '').replace(']', '').slice(0, 8)}
-                </span>
-              </div>
-            ))}
+            {computedCols.slice(0, 5).map((col) => {
+              const funcStyle = col.func_type ? FUNC_TYPE_STYLES[col.func_type] : null
+              return (
+                <div key={col.name} className="flex items-center gap-1">
+                  <Zap className={cn('h-2 w-2 shrink-0', col.error_count > 0 ? 'text-red-400' : 'text-amber-400/70')} />
+                  <span className={cn(
+                    'text-[9px] truncate font-medium',
+                    col.error_count > 0 ? 'text-red-300/80' : 'text-amber-300/80',
+                  )}>
+                    {col.name}
+                  </span>
+                  {funcStyle && (
+                    <span className={cn(
+                      'text-[7px] px-0.5 rounded border shrink-0',
+                      funcStyle.bg, funcStyle.text, funcStyle.border,
+                    )}>
+                      {col.func_name}
+                    </span>
+                  )}
+                </div>
+              )
+            })}
             {computedCols.length > 5 && (
               <div className="text-[8px] text-amber-400/30 pl-3">+{computedCols.length - 5} more computed</div>
             )}
@@ -437,6 +479,7 @@ function DetailPanel({
 
 function ComputedColumnRow({ col, step }: { col: PipelineColumn; step: number }) {
   const [isExpanded, setIsExpanded] = useState(false)
+  const funcStyle = col.func_type ? FUNC_TYPE_STYLES[col.func_type] : null
 
   return (
     <div className="rounded-md border border-border/30 bg-amber-500/5 overflow-hidden">
@@ -451,11 +494,34 @@ function ComputedColumnRow({ col, step }: { col: PipelineColumn; step: number })
         {col.error_count > 0 && (
           <AlertTriangle className="h-2.5 w-2.5 text-red-400 shrink-0" />
         )}
-        <span className="text-[8px] text-muted-foreground/30 ml-auto shrink-0">{col.type.slice(0, 8)}</span>
-        <ChevronDown className={cn('h-2.5 w-2.5 text-muted-foreground/40 transition-transform shrink-0', isExpanded && 'rotate-180')} />
+        {funcStyle && (
+          <span className={cn(
+            'text-[7px] px-1 rounded border shrink-0',
+            funcStyle.bg, funcStyle.text, funcStyle.border,
+          )}>
+            {funcStyle.label}
+          </span>
+        )}
+        <ChevronDown className={cn('h-2.5 w-2.5 text-muted-foreground/40 transition-transform shrink-0 ml-auto', isExpanded && 'rotate-180')} />
       </button>
       {isExpanded && (
-        <div className="px-2 pb-2 space-y-1">
+        <div className="px-2 pb-2 space-y-1.5">
+          {/* Function info */}
+          {col.func_name && (
+            <div className="flex items-center gap-1.5">
+              <span className={cn(
+                'text-[9px] font-mono font-medium',
+                funcStyle?.text ?? 'text-muted-foreground',
+              )}>
+                {col.func_name}()
+              </span>
+              {funcStyle && (
+                <span className="text-[8px] text-muted-foreground/40">
+                  {col.func_type === 'builtin' ? 'pixeltable built-in' : col.func_type === 'custom_udf' ? 'custom @pxt.udf' : col.func_type === 'query' ? '@pxt.query' : ''}
+                </span>
+              )}
+            </div>
+          )}
           {col.computed_with && (
             <p className="text-[9px] text-muted-foreground/50 break-all font-mono leading-relaxed bg-black/20 rounded px-1.5 py-1">
               {col.computed_with}
@@ -490,7 +556,9 @@ function buildLayout(
   const childrenMap = new Map<string, string[]>()
   const parentMap = new Map<string, string>()
 
+  // Only use view edges for tree hierarchy; query edges are cross-references
   for (const e of pipelineEdges) {
+    if (e.type !== 'view') continue
     if (!childrenMap.has(e.source)) childrenMap.set(e.source, [])
     childrenMap.get(e.source)!.push(e.target)
     parentMap.set(e.target, e.source)
@@ -615,9 +683,9 @@ export function PipelineInspector() {
       source: e.source,
       target: e.target,
       type: 'labeled',
-      animated: true,
-      data: { label: e.label },
-      style: { strokeWidth: 1.5 },
+      animated: e.type === 'view',
+      data: { label: e.label, edgeType: e.type },
+      style: { strokeWidth: e.type === 'query' ? 1 : 1.5 },
     }))
 
     setNodes(flowNodes)
@@ -687,8 +755,15 @@ export function PipelineInspector() {
           <div className="ml-auto flex items-center gap-3 text-[9px] text-muted-foreground/50">
             <span className="flex items-center gap-1"><Table2 className="h-2.5 w-2.5 text-emerald-400" /> Table</span>
             <span className="flex items-center gap-1"><Eye className="h-2.5 w-2.5 text-blue-400" /> View</span>
-            <span className="flex items-center gap-1"><Zap className="h-2.5 w-2.5 text-amber-400" /> Computed</span>
-            <span className="flex items-center gap-1"><div className="w-4 h-px bg-muted-foreground/50 relative"><div className="absolute right-0 top-1/2 -translate-y-1/2 w-0 h-0 border-l-[3px] border-l-muted-foreground/50 border-y-[2px] border-y-transparent" /></div> Edge</span>
+            <span className="flex items-center gap-1 px-0.5 rounded border border-sky-500/20 text-sky-300 bg-sky-500/10">built-in</span>
+            <span className="flex items-center gap-1 px-0.5 rounded border border-violet-500/20 text-violet-300 bg-violet-500/10">UDF</span>
+            <span className="flex items-center gap-1 px-0.5 rounded border border-teal-500/20 text-teal-300 bg-teal-500/10">query</span>
+            <span className="flex items-center gap-1">
+              <span className="w-4 h-px bg-muted-foreground/50" /> view
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="w-4 h-px border-t border-dashed border-teal-400/60" /> query
+            </span>
           </div>
         </div>
       )}
