@@ -551,6 +551,10 @@ export async function getTimeline(
   return request<import('@/types').TimelineResponse>(`/db/timeline?limit=${limit}`)
 }
 
+export async function getPipeline(): Promise<import('@/types').PipelineResponse> {
+  return request<import('@/types').PipelineResponse>('/db/pipeline')
+}
+
 // ── Prompt Lab (Experiments) ─────────────────────────────────────────────────
 
 export async function getExperimentModels(): Promise<import('@/types').ExperimentModelInfo[]> {

@@ -1,6 +1,7 @@
 """Database introspection router — browse the Pixeltable catalog."""
 
 import logging
+import re
 from datetime import datetime
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -304,4 +305,195 @@ def join_tables(body: JoinRequest):
         raise
     except Exception as e:
         logger.error(f"Join error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Pipeline Inspector ────────────────────────────────────────────────────────
+
+_COL_REF_RE = re.compile(r"\b([a-z_][a-z0-9_]*)\b")
+
+_ITERATOR_HINTS: list[tuple[str, str]] = [
+    ("FrameIterator", "FrameIterator"),
+    ("AudioSplitter", "AudioSplitter"),
+    ("DocumentSplitter", "DocumentSplitter"),
+    ("StringSplitter", "StringSplitter"),
+]
+
+
+def _parse_deps(computed_with: str | None, all_cols: set[str]) -> list[str]:
+    """Extract column names referenced in a computed_with expression."""
+    if not computed_with:
+        return []
+    tokens = _COL_REF_RE.findall(computed_with)
+    return sorted(set(t for t in tokens if t in all_cols))
+
+
+def _detect_iterator(columns: list[dict]) -> str | None:
+    """Detect the iterator type used to create a view from its column shapes."""
+    own_cols = {c["name"] for c in columns if c.get("defined_in_self")}
+    if {"frame_idx", "pos_frame", "frame"} & own_cols:
+        return "FrameIterator"
+    if {"audio_chunk"} & own_cols and {"start_time_sec", "end_time_sec"} & own_cols:
+        return "AudioSplitter"
+    if {"heading", "page", "title"} & own_cols and "pos" in own_cols:
+        return "DocumentSplitter"
+    if "text" in own_cols and "pos" in own_cols:
+        return "StringSplitter"
+    return None
+
+
+def _count_col_errors(tbl, col_name: str, limit: int = 500) -> int:
+    """Count rows where a computed column has a non-null errortype."""
+    try:
+        col_ref = getattr(tbl, col_name)
+        err_col = col_ref.errortype
+        rows = tbl.select(err=err_col).limit(limit).collect()
+        return sum(1 for r in rows if r.get("err") is not None)
+    except Exception:
+        return 0
+
+
+@router.get("/pipeline")
+@pxt_retry()
+def get_pipeline():
+    """Return the full DAG metadata for the Pipeline Inspector.
+
+    Includes tables, views, computed column lineage, embedding indices,
+    version history, and per-column error counts.
+    """
+    try:
+        table_paths = sorted(pxt.list_tables(NAMESPACE, recursive=True))
+
+        nodes: list[dict] = []
+        edges: list[dict] = []
+
+        for path in table_paths:
+            try:
+                tbl = pxt.get_table(path)
+                md = tbl.get_metadata()
+                col_meta = md.get("columns", {})
+                row_count = tbl.count()
+
+                all_col_names = set(col_meta.keys())
+
+                columns = []
+                computed_cols = []
+                insertable_cols: set[str] = set()
+
+                short_name = path.rsplit("/", 1)[-1]
+
+                for col_name, info in col_meta.items():
+                    cw = info.get("computed_with")
+                    is_computed = cw is not None
+                    if not is_computed:
+                        insertable_cols.add(col_name)
+                    defined_in = info.get("defined_in")
+
+                    col_entry = {
+                        "name": col_name,
+                        "type": info.get("type_", "unknown"),
+                        "is_computed": is_computed,
+                        "computed_with": str(cw)[:200] if cw else None,
+                        "defined_in": defined_in,
+                        "defined_in_self": defined_in == short_name,
+                    }
+                    columns.append(col_entry)
+                    if is_computed:
+                        computed_cols.append(col_name)
+
+                # Compute error counts for computed columns (sample first 500 rows)
+                total_errors = 0
+                for col in columns:
+                    if col["is_computed"]:
+                        errs = _count_col_errors(tbl, col["name"])
+                        col["error_count"] = errs
+                        total_errors += errs
+                    else:
+                        col["error_count"] = 0
+
+                # Column-level dependency edges (within this table)
+                for col in columns:
+                    if col["is_computed"] and col["computed_with"]:
+                        deps = _parse_deps(col["computed_with"], all_col_names)
+                        col["depends_on"] = deps
+
+                # Indices
+                raw_indices = md.get("indices", {})
+                indices = []
+                for idx_name, idx_info in raw_indices.items():
+                    indices.append({
+                        "name": idx_name,
+                        "columns": idx_info.get("columns", []),
+                        "type": idx_info.get("index_type", "unknown"),
+                        "embedding": str(idx_info.get("parameters", {}).get("embedding", ""))[:120],
+                    })
+
+                # Version history (last 10)
+                try:
+                    raw_versions = tbl.get_versions()
+                    versions = []
+                    for v in raw_versions[:10]:
+                        versions.append({
+                            "version": v["version"],
+                            "created_at": v["created_at"].isoformat() if v.get("created_at") else None,
+                            "change_type": v.get("change_type"),
+                            "inserts": v.get("inserts", 0),
+                            "updates": v.get("updates", 0),
+                            "deletes": v.get("deletes", 0),
+                            "errors": v.get("errors", 0),
+                        })
+                except Exception:
+                    versions = []
+
+                base_path = md.get("base")
+                is_view = md.get("is_view", False)
+
+                iterator_type = _detect_iterator(columns) if is_view else None
+
+                nodes.append({
+                    "path": path,
+                    "name": short_name,
+                    "is_view": is_view,
+                    "base": base_path,
+                    "row_count": row_count,
+                    "version": md.get("version", 0),
+                    "total_errors": total_errors,
+                    "columns": columns,
+                    "indices": indices,
+                    "versions": versions,
+                    "computed_count": len(computed_cols),
+                    "insertable_count": len(columns) - len(computed_cols),
+                    "iterator_type": iterator_type,
+                })
+
+                if is_view and base_path:
+                    edges.append({
+                        "source": base_path,
+                        "target": path,
+                        "type": "view",
+                        "label": iterator_type or "view",
+                    })
+
+            except Exception as e:
+                logger.warning(f"Pipeline: could not inspect {path}: {e}")
+                nodes.append({
+                    "path": path,
+                    "name": path.split(".")[-1] if "." in path else path,
+                    "is_view": False,
+                    "base": None,
+                    "row_count": 0,
+                    "version": 0,
+                    "total_errors": 0,
+                    "columns": [],
+                    "indices": [],
+                    "versions": [],
+                    "computed_count": 0,
+                    "insertable_count": 0,
+                    "error": str(e),
+                })
+
+        return {"nodes": nodes, "edges": edges}
+
+    except Exception as e:
+        logger.error(f"Pipeline error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))

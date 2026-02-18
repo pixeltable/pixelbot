@@ -502,3 +502,62 @@ export interface TimelineResponse {
   total: number
 }
 
+// ── Pipeline Inspector ──────────────────────────────────────────────────────
+
+export interface PipelineColumn {
+  name: string
+  type: string
+  is_computed: boolean
+  computed_with: string | null
+  defined_in: string | null
+  defined_in_self: boolean
+  error_count: number
+  depends_on?: string[]
+}
+
+export interface PipelineIndex {
+  name: string
+  columns: string[]
+  type: string
+  embedding: string
+}
+
+export interface PipelineVersion {
+  version: number
+  created_at: string | null
+  change_type: string | null
+  inserts: number
+  updates: number
+  deletes: number
+  errors: number
+}
+
+export interface PipelineNode {
+  path: string
+  name: string
+  is_view: boolean
+  base: string | null
+  row_count: number
+  version: number
+  total_errors: number
+  columns: PipelineColumn[]
+  indices: PipelineIndex[]
+  versions: PipelineVersion[]
+  computed_count: number
+  insertable_count: number
+  iterator_type: string | null
+  error?: string
+}
+
+export interface PipelineEdge {
+  source: string
+  target: string
+  type: string
+  label: string
+}
+
+export interface PipelineResponse {
+  nodes: PipelineNode[]
+  edges: PipelineEdge[]
+}
+

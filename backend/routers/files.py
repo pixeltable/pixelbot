@@ -252,6 +252,7 @@ class AddUrlResponse(BaseModel):
 
 
 @router.post("/add_url", response_model=AddUrlResponse)
+@pxt_retry()
 def add_url(body: AddUrlRequest):
     """Add a URL as a data source."""
     user_id = config.DEFAULT_USER_ID
@@ -288,6 +289,16 @@ def add_url(body: AddUrlRequest):
             uuid=file_uuid,
         )
 
+    except ValueError as e:
+        err_msg = str(e)
+        if "exceeds maximum" in err_msg or "[E088]" in err_msg:
+            logger.warning(f"Document too large for processing: {err_msg[:200]}")
+            raise HTTPException(
+                status_code=400,
+                detail="Document is too large to process (exceeds 1M characters). Try a shorter document or a direct file upload.",
+            )
+        logger.error(f"Error adding URL: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
     except Exception as e:
         logger.error(f"Error adding URL: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
@@ -303,6 +314,7 @@ class DeleteFileResponse(BaseModel):
 
 
 @router.delete("/delete_file/{file_uuid}/{file_type}", response_model=DeleteFileResponse)
+@pxt_retry()
 def delete_file(file_uuid: str, file_type: str):
     """Delete a file by UUID and type."""
     user_id = config.DEFAULT_USER_ID
@@ -375,6 +387,7 @@ class DeleteAllResponse(BaseModel):
 
 
 @router.post("/delete_all", response_model=DeleteAllResponse)
+@pxt_retry()
 def delete_all(body: DeleteAllRequest):
     """Delete all items from a given table type."""
     user_id = config.DEFAULT_USER_ID

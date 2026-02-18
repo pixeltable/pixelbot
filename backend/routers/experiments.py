@@ -512,6 +512,7 @@ def get_experiment(experiment_id: str):
 
 
 @router.delete("/{experiment_id}")
+@pxt_retry()
 def delete_experiment(experiment_id: str):
     """Delete all results for an experiment."""
     try:

@@ -67,9 +67,11 @@ export function AppLayout() {
           'flex h-14 items-center gap-2.5 px-3 shrink-0',
           isSidebarOpen ? 'justify-start' : 'justify-center',
         )}>
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-k-yellow shadow-sm shadow-k-yellow/20">
-            <span className="text-sm font-bold text-k-black">P</span>
-          </div>
+          <img
+            src="/logo.png"
+            alt="Pixelbot"
+            className="h-8 w-8 shrink-0 rounded-lg"
+          />
           {isSidebarOpen && (
             <span className="text-[13px] font-semibold tracking-tight text-foreground">
               Pixelbot

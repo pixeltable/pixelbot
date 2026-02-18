@@ -48,6 +48,7 @@ class GenerateImageResponse(BaseModel):
 
 
 @router.post("/generate_image", response_model=GenerateImageResponse)
+@pxt_retry()
 def generate_image(body: GenerateImageRequest):
     """Generate an image using the configured provider (Gemini Imagen or OpenAI DALL-E).
 
@@ -166,6 +167,7 @@ class DeleteResponse(BaseModel):
 
 
 @router.delete("/delete_image/{timestamp_str}", response_model=DeleteResponse)
+@pxt_retry()
 def delete_generated_image(timestamp_str: str):
     """Delete a generated image by timestamp."""
     user_id = config.DEFAULT_USER_ID
@@ -200,6 +202,7 @@ class GenerateVideoRequest(BaseModel):
 
 
 @router.post("/generate_video")
+@pxt_retry()
 def generate_video(body: GenerateVideoRequest):
     """Generate a video using Gemini Veo.
 
@@ -305,6 +308,7 @@ def serve_generated_video(path: str):
 # ── Delete Generated Video ───────────────────────────────────────────────────
 
 @router.delete("/delete_video/{timestamp_str}", response_model=DeleteResponse)
+@pxt_retry()
 def delete_generated_video(timestamp_str: str):
     """Delete a generated video by timestamp."""
     user_id = config.DEFAULT_USER_ID
@@ -344,6 +348,7 @@ class SaveToCollectionResponse(BaseModel):
 
 
 @router.post("/save_generated_image", response_model=SaveToCollectionResponse)
+@pxt_retry()
 def save_generated_image_to_collection(body: SaveToCollectionRequest):
     """Save a generated image into agents.images so it enters the CLIP embedding + RAG pipeline."""
     user_id = config.DEFAULT_USER_ID
@@ -396,6 +401,7 @@ def save_generated_image_to_collection(body: SaveToCollectionRequest):
 
 
 @router.post("/save_generated_video", response_model=SaveToCollectionResponse)
+@pxt_retry()
 def save_generated_video_to_collection(body: SaveToCollectionRequest):
     """Save a generated video into agents.videos so it enters keyframe/transcription/RAG pipeline."""
     user_id = config.DEFAULT_USER_ID

@@ -24,6 +24,7 @@ import {
   Filter,
   X,
   Merge,
+  GitBranch,
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -31,6 +32,7 @@ import { cn } from '@/lib/utils'
 import { useToast } from '@/components/ui/toast'
 import * as api from '@/lib/api'
 import type { TableInfo, TableRowsResponse, JoinResult } from '@/types'
+import { PipelineInspector } from '@/components/database/pipeline-inspector'
 
 // ── Grouping logic ──────────────────────────────────────────────────────────
 
@@ -279,19 +281,44 @@ export function DatabasePage() {
     })
   }, [])
 
+  const [dbView, setDbView] = useState<'tables' | 'pipeline'>('tables')
   const totalRows = tables.reduce((sum, t) => sum + t.row_count, 0)
   const tableCount = tables.filter((t) => t.type === 'table').length
   const viewCount = tables.filter((t) => t.type === 'view').length
 
   return (
-    <div className="flex h-full overflow-hidden">
+    <div className="flex flex-col h-full overflow-hidden">
+      {/* View switcher */}
+      <div className="flex items-center gap-1 px-4 pt-3 pb-2 shrink-0">
+        <h2 className="text-sm font-semibold text-foreground flex items-center gap-2 mr-4">
+          <Database className="h-4 w-4 text-k-yellow" />
+          Database
+        </h2>
+        {(['tables', 'pipeline'] as const).map((view) => (
+          <button
+            key={view}
+            onClick={() => setDbView(view)}
+            className={cn(
+              'flex items-center gap-1.5 px-3 py-1 rounded-md text-[11px] font-medium transition-colors',
+              dbView === view
+                ? 'bg-accent text-foreground'
+                : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground',
+            )}
+          >
+            {view === 'tables' ? <Table2 className="h-3 w-3" /> : <GitBranch className="h-3 w-3" />}
+            {view === 'tables' ? 'Tables' : 'Pipeline'}
+          </button>
+        ))}
+      </div>
+
+      {dbView === 'pipeline' ? (
+        <PipelineInspector />
+      ) : (
+
+    <div className="flex flex-1 overflow-hidden">
       {/* Left panel: grouped table list */}
       <div className="w-72 shrink-0 border-r border-border/60 flex flex-col bg-card/20">
-        <div className="px-4 pt-5 pb-3">
-          <h2 className="text-sm font-semibold text-foreground flex items-center gap-2 mb-1.5">
-            <Database className="h-4 w-4 text-k-yellow" />
-            Database
-          </h2>
+        <div className="px-4 pt-2 pb-3">
           <p className="text-[10px] text-muted-foreground">
             {tables.length} objects &middot; {totalRows.toLocaleString()} total rows
           </p>
@@ -627,6 +654,9 @@ export function DatabasePage() {
           </>
         )}
       </div>
+    </div>
+
+      )}
     </div>
   )
 }

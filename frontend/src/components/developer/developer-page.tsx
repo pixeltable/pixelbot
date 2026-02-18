@@ -15,6 +15,8 @@ import {
   Braces,
   Plug,
   BookOpen,
+  CloudUpload,
+  Share2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
@@ -538,12 +540,88 @@ curl -o data.csv http://localhost:8000/api/export/csv/agents.prompt_experiments`
                 </div>
               </div>
 
+              {/* Data Sharing (Publish / Replicate) */}
+              <div className="rounded-xl border border-border/60 bg-card/40 overflow-hidden">
+                <div className="px-5 py-4 border-b border-border/40 flex items-center gap-3">
+                  <div className="h-8 w-8 rounded-lg bg-emerald-500/15 flex items-center justify-center">
+                    <Share2 className="h-4 w-4 text-emerald-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-[13px] font-semibold text-foreground">Data Sharing &mdash; Publish &amp; Replicate</h3>
+                    <p className="text-[11px] text-muted-foreground/60">Share datasets via Pixeltable Cloud or replicate public datasets locally</p>
+                  </div>
+                  <a
+                    href="https://docs.pixeltable.com/platform/data-sharing"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="ml-auto text-[10px] text-muted-foreground hover:text-foreground flex items-center gap-1"
+                  >
+                    Docs <ExternalLink className="h-2.5 w-2.5" />
+                  </a>
+                </div>
+                <div className="p-5 space-y-4">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <CloudUpload className="h-3.5 w-3.5 text-emerald-400" />
+                      <span className="text-[12px] font-medium text-foreground">Publish a table to the cloud</span>
+                    </div>
+                    <CodeBlock
+                      code={`import pixeltable as pxt
+
+# Publish any local table to Pixeltable Cloud
+pxt.publish(
+    source='agents.chat_history',
+    destination_uri='pxt://your-org/chat-history',
+    access='public'   # or 'private' (default)
+)
+
+# Push local updates to the published table
+t = pxt.get_table('agents.chat_history')
+t.push()`}
+                      language="python"
+                      copiedText={copiedText}
+                      onCopy={copyToClipboard}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Download className="h-3.5 w-3.5 text-emerald-400" />
+                      <span className="text-[12px] font-medium text-foreground">Replicate a dataset locally</span>
+                    </div>
+                    <CodeBlock
+                      code={`import pixeltable as pxt
+
+# Replicate any public dataset — no API key required
+coco = pxt.replicate(
+    remote_uri='pxt://pixeltable:fiftyone/coco_mini_2017',
+    local_path='my-data.coco'
+)
+
+# Query it like any local table
+coco.select(coco.image, coco.caption).limit(5).collect()
+
+# Pull upstream updates
+coco.pull()`}
+                      language="python"
+                      copiedText={copiedText}
+                      onCopy={copyToClipboard}
+                    />
+                  </div>
+                  <p className="text-[11px] text-muted-foreground/50">
+                    Community Edition includes 1 TB cloud storage. Browse public datasets at{' '}
+                    <a href="https://pixeltable.com/data-products" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">pixeltable.com/data-products</a>.
+                  </p>
+                </div>
+              </div>
+
               {/* Links */}
               <div className="flex flex-wrap gap-3">
                 {[
                   { label: 'Pixeltable Docs', url: 'https://docs.pixeltable.com/', icon: BookOpen },
                   { label: 'GitHub', url: 'https://github.com/pixeltable/pixeltable', icon: Code2 },
                   { label: 'MCP Server', url: 'https://github.com/pixeltable/mcp-server-pixeltable-developer', icon: Plug },
+                  { label: 'Data Sharing', url: 'https://docs.pixeltable.com/platform/data-sharing', icon: Share2 },
+                  { label: 'Public Datasets', url: 'https://pixeltable.com/data-products', icon: CloudUpload },
                   { label: 'LLMs.txt', url: 'https://docs.pixeltable.com/llms.txt', icon: FileJson },
                 ].map(({ label, url, icon: Icon }) => (
                   <a

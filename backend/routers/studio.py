@@ -1082,6 +1082,7 @@ def _collect_visual_embeddings(
 # ── Image Preview ────────────────────────────────────────────────────────────
 
 @router.get("/image_preview/{uuid}")
+@pxt_retry()
 def get_image_preview(uuid: str):
     """Get a larger preview of an image for the studio workspace."""
     user_id = config.DEFAULT_USER_ID
@@ -1122,6 +1123,7 @@ class TransformRequest(BaseModel):
 
 
 @router.post("/transform/image")
+@pxt_retry()
 def transform_image(body: TransformRequest):
     """Apply a PIL transform to an image and return the preview (no storage)."""
     user_id = config.DEFAULT_USER_ID
@@ -1256,6 +1258,7 @@ def list_detection_models():
 
 
 @router.post("/detect")
+@pxt_retry()
 def detect_objects(body: DetectRequest):
     """Run on-demand object detection or classification on an image or video frame.
     Models are loaded lazily and cached in memory for fast subsequent calls.
@@ -1434,6 +1437,7 @@ class SaveImageResponse(BaseModel):
 
 
 @router.post("/save/image", response_model=SaveImageResponse)
+@pxt_retry()
 def save_transformed_image(body: TransformRequest):
     """Apply transform at full resolution and save as a new image in Pixeltable."""
     user_id = config.DEFAULT_USER_ID
@@ -1489,6 +1493,7 @@ def save_transformed_image(body: TransformRequest):
 # ── Download Transformed Image ───────────────────────────────────────────────
 
 @router.post("/download/image")
+@pxt_retry()
 def download_transformed_image(body: TransformRequest):
     """Apply transform at full resolution and return as a downloadable PNG."""
     try:
@@ -1532,6 +1537,7 @@ def download_transformed_image(body: TransformRequest):
 # ── Video Transform ──────────────────────────────────────────────────────────
 
 @router.post("/transform/video")
+@pxt_retry()
 def transform_video(body: TransformRequest):
     """Apply a Pixeltable video UDF and return the result (metadata, frame, clip, overlay, scenes)."""
     user_id = config.DEFAULT_USER_ID
@@ -1673,6 +1679,7 @@ class SaveVideoRequest(BaseModel):
 
 
 @router.post("/save/video")
+@pxt_retry()
 def save_video_result(body: SaveVideoRequest):
     """Save a video transform result (clip or overlay) as a new video in Pixeltable."""
     user_id = config.DEFAULT_USER_ID
@@ -1704,6 +1711,7 @@ def save_video_result(body: SaveVideoRequest):
 # ── Save Extracted Frame as Image ─────────────────────────────────────────────
 
 @router.post("/save/extracted_frame")
+@pxt_retry()
 def save_extracted_frame(body: TransformRequest):
     """Extract a frame and save it as a new image in Pixeltable."""
     user_id = config.DEFAULT_USER_ID
@@ -1872,6 +1880,7 @@ def _save_reve_temp(img: Image.Image, prefix: str) -> str:
 
 
 @router.post("/reve/edit")
+@pxt_retry()
 def reve_edit_image(body: ReveEditRequest):
     """Edit an image using Reve AI with a natural language instruction.
 
@@ -1938,6 +1947,7 @@ def reve_edit_image(body: ReveEditRequest):
 
 
 @router.post("/reve/remix")
+@pxt_retry()
 def reve_remix_images(body: ReveRemixRequest):
     """Remix one or more images using Reve AI with a creative prompt.
 
@@ -2000,6 +2010,7 @@ def reve_remix_images(body: ReveRemixRequest):
 
 
 @router.post("/reve/save")
+@pxt_retry()
 def reve_save_result(body: ReveSaveRequest):
     """Save a Reve edit/remix result from temp storage into the image collection.
 

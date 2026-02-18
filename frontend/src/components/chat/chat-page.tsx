@@ -18,6 +18,7 @@ import {
   ArrowRight,
   ListOrdered,
   X,
+  Check,
   Music,
 } from 'lucide-react'
 import { marked } from 'marked'
@@ -485,6 +486,46 @@ export function ChatPage() {
   )
 }
 
+// ── Save to Library Button ──────────────────────────────────────────────────
+
+function SaveToLibraryButton({ audioPath, onSave }: { audioPath: string; onSave: (path: string) => void }) {
+  const [status, setStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
+
+  const handleClick = async () => {
+    if (status !== 'idle') return
+    setStatus('saving')
+    try {
+      await onSave(audioPath)
+      setStatus('saved')
+    } catch {
+      setStatus('idle')
+    }
+  }
+
+  return (
+    <button
+      className={cn(
+        'flex items-center gap-1 px-2 py-1 rounded-md text-[11px] transition-colors',
+        status === 'saved'
+          ? 'text-green-400'
+          : status === 'saving'
+            ? 'text-muted-foreground/50 cursor-wait'
+            : 'text-muted-foreground hover:bg-accent hover:text-foreground',
+      )}
+      onClick={handleClick}
+      disabled={status !== 'idle'}
+    >
+      {status === 'saving' ? (
+        <><Loader2 className="h-3 w-3 animate-spin" /> Saving…</>
+      ) : status === 'saved' ? (
+        <><Check className="h-3 w-3" /> Saved to Library</>
+      ) : (
+        <><Music className="h-3 w-3" /> Save to Library</>
+      )}
+    </button>
+  )
+}
+
 // ── Message Component ───────────────────────────────────────────────────────
 
 function MessageBubble({
@@ -525,11 +566,36 @@ function MessageBubble({
     return parseFollowUpQuestions(message.follow_up_text)
   }, [message.follow_up_text])
 
+  const [isExpanded, setIsExpanded] = useState(false)
+  const USER_COLLAPSE_THRESHOLD = 280
+  const isLongUserMessage = isUser && message.content.length > USER_COLLAPSE_THRESHOLD
+
   if (isUser) {
+    const displayContent = isLongUserMessage && !isExpanded
+      ? message.content.slice(0, USER_COLLAPSE_THRESHOLD)
+      : message.content
+
     return (
       <div className="flex gap-3 justify-end py-2 animate-fade-in">
         <div className="max-w-[75%] rounded-2xl bg-accent text-foreground px-4 py-3">
-          <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+          <div className="relative">
+            <p className="text-sm whitespace-pre-wrap">
+              {displayContent}
+              {isLongUserMessage && !isExpanded && '…'}
+            </p>
+            {isLongUserMessage && !isExpanded && (
+              <div className="absolute bottom-0 left-0 right-0 h-6 bg-gradient-to-t from-accent to-transparent pointer-events-none" />
+            )}
+          </div>
+          {isLongUserMessage && (
+            <button
+              onClick={() => setIsExpanded(!isExpanded)}
+              className="flex items-center gap-1 mt-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <ChevronDown className={cn('h-3 w-3 transition-transform', isExpanded && 'rotate-180')} />
+              {isExpanded ? 'Show less' : `Show more (${message.content.length} chars)`}
+            </button>
+          )}
         </div>
         <div className="flex-shrink-0 mt-1">
           <div className="h-7 w-7 rounded-full bg-accent flex items-center justify-center">
@@ -663,12 +729,7 @@ function MessageBubble({
             </>
           )}
           {isAudio && message.audio_path && onSaveAudio && (
-            <button
-              className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-              onClick={() => onSaveAudio(message.audio_path!)}
-            >
-              <Music className="h-3 w-3" /> Save to Library
-            </button>
+            <SaveToLibraryButton audioPath={message.audio_path} onSave={onSaveAudio} />
           )}
         </div>
       </div>

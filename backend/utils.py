@@ -25,6 +25,14 @@ _TRANSIENT_MESSAGES = (
 )
 
 
+def _is_transient(exc: Exception) -> bool:
+    """Return True if the exception is a transient Pixeltable/psycopg error."""
+    if isinstance(exc, AssertionError):
+        return True
+    err_str = str(exc)
+    return any(msg in err_str for msg in _TRANSIENT_MESSAGES)
+
+
 def pxt_retry(
     max_attempts: int = 3,
     delay: float = 0.5,
@@ -32,7 +40,8 @@ def pxt_retry(
 ) -> Callable[[Callable[P, T]], Callable[P, T]]:
     """Decorator that retries a function on transient Pixeltable connection errors.
 
-    Supports both sync and async functions. Catches AssertionError,
+    Supports both sync and async functions. Catches AssertionError (bare
+    assertions from Pixeltable's internal transaction guards),
     ProgrammingError, ResourceClosedError and similar transient errors that
     occur when concurrent requests hit the Pixeltable catalog.
     """
@@ -46,14 +55,12 @@ def pxt_retry(
                     try:
                         return await fn(*args, **kwargs)
                     except Exception as exc:
-                        err_str = str(exc)
-                        is_transient = any(msg in err_str for msg in _TRANSIENT_MESSAGES)
-                        if not is_transient or attempt == max_attempts:
+                        if not _is_transient(exc) or attempt == max_attempts:
                             raise
                         last_exc = exc
                         logger.warning(
                             f"[pxt_retry] {fn.__name__} attempt {attempt}/{max_attempts} "
-                            f"failed with transient error: {err_str[:120]}. "
+                            f"failed with transient error: {type(exc).__name__}: {str(exc)[:120]}. "
                             f"Retrying in {wait:.1f}s..."
                         )
                         await asyncio.sleep(wait)
@@ -69,14 +76,12 @@ def pxt_retry(
                     try:
                         return fn(*args, **kwargs)
                     except Exception as exc:
-                        err_str = str(exc)
-                        is_transient = any(msg in err_str for msg in _TRANSIENT_MESSAGES)
-                        if not is_transient or attempt == max_attempts:
+                        if not _is_transient(exc) or attempt == max_attempts:
                             raise
                         last_exc = exc
                         logger.warning(
                             f"[pxt_retry] {fn.__name__} attempt {attempt}/{max_attempts} "
-                            f"failed with transient error: {err_str[:120]}. "
+                            f"failed with transient error: {type(exc).__name__}: {str(exc)[:120]}. "
                             f"Retrying in {wait:.1f}s..."
                         )
                         time.sleep(wait)
