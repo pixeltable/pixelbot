@@ -32,16 +32,37 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>
 }
 
+// ── User ────────────────────────────────────────────────────────────────────
+
+export async function getUserInfo(): Promise<{ user_name: string }> {
+  return request<{ user_name: string }>('/user_info')
+}
+
 // ── Chat ─────────────────────────────────────────────────────────────────────
 
 export async function sendQuery(
   query: string,
   personaId?: string | null,
+  conversationId?: string | null,
 ): Promise<QueryResponse> {
   return request<QueryResponse>('/query', {
     method: 'POST',
-    body: JSON.stringify({ query, persona_id: personaId }),
+    body: JSON.stringify({ query, persona_id: personaId, conversation_id: conversationId }),
   })
+}
+
+// ── Conversations ────────────────────────────────────────────────────────────
+
+export async function getConversations(): Promise<import('@/types').Conversation[]> {
+  return request<import('@/types').Conversation[]>('/conversations')
+}
+
+export async function getConversation(conversationId: string): Promise<{ conversation_id: string; messages: import('@/types').ChatMessage[] }> {
+  return request('/conversations/' + encodeURIComponent(conversationId))
+}
+
+export async function deleteConversation(conversationId: string): Promise<{ message: string; num_deleted: number }> {
+  return request('/conversations/' + encodeURIComponent(conversationId), { method: 'DELETE' })
 }
 
 // ── Files ────────────────────────────────────────────────────────────────────

@@ -29,6 +29,7 @@ class ChatHistoryRow(BaseModel):
     """Row model for the agents.chat_history table."""
     role: str  # "user" or "assistant"
     content: str
+    conversation_id: str
     timestamp: datetime
     user_id: str
 

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Outlet, NavLink } from 'react-router-dom'
+import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import {
   MessageSquare,
   History,
@@ -13,6 +13,7 @@ import {
   Database,
   FlaskConical,
   Code2,
+  SquarePen,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -52,6 +53,12 @@ const BOTTOM_NAV = [
 
 export function AppLayout() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
+  const navigate = useNavigate()
+
+  const handleNewChat = () => {
+    navigate('/')
+    window.dispatchEvent(new Event('new-chat'))
+  }
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
@@ -62,21 +69,33 @@ export function AppLayout() {
           isSidebarOpen ? 'w-[200px]' : 'w-14',
         )}
       >
-        {/* Logo */}
+        {/* Logo + New Chat */}
         <div className={cn(
-          'flex h-14 items-center gap-2.5 px-3 shrink-0',
-          isSidebarOpen ? 'justify-start' : 'justify-center',
+          'flex h-14 items-center px-3 shrink-0',
+          isSidebarOpen ? 'justify-between' : 'flex-col justify-center gap-1',
         )}>
-          <img
-            src="/logo.png"
-            alt="Pixelbot"
-            className="h-8 w-8 shrink-0 rounded-lg"
-          />
-          {isSidebarOpen && (
-            <span className="text-[13px] font-semibold tracking-tight text-foreground">
-              Pixelbot
-            </span>
-          )}
+          <div className="flex items-center gap-2.5">
+            <img
+              src="/logo.png"
+              alt="Pixelbot"
+              className="h-8 w-8 shrink-0 rounded-lg"
+            />
+            {isSidebarOpen && (
+              <span className="text-[13px] font-semibold tracking-tight text-foreground">
+                Pixelbot
+              </span>
+            )}
+          </div>
+          <button
+            onClick={handleNewChat}
+            className={cn(
+              'flex items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground transition-colors',
+              isSidebarOpen ? 'h-7 w-7' : 'h-6 w-6',
+            )}
+            title="New chat"
+          >
+            <SquarePen className={cn(isSidebarOpen ? 'h-4 w-4' : 'h-3.5 w-3.5')} />
+          </button>
         </div>
 
         {/* Primary nav */}
@@ -120,7 +139,6 @@ export function AppLayout() {
 
         {/* Bottom section */}
         <div className="px-2 pb-2 space-y-0.5">
-          {/* Settings */}
           {BOTTOM_NAV.map(({ to, icon: Icon, label }) => (
             <NavLink
               key={to}
@@ -140,7 +158,6 @@ export function AppLayout() {
             </NavLink>
           ))}
 
-          {/* Collapse */}
           <button
             className={cn(
               'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-[13px] font-medium text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground',
@@ -158,7 +175,6 @@ export function AppLayout() {
             )}
           </button>
 
-          {/* Powered by Pixeltable */}
           <a
             href="https://github.com/pixeltable/pixeltable"
             target="_blank"

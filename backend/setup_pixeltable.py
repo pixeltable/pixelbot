@@ -290,7 +290,13 @@ def search_memory(query_text: str, user_id: str):
 
 chat_history = pxt.create_table(
     "agents.chat_history",
-    {"role": pxt.String, "content": pxt.String, "timestamp": pxt.Timestamp, "user_id": pxt.String},
+    {
+        "role": pxt.String,
+        "content": pxt.String,
+        "conversation_id": pxt.String,
+        "timestamp": pxt.Timestamp,
+        "user_id": pxt.String,
+    },
     if_exists="ignore",
 )
 

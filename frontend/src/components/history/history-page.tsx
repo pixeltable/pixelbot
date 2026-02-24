@@ -1,12 +1,11 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   Trash2,
   Download,
-  ChevronRight,
   Search,
   Loader2,
   Clock,
-  Zap,
   MessageSquare,
   Bug,
   Brain,
@@ -19,53 +18,46 @@ import {
   Upload,
   User,
   Database,
+  ArrowRight,
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Badge } from '@/components/ui/badge'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import { useToast } from '@/components/ui/toast'
 import * as api from '@/lib/api'
-import type { WorkflowEntry, WorkflowDetail, TimelineEvent } from '@/types'
+import type { Conversation, TimelineEvent } from '@/types'
 import { cn } from '@/lib/utils'
 
 type HistoryView = 'conversations' | 'timeline'
 
 export function HistoryPage() {
   const { addToast } = useToast()
+  const navigate = useNavigate()
   const [view, setView] = useState<HistoryView>('conversations')
-  const [entries, setEntries] = useState<WorkflowEntry[]>([])
+  const [conversations, setConversations] = useState<Conversation[]>([])
   const [search, setSearch] = useState('')
   const [isLoading, setIsLoading] = useState(true)
-  const [selectedDetail, setSelectedDetail] = useState<WorkflowDetail | null>(null)
-  const [isDetailOpen, setIsDetailOpen] = useState(false)
 
   // Timeline state
   const [timelineEvents, setTimelineEvents] = useState<TimelineEvent[]>([])
   const [isLoadingTimeline, setIsLoadingTimeline] = useState(false)
 
-  const fetchHistory = useCallback(async () => {
+  const fetchConversations = useCallback(async () => {
     setIsLoading(true)
     try {
-      const ctx = await api.getContextInfo()
-      setEntries(ctx.workflow_data)
+      const data = await api.getConversations()
+      setConversations(data)
     } catch {
-      addToast('Failed to load history', 'error')
+      addToast('Failed to load conversations', 'error')
     } finally {
       setIsLoading(false)
     }
   }, [addToast])
 
   useEffect(() => {
-    fetchHistory()
-  }, [fetchHistory])
+    fetchConversations()
+  }, [fetchConversations])
 
-  // Load timeline when switching to that tab
   useEffect(() => {
     if (view !== 'timeline') return
     async function loadTimeline() {
@@ -82,30 +74,26 @@ export function HistoryPage() {
     loadTimeline()
   }, [view, addToast])
 
-  const handleViewDetail = useCallback(
-    async (timestamp: string) => {
-      try {
-        const detail = await api.getWorkflowDetail(timestamp)
-        setSelectedDetail(detail)
-        setIsDetailOpen(true)
-      } catch (err) {
-        addToast(err instanceof Error ? err.message : 'Failed to load detail', 'error')
-      }
+  const handleOpenConversation = useCallback(
+    (conversationId: string) => {
+      navigate(`/?c=${conversationId}`)
     },
-    [addToast],
+    [navigate],
   )
 
   const handleDelete = useCallback(
-    async (timestamp: string) => {
+    async (e: React.MouseEvent, conversationId: string) => {
+      e.stopPropagation()
       try {
-        await api.deleteHistory(timestamp)
-        addToast('Entry deleted', 'success')
-        await fetchHistory()
+        await api.deleteConversation(conversationId)
+        addToast('Conversation deleted', 'success')
+        setConversations((prev) => prev.filter((c) => c.conversation_id !== conversationId))
+        window.dispatchEvent(new Event('conversations-changed'))
       } catch (err) {
         addToast(err instanceof Error ? err.message : 'Delete failed', 'error')
       }
     },
-    [addToast, fetchHistory],
+    [addToast],
   )
 
   const handleDownload = useCallback(async () => {
@@ -137,11 +125,8 @@ export function HistoryPage() {
     }
   }, [addToast])
 
-  const filteredEntries = entries.filter(
-    (e) =>
-      !search ||
-      e.prompt.toLowerCase().includes(search.toLowerCase()) ||
-      e.answer?.toLowerCase().includes(search.toLowerCase()),
+  const filteredConversations = conversations.filter(
+    (c) => !search || c.title.toLowerCase().includes(search.toLowerCase()),
   )
 
   return (
@@ -151,11 +136,10 @@ export function HistoryPage() {
         <div>
           <h2 className="text-lg font-semibold tracking-tight">History</h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            {entries.length} conversation{entries.length !== 1 ? 's' : ''}
+            {conversations.length} conversation{conversations.length !== 1 ? 's' : ''}
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {/* View toggle */}
           <div className="flex rounded-lg border border-border overflow-hidden">
             <button
               className={cn(
@@ -211,7 +195,6 @@ export function HistoryPage() {
       {/* Conversations view */}
       {view === 'conversations' && (
         <>
-          {/* Search */}
           <div className="px-6 py-3">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
@@ -224,41 +207,41 @@ export function HistoryPage() {
             </div>
           </div>
 
-          {/* List */}
           <ScrollArea className="flex-1 px-6">
             {isLoading ? (
               <div className="flex flex-col items-center justify-center py-16">
                 <Loader2 className="h-6 w-6 animate-spin text-k-yellow mb-2" />
-                <p className="text-xs text-muted-foreground">Loading history...</p>
+                <p className="text-xs text-muted-foreground">Loading conversations...</p>
               </div>
-            ) : filteredEntries.length === 0 ? (
+            ) : filteredConversations.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16">
                 <MessageSquare className="h-10 w-10 text-muted-foreground/20 mb-3" />
                 <p className="text-sm text-muted-foreground">No conversations yet</p>
               </div>
             ) : (
               <div className="space-y-1.5 pb-4">
-                {filteredEntries.map((entry, i) => (
+                {filteredConversations.map((convo, i) => (
                   <div
-                    key={entry.timestamp}
-                    className={cn(
-                      'flex items-center gap-3 rounded-xl border border-border/50 p-3 hover:bg-card hover:border-border transition-all group cursor-pointer animate-fade-in',
-                    )}
+                    key={convo.conversation_id}
+                    className="flex items-center gap-3 rounded-xl border border-border/50 p-3 hover:bg-card hover:border-border transition-all group cursor-pointer animate-fade-in"
                     style={{ animationDelay: `${i * 30}ms` }}
-                    onClick={() => handleViewDetail(entry.timestamp)}
+                    onClick={() => handleOpenConversation(convo.conversation_id)}
                   >
                     <div className="h-9 w-9 rounded-lg bg-muted flex items-center justify-center shrink-0">
                       <MessageSquare className="h-4 w-4 text-muted-foreground" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{entry.prompt}</p>
-                      <p className="text-xs text-muted-foreground truncate mt-0.5">
-                        {entry.answer?.slice(0, 100)}
+                      <p className="text-sm font-medium truncate">
+                        {convo.title || 'New conversation'}
                       </p>
-                      <div className="flex items-center gap-1.5 mt-1.5">
-                        <Clock className="h-2.5 w-2.5 text-muted-foreground/50" />
-                        <span className="text-[10px] text-muted-foreground/70">
-                          {new Date(entry.timestamp).toLocaleString()}
+                      <div className="flex items-center gap-3 mt-1.5">
+                        <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground/70">
+                          <Clock className="h-2.5 w-2.5" />
+                          {new Date(convo.updated_at).toLocaleString()}
+                        </span>
+                        <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground/50">
+                          <MessageSquare className="h-2.5 w-2.5" />
+                          {convo.message_count} messages
                         </span>
                       </div>
                     </div>
@@ -267,17 +250,16 @@ export function HistoryPage() {
                         className="h-7 w-7 flex items-center justify-center rounded-md hover:bg-accent transition-colors"
                         onClick={(e) => {
                           e.stopPropagation()
-                          handleViewDetail(entry.timestamp)
+                          handleOpenConversation(convo.conversation_id)
                         }}
+                        title="Open conversation"
                       >
-                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                        <ArrowRight className="h-4 w-4 text-muted-foreground" />
                       </button>
                       <button
                         className="h-7 w-7 flex items-center justify-center rounded-md hover:bg-destructive/10 transition-colors"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleDelete(entry.timestamp)
-                        }}
+                        onClick={(e) => handleDelete(e, convo.conversation_id)}
+                        title="Delete conversation"
                       >
                         <Trash2 className="h-3.5 w-3.5 text-destructive" />
                       </button>
@@ -289,69 +271,6 @@ export function HistoryPage() {
           </ScrollArea>
         </>
       )}
-
-      {/* Detail Dialog */}
-      <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Zap className="h-4 w-4 text-k-yellow" />
-              Workflow Detail
-            </DialogTitle>
-          </DialogHeader>
-          {selectedDetail && (
-            <div className="space-y-4 text-sm">
-                {/* Prompt */}
-                <div className="rounded-lg border border-border bg-card p-3">
-                  <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground mb-1">Prompt</p>
-                  <p className="text-sm">{selectedDetail.prompt}</p>
-                </div>
-
-                {/* Answer */}
-                <div className="rounded-lg border border-border bg-card p-3">
-                  <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground mb-1">Answer</p>
-                  <p className="text-sm whitespace-pre-wrap leading-relaxed">{selectedDetail.answer}</p>
-                </div>
-
-                {/* Parameters */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="rounded-lg border border-border bg-card p-3">
-                    <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground mb-0.5">Temperature</p>
-                    <p className="text-lg font-semibold">{selectedDetail.temperature}</p>
-                  </div>
-                  <div className="rounded-lg border border-border bg-card p-3">
-                    <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground mb-0.5">Max Tokens</p>
-                    <p className="text-lg font-semibold">{selectedDetail.max_tokens}</p>
-                  </div>
-                </div>
-
-                {/* System prompts */}
-                <div className="rounded-lg border border-border bg-card p-3">
-                  <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground mb-1.5">Initial System Prompt</p>
-                  <pre className="p-2.5 bg-muted rounded-md text-xs overflow-auto max-h-40 leading-relaxed whitespace-pre-wrap">
-                    {selectedDetail.initial_system_prompt}
-                  </pre>
-                </div>
-                <div className="rounded-lg border border-border bg-card p-3">
-                  <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground mb-1.5">Final System Prompt</p>
-                  <pre className="p-2.5 bg-muted rounded-md text-xs overflow-auto max-h-40 leading-relaxed whitespace-pre-wrap">
-                    {selectedDetail.final_system_prompt}
-                  </pre>
-                </div>
-
-                {/* Tool output */}
-                {selectedDetail.tool_output != null && (
-                  <div className="rounded-lg border border-border bg-card p-3">
-                    <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground mb-1.5">Tool Output</p>
-                    <pre className="p-2.5 bg-muted rounded-md text-xs overflow-auto max-h-64 leading-relaxed whitespace-pre-wrap">
-                      {JSON.stringify(selectedDetail.tool_output as Record<string, unknown>, null, 2)}
-                    </pre>
-                  </div>
-                )}
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }

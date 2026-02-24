@@ -15,6 +15,102 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["history"])
 
 
+# ── Conversations ─────────────────────────────────────────────────────────────
+
+@router.get("/conversations")
+@pxt_retry()
+def list_conversations():
+    """List all conversations, grouped by conversation_id."""
+    user_id = config.DEFAULT_USER_ID
+
+    try:
+        table = pxt.get_table("agents.chat_history")
+        rows = list(
+            table.where(table.user_id == user_id)
+            .select(
+                role=table.role,
+                content=table.content,
+                conversation_id=table.conversation_id,
+                timestamp=table.timestamp,
+            )
+            .order_by(table.timestamp, asc=True)
+            .collect()
+        )
+
+        convos: dict[str, dict] = {}
+        for row in rows:
+            cid = row.get("conversation_id") or "default"
+            if cid not in convos:
+                convos[cid] = {
+                    "conversation_id": cid,
+                    "title": "",
+                    "created_at": row["timestamp"].isoformat() if isinstance(row["timestamp"], datetime) else str(row["timestamp"]),
+                    "updated_at": row["timestamp"].isoformat() if isinstance(row["timestamp"], datetime) else str(row["timestamp"]),
+                    "message_count": 0,
+                }
+            entry = convos[cid]
+            entry["message_count"] += 1
+            ts_iso = row["timestamp"].isoformat() if isinstance(row["timestamp"], datetime) else str(row["timestamp"])
+            entry["updated_at"] = ts_iso
+            if not entry["title"] and row["role"] == "user":
+                entry["title"] = row["content"][:100]
+
+        result = sorted(convos.values(), key=lambda c: c["updated_at"], reverse=True)
+        return result
+
+    except Exception as e:
+        logger.error(f"Error listing conversations: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/conversations/{conversation_id}")
+@pxt_retry()
+def get_conversation(conversation_id: str):
+    """Get all messages for a specific conversation."""
+    user_id = config.DEFAULT_USER_ID
+
+    try:
+        table = pxt.get_table("agents.chat_history")
+        rows = list(
+            table.where((table.user_id == user_id) & (table.conversation_id == conversation_id))
+            .select(role=table.role, content=table.content, timestamp=table.timestamp)
+            .order_by(table.timestamp, asc=True)
+            .collect()
+        )
+
+        messages = []
+        for row in rows:
+            messages.append({
+                "role": row["role"],
+                "content": row["content"],
+                "timestamp": row["timestamp"].isoformat() if isinstance(row["timestamp"], datetime) else str(row["timestamp"]),
+            })
+
+        return {"conversation_id": conversation_id, "messages": messages}
+
+    except Exception as e:
+        logger.error(f"Error fetching conversation: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/conversations/{conversation_id}")
+@pxt_retry()
+def delete_conversation(conversation_id: str):
+    """Delete all messages in a conversation."""
+    user_id = config.DEFAULT_USER_ID
+
+    try:
+        table = pxt.get_table("agents.chat_history")
+        status = table.delete(
+            where=(table.user_id == user_id) & (table.conversation_id == conversation_id)
+        )
+        return {"message": "Conversation deleted", "num_deleted": status.num_rows}
+
+    except Exception as e:
+        logger.error(f"Error deleting conversation: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 def _parse_timestamp(ts_str: str) -> datetime:
     """Parse a timestamp string, trying multiple formats."""
     for fmt in ("%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S"):

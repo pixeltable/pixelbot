@@ -125,6 +125,15 @@ export interface ChatMessage {
   video_url?: string
   audio_url?: string
   audio_path?: string
+  processing_ms?: number
+}
+
+export interface Conversation {
+  conversation_id: string
+  title: string
+  created_at: string
+  updated_at: string
+  message_count: number
 }
 
 export interface TtsVoice {

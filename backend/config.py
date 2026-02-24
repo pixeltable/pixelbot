@@ -47,3 +47,4 @@ ALLOWED_EXTENSIONS = {
 
 # --- Default User (local mode) ---
 DEFAULT_USER_ID = "local_user"
+DEFAULT_USER_NAME = "Pierre"

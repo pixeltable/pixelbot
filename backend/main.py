@@ -74,6 +74,12 @@ def health():
     return {"status": "ok"}
 
 
+@app.get("/api/user_info")
+def user_info():
+    import config
+    return {"user_name": config.DEFAULT_USER_NAME}
+
+
 # Serve frontend static build (production)
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 if STATIC_DIR.is_dir():

@@ -16,6 +16,7 @@ router = APIRouter(prefix="/api", tags=["chat"])
 class QueryRequest(BaseModel):
     query: str
     persona_id: str | None = None
+    conversation_id: str | None = None
 
 
 class QueryMetadata(BaseModel):
@@ -142,11 +143,13 @@ def query(body: QueryRequest):
                         })
 
         # Insert into chat history using validated Pydantic models
+        conversation_id = body.conversation_id or "default"
         try:
             chat_history_table = pxt.get_table("agents.chat_history")
             chat_history_table.insert([ChatHistoryRow(
                 role="user",
                 content=body.query,
+                conversation_id=conversation_id,
                 timestamp=current_timestamp,
                 user_id=user_id,
             )])
@@ -155,6 +158,7 @@ def query(body: QueryRequest):
                 chat_history_table.insert([ChatHistoryRow(
                     role="assistant",
                     content=answer,
+                    conversation_id=conversation_id,
                     timestamp=datetime.now(),
                     user_id=user_id,
                 )])

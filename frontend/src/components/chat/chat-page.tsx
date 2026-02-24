@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import {
   Send,
   ImageIcon,
@@ -20,6 +21,9 @@ import {
   X,
   Check,
   Music,
+  Search,
+  PenLine,
+  Clock,
 } from 'lucide-react'
 import { marked } from 'marked'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -53,20 +57,48 @@ function parseFollowUpQuestions(text: string): string[] {
 }
 
 const SOURCE_CONFIG = {
-  docs: { icon: FileText, label: 'Documents', className: 'text-blue-400' },
-  images: { icon: ImageIcon, label: 'Images', className: 'text-k-yellow' },
-  tools: { icon: Wrench, label: 'Tools', className: 'text-orange-400' },
-  memory: { icon: Brain, label: 'Memory', className: 'text-emerald-400' },
+  docs: { icon: FileText, label: 'Documents', iconClass: 'text-blue-400', pillClass: 'bg-blue-500/10 text-blue-400 border-blue-500/20' },
+  images: { icon: ImageIcon, label: 'Images', iconClass: 'text-k-yellow', pillClass: 'bg-k-yellow/10 text-k-yellow border-k-yellow/20' },
+  tools: { icon: Wrench, label: 'Tools', iconClass: 'text-orange-400', pillClass: 'bg-orange-500/10 text-orange-400 border-orange-500/20' },
+  memory: { icon: Brain, label: 'Memory', iconClass: 'text-emerald-400', pillClass: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
 } as const
+
+type WelcomeChip = {
+  icon: typeof ImageIcon
+  label: string
+  prompt: string
+  mode?: 'chat' | 'image' | 'video' | 'voice'
+  activeClass?: string
+}
+
+const WELCOME_CHIPS: WelcomeChip[] = [
+  { icon: ImageIcon, label: 'Create image', prompt: '', mode: 'image', activeClass: 'border-k-yellow/30 text-k-yellow hover:bg-k-yellow/10' },
+  { icon: Film, label: 'Create video', prompt: '', mode: 'video', activeClass: 'border-violet-400/30 text-violet-400 hover:bg-violet-500/10' },
+  { icon: Volume2, label: 'Generate speech', prompt: '', mode: 'voice', activeClass: 'border-emerald-400/30 text-emerald-400 hover:bg-emerald-500/10' },
+  { icon: Search, label: 'Search the web', prompt: 'Search for recent news about ' },
+  { icon: FileText, label: 'Summarize my files', prompt: 'Summarize my files' },
+  { icon: PenLine, label: 'Ask anything', prompt: '' },
+]
+
+function getGreeting(): string {
+  const hour = new Date().getHours()
+  if (hour < 12) return 'Good morning'
+  if (hour < 17) return 'Good afternoon'
+  return 'Good evening'
+}
 
 export function ChatPage() {
   const { addToast } = useToast()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [mode, setMode] = useState<'chat' | 'image' | 'video' | 'voice'>('chat')
   const [personas, setPersonas] = useState<Persona[]>([])
   const [selectedPersona, setSelectedPersona] = useState<string | null>(null)
+  const [userName, setUserName] = useState<string | null>(null)
+  const conversationIdRef = useRef<string>(searchParams.get('c') || crypto.randomUUID())
+  const hasLoadedInitialRef = useRef(false)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   // ── Message Queue ────────────────────────────────────────────────────────
@@ -132,7 +164,47 @@ export function ChatPage() {
 
   useEffect(() => {
     api.getPersonas().then(setPersonas).catch(() => {})
+    api.getUserInfo().then((info) => setUserName(info.user_name)).catch(() => {})
   }, [])
+
+  // Load existing conversation on mount or when URL param changes
+  useEffect(() => {
+    const urlConvoId = searchParams.get('c')
+    const isNewConvo = urlConvoId && urlConvoId !== conversationIdRef.current
+    const isInitialLoad = urlConvoId && !hasLoadedInitialRef.current
+
+    if (isNewConvo || isInitialLoad) {
+      hasLoadedInitialRef.current = true
+      conversationIdRef.current = urlConvoId
+      setMessages([])
+      const loadConvo = (id: string, retries = 2) => {
+        api.getConversation(id)
+          .then((data) => {
+            setMessages(data.messages.map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content })))
+          })
+          .catch(() => {
+            if (retries > 0) setTimeout(() => loadConvo(id, retries - 1), 1000)
+          })
+      }
+      loadConvo(urlConvoId)
+    } else if (!urlConvoId) {
+      hasLoadedInitialRef.current = true
+      conversationIdRef.current = crypto.randomUUID()
+      setMessages([])
+    }
+  }, [searchParams])
+
+  // "New chat" event from sidebar
+  useEffect(() => {
+    const handler = () => {
+      conversationIdRef.current = crypto.randomUUID()
+      setMessages([])
+      setInput('')
+      setSearchParams({}, { replace: true })
+    }
+    window.addEventListener('new-chat', handler)
+    return () => window.removeEventListener('new-chat', handler)
+  }, [setSearchParams])
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -143,14 +215,23 @@ export function ChatPage() {
     setIsLoading(true)
     setMessages((prev) => [...prev, { role: 'user', content: text }])
 
+    // Pin conversation ID in URL after first message
+    if (!searchParams.get('c')) {
+      setSearchParams({ c: conversationIdRef.current }, { replace: true })
+    }
+
+    const t0 = performance.now()
+
     if (mode === 'image') {
       try {
         const result = await api.generateImage(text)
+        const processing_ms = Math.round(performance.now() - t0)
         setMessages((prev) => [
           ...prev,
           {
             role: 'assistant',
             content: `![Generated Image](data:image/png;base64,${result.generated_image_base64})`,
+            processing_ms,
           },
         ])
       } catch (err) {
@@ -160,12 +241,14 @@ export function ChatPage() {
       try {
         const result = await api.generateVideo(text)
         const videoUrl = api.getVideoUrl(result.video_path)
+        const processing_ms = Math.round(performance.now() - t0)
         setMessages((prev) => [
           ...prev,
           {
             role: 'assistant',
             content: `Generated video for: "${text}"`,
             video_url: videoUrl,
+            processing_ms,
           },
         ])
       } catch (err) {
@@ -174,6 +257,7 @@ export function ChatPage() {
     } else if (mode === 'voice') {
       try {
         const result = await api.generateSpeech(text)
+        const processing_ms = Math.round(performance.now() - t0)
         setMessages((prev) => [
           ...prev,
           {
@@ -181,6 +265,7 @@ export function ChatPage() {
             content: `Generated speech (${result.voice})`,
             audio_url: result.audio_url,
             audio_path: result.audio_path,
+            processing_ms,
           },
         ])
       } catch (err) {
@@ -188,7 +273,8 @@ export function ChatPage() {
       }
     } else {
       try {
-        const response = await api.sendQuery(text, selectedPersona)
+        const response = await api.sendQuery(text, selectedPersona, conversationIdRef.current)
+        const processing_ms = Math.round(performance.now() - t0)
         const assistantMsg: ChatMessage = {
           role: 'assistant',
           content: response.answer,
@@ -196,6 +282,7 @@ export function ChatPage() {
           video_frame_context: response.video_frame_context,
           follow_up_text: response.follow_up_text,
           metadata: response.metadata,
+          processing_ms,
         }
         setMessages((prev) => [...prev, assistantMsg])
       } catch (err) {
@@ -205,7 +292,8 @@ export function ChatPage() {
 
     setIsLoading(false)
     isProcessingRef.current = false
-  }, [mode, selectedPersona, addToast])
+    window.dispatchEvent(new Event('conversations-changed'))
+  }, [mode, selectedPersona, addToast, searchParams, setSearchParams])
 
   // Drain the queue one at a time — only starts the next after isLoading goes false
   useEffect(() => {
@@ -276,27 +364,37 @@ export function ChatPage() {
           {/* Welcome screen */}
           {messages.length === 0 && (
             <div className="flex flex-col items-center justify-center py-28 text-center animate-fade-in">
-              <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+              {userName && (
+                <p className="text-sm text-k-yellow font-medium mb-1">
+                  {getGreeting()}, {userName}
+                </p>
+              )}
+              <h1 className="text-3xl font-semibold tracking-tight text-foreground">
                 What can I help with?
               </h1>
               <p className="text-sm text-muted-foreground mt-2 max-w-md">
                 Ask about your documents, images, videos, or search the web.
               </p>
               <div className="flex flex-wrap gap-2 mt-8 justify-center">
-                {[
-                  'What documents do I have?',
-                  'Summarize my files',
-                  'Search for recent news',
-                  'Show me financial data',
-                ].map((suggestion) => (
-                  <button
-                    key={suggestion}
-                    className="px-3.5 py-2 rounded-full border border-border/60 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground hover:border-border transition-all"
-                    onClick={() => setInput(suggestion)}
-                  >
-                    {suggestion}
-                  </button>
-                ))}
+                {WELCOME_CHIPS.map((chip) => {
+                  const Icon = chip.icon
+                  return (
+                    <button
+                      key={chip.label}
+                      className={cn(
+                        'flex items-center gap-2 px-3.5 py-2 rounded-full border text-xs font-medium transition-all',
+                        chip.activeClass ?? 'border-border/60 text-muted-foreground hover:bg-accent hover:text-foreground hover:border-border',
+                      )}
+                      onClick={() => {
+                        if (chip.mode) setMode(chip.mode)
+                        setInput(chip.prompt)
+                      }}
+                    >
+                      <Icon className="h-3.5 w-3.5" />
+                      {chip.label}
+                    </button>
+                  )
+                })}
               </div>
             </div>
           )}
@@ -526,6 +624,21 @@ function SaveToLibraryButton({ audioPath, onSave }: { audioPath: string; onSave:
   )
 }
 
+// ── Thinking Summary (post-response) ────────────────────────────────────────
+
+function ThinkingSummary({ message }: { message: ChatMessage }) {
+  const durationSec = ((message.processing_ms ?? 0) / 1000).toFixed(1)
+
+  return (
+    <div className="mb-1">
+      <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground/50">
+        <Clock className="h-3 w-3" />
+        Thought for {durationSec}s
+      </span>
+    </div>
+  )
+}
+
 // ── Message Component ───────────────────────────────────────────────────────
 
 function MessageBubble({
@@ -617,6 +730,9 @@ function MessageBubble({
 
       {/* Content */}
       <div className="flex-1 min-w-0 space-y-3">
+        {/* Thinking summary (collapsed) */}
+        {message.processing_ms != null && <ThinkingSummary message={message} />}
+
         {/* Main answer */}
         {isAudio ? (
           <div className="space-y-2">
@@ -677,16 +793,21 @@ function MessageBubble({
           </div>
         )}
 
-        {/* Sources (subtle inline) */}
+        {/* Source citation pills */}
         {sources.length > 0 && (
-          <div className="flex items-center gap-3 text-[11px] text-muted-foreground/60">
-            <span>Sources:</span>
+          <div className="flex flex-wrap items-center gap-1.5">
             {sources.map((key) => {
               const config = SOURCE_CONFIG[key]
               const Icon = config.icon
               return (
-                <span key={key} className={cn('inline-flex items-center gap-1', config.className)}>
-                  <Icon className="h-3 w-3" />
+                <span
+                  key={key}
+                  className={cn(
+                    'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium',
+                    config.pillClass,
+                  )}
+                >
+                  <Icon className="h-2.5 w-2.5" />
                   {config.label}
                 </span>
               )
