@@ -428,6 +428,21 @@ function ComputedColumnRow({ col, step }: { col: PipelineColumn; step: number })
               ))}
             </div>
           )}
+          {col.comment && (
+            <div className="text-[10px] text-muted-foreground/70 italic">
+              {col.comment}
+            </div>
+          )}
+          {col.custom_metadata && Object.keys(col.custom_metadata).length > 0 && (
+            <div className="text-[10px] text-muted-foreground/60">
+              <span className="font-medium">Metadata:</span>{' '}
+              {Object.entries(col.custom_metadata).map(([k, v]) => (
+                <span key={k} className="bg-accent px-1.5 py-0.5 rounded mr-1">
+                  {k}={String(v)}
+                </span>
+              ))}
+            </div>
+          )}
           {col.error_count > 0 && (
             <div className="text-xs text-destructive flex items-center gap-1.5">
               <AlertTriangle className="h-3 w-3" />

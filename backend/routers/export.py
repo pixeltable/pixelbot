@@ -180,6 +180,46 @@ def export_parquet(
 
 # ── Preview (first N rows as JSON for the UI) ───────────────────────────────
 
+@router.get("/json_column/{table_path:path}")
+@pxt_retry()
+def export_json_column(
+    table_path: str,
+    column: str = Query(..., description="Column to serialize"),
+    limit: int = Query(default=100, le=5000),
+):
+    """Serialize a complex column to JSON strings using Pixeltable's json.dumps() UDF."""
+    try:
+        tbl = pxt.get_table(table_path)
+    except Exception:
+        raise HTTPException(status_code=404, detail=f"Table not found: {table_path}")
+
+    col_names = tbl.columns()
+    if column not in col_names:
+        raise HTTPException(status_code=400, detail=f"Column '{column}' not in table")
+
+    try:
+        from pixeltable.functions import json as pxt_json
+        col_ref = getattr(tbl, column)
+        rows = list(
+            tbl.select(
+                serialized=pxt_json.dumps(col_ref),
+            )
+            .limit(limit)
+            .collect()
+        )
+        return {
+            "path": table_path,
+            "column": column,
+            "rows": [{"serialized": r.get("serialized")} for r in rows],
+            "count": len(rows),
+        }
+    except ImportError:
+        raise HTTPException(status_code=501, detail="pixeltable.functions.json not available")
+    except Exception as e:
+        logger.error(f"JSON dumps error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/preview/{table_path:path}")
 @pxt_retry()
 def preview_table(

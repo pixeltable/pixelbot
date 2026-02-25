@@ -156,6 +156,11 @@ OPERATIONS_CATALOG = {
          "params": [{"name": "text", "type": "string", "default": "Hello World"},
                     {"name": "font_size", "type": "number", "default": 32, "min": 8, "max": 128},
                     {"name": "position", "type": "string", "default": "bottom"}]},
+        {"id": "crop_video", "label": "Crop Video", "description": "Crop a rectangular region of the video", "category": "transform",
+         "params": [{"name": "top", "type": "number", "default": 0, "min": 0},
+                    {"name": "left", "type": "number", "default": 0, "min": 0},
+                    {"name": "bottom", "type": "number", "default": 480, "min": 1},
+                    {"name": "right", "type": "number", "default": 640, "min": 1}]},
     ],
 }
 
@@ -1641,6 +1646,27 @@ def transform_video(body: TransformRequest):
                 "operation": "overlay_text",
                 "video_url": f"/api/serve_video?path={video_path}",
                 "video_path": video_path,
+            }
+
+        elif body.operation == "crop_video":
+            top = int(body.params.get("top", 0))
+            left = int(body.params.get("left", 0))
+            bottom = int(body.params.get("bottom", 480))
+            right = int(body.params.get("right", 640))
+            rows = match.select(
+                cropped=pxt_video.crop(vid_table.video, top=top, left=left, bottom=bottom, right=right),
+            ).collect()
+            if not rows:
+                raise HTTPException(status_code=404, detail="Video not found")
+            cropped = rows[0].get("cropped")
+            if cropped is None:
+                raise HTTPException(status_code=400, detail="Crop failed — check coordinates against video dimensions")
+            video_path = str(cropped)
+            return {
+                "operation": "crop_video",
+                "video_url": f"/api/serve_video?path={video_path}",
+                "video_path": video_path,
+                "crop": {"top": top, "left": left, "bottom": bottom, "right": right},
             }
 
         elif body.operation == "detect_scenes":

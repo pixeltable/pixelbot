@@ -331,6 +331,91 @@ for v in t.get_versions():
 t.revert()
 print(f"Reverted to version {t.get_versions()[0].version}")`,
   },
+  {
+    label: 'Data Sampling',
+    description: 'Random and stratified sampling with query.sample()',
+    language: 'python',
+    code: `import pixeltable as pxt
+
+t = pxt.get_table("agents.chat_history")
+
+# Random 10% sample (reproducible with seed)
+sample = t.sample(fraction=0.1, seed=42).collect()
+print(f"Sampled {len(sample)} rows")
+
+# Fixed count sample
+five_rows = t.sample(n=5, seed=42).collect()
+
+# Stratified sampling — equal allocation per class
+by_role = t.sample(n_per_stratum=3, stratify_by=t.role, seed=42).collect()
+
+# Combined with filters and projections
+recent_sample = (
+    t.where(t.role == "user")
+     .sample(fraction=0.2, seed=42)
+     .select(t.content, t.timestamp)
+     .collect()
+)`,
+  },
+  {
+    label: 'JSON Serialization',
+    description: 'Serialize complex columns with json.dumps()',
+    language: 'python',
+    code: `import pixeltable as pxt
+from pixeltable.functions import json as pxt_json
+
+t = pxt.get_table("agents.tools")
+
+# Serialize a complex dict/list column to JSON strings
+rows = (
+    t.select(
+        t.prompt,
+        tool_json=pxt_json.dumps(t.tool_output),
+    )
+    .limit(10)
+    .collect()
+)
+for r in rows:
+    print(f"Q: {r['prompt'][:60]}...")
+    print(f"Tools: {r['tool_json'][:120]}...")`,
+  },
+  {
+    label: 'Video Crop',
+    description: 'Crop a rectangular region from a video',
+    language: 'python',
+    code: `import pixeltable as pxt
+from pixeltable.functions.video import crop
+
+videos = pxt.get_table("agents.videos")
+
+# Crop a 640x480 region starting at top=50, left=100
+result = (
+    videos.select(
+        cropped=crop(videos.video, top=50, left=100, bottom=530, right=740),
+    )
+    .limit(1)
+    .collect()
+)
+# result[0]["cropped"] is a path to the cropped video file`,
+  },
+  {
+    label: 'Pagination with offset',
+    description: 'Server-side pagination using limit(n, offset=)',
+    language: 'python',
+    code: `import pixeltable as pxt
+
+t = pxt.get_table("agents.chat_history")
+
+# Page through results 50 at a time
+page_size = 50
+for page in range(3):
+    rows = (
+        t.select(t.role, t.content)
+         .limit(page_size, offset=page * page_size)
+         .collect()
+    )
+    print(f"Page {page + 1}: {len(rows)} rows")`,
+  },
 ]
 
 const MCP_CONFIG = `{

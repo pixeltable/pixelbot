@@ -576,6 +576,20 @@ export async function getPipeline(): Promise<import('@/types').PipelineResponse>
   return request<import('@/types').PipelineResponse>('/db/pipeline')
 }
 
+export async function sampleTable(params: {
+  path: string
+  n?: number | null
+  fraction?: number | null
+  stratify_by?: string | null
+  seed?: number | null
+  limit?: number
+}): Promise<import('@/types').SampleResponse> {
+  return request<import('@/types').SampleResponse>('/db/sample', {
+    method: 'POST',
+    body: JSON.stringify(params),
+  })
+}
+
 // ── Prompt Lab (Experiments) ─────────────────────────────────────────────────
 
 export async function getExperimentModels(): Promise<import('@/types').ExperimentModelInfo[]> {

@@ -25,13 +25,14 @@ import {
   X,
   Merge,
   GitBranch,
+  Shuffle,
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { useToast } from '@/components/ui/toast'
 import * as api from '@/lib/api'
-import type { TableInfo, TableRowsResponse, JoinResult } from '@/types'
+import type { TableInfo, TableRowsResponse, JoinResult, SampleResponse } from '@/types'
 import { PipelineInspector } from '@/components/database/pipeline-inspector'
 
 // ── Grouping logic ──────────────────────────────────────────────────────────
@@ -158,6 +159,8 @@ export function DatabasePage() {
   const [joinType, setJoinType] = useState<'inner' | 'left' | 'cross'>('inner')
   const [joinResult, setJoinResult] = useState<JoinResult | null>(null)
   const [isJoining, setIsJoining] = useState(false)
+  const [sampleData, setSampleData] = useState<SampleResponse | null>(null)
+  const [isSampling, setIsSampling] = useState(false)
 
   const filteredTables = useMemo(() => {
     if (!tableSearch.trim()) return tables
@@ -200,6 +203,25 @@ export function DatabasePage() {
     URL.revokeObjectURL(url)
   }, [rowData, selectedTable, filteredRows, rowFilter, addToast])
 
+  const handleSample = useCallback(async (fraction: number = 0.1) => {
+    if (!selectedTable) return
+    setIsSampling(true)
+    setSampleData(null)
+    try {
+      const result = await api.sampleTable({
+        path: selectedTable.path,
+        fraction,
+        seed: 42,
+        limit: 100,
+      })
+      setSampleData(result)
+      addToast(`Sampled ${result.sample_count} of ${result.total} rows (${Math.round(fraction * 100)}%)`, 'success')
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : 'Sampling failed', 'error')
+    }
+    setIsSampling(false)
+  }, [selectedTable, addToast])
+
   useEffect(() => {
     async function load() {
       try {
@@ -220,6 +242,7 @@ export function DatabasePage() {
       setIsLoadingRows(true)
       setRowData(null)
       setRowFilter('')
+      setSampleData(null)
       try {
         const rows = await api.getTableRows(table.path, 50, 0)
         setRowData(rows)
@@ -504,6 +527,20 @@ export function DatabasePage() {
                   <Download className="h-3 w-3" />
                   CSV
                 </button>
+                <button
+                  className={cn(
+                    'flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1 text-[10px] font-medium shrink-0',
+                    'text-muted-foreground hover:bg-accent hover:text-foreground transition-colors',
+                    sampleData && 'border-k-yellow/40 bg-k-yellow/5 text-k-yellow',
+                    (!rowData || rowData.total === 0) && 'opacity-30 pointer-events-none',
+                  )}
+                  onClick={() => sampleData ? setSampleData(null) : handleSample(0.1)}
+                  disabled={isSampling || !rowData || rowData.total === 0}
+                  title={sampleData ? 'Clear sample — show all rows' : 'Sample 10% of rows (query.sample)'}
+                >
+                  {isSampling ? <Loader2 className="h-3 w-3 animate-spin" /> : <Shuffle className="h-3 w-3" />}
+                  {sampleData ? `Sample (${sampleData.sample_count})` : 'Sample'}
+                </button>
               </div>
 
               {/* Column chips */}
@@ -517,6 +554,7 @@ export function DatabasePage() {
                         ? 'border-amber-500/20 bg-amber-500/5 text-amber-400'
                         : 'border-border bg-muted/30 text-muted-foreground',
                     )}
+                    title={col.comment || undefined}
                   >
                     {col.is_computed ? (
                       <Cpu className="h-2.5 w-2.5" />
@@ -525,6 +563,9 @@ export function DatabasePage() {
                     )}
                     <span className="font-mono font-medium">{col.name}</span>
                     <span className="text-[8px] opacity-60">{col.type}</span>
+                    {col.comment && (
+                      <span className="text-[8px] opacity-40 italic max-w-[120px] truncate">{col.comment}</span>
+                    )}
                   </div>
                 ))}
               </div>
@@ -551,18 +592,44 @@ export function DatabasePage() {
               )}
             </div>
 
+            {/* Sample banner */}
+            {sampleData && (
+              <div className="flex items-center gap-2 px-5 py-1.5 bg-k-yellow/5 border-b border-k-yellow/20 text-[10px]">
+                <Shuffle className="h-3 w-3 text-k-yellow" />
+                <span className="text-k-yellow font-medium">
+                  Sample: {sampleData.sample_count} of {sampleData.total} rows
+                  ({sampleData.params.fraction != null ? `${Math.round(sampleData.params.fraction * 100)}%` : `n=${sampleData.params.n}`}
+                  {sampleData.params.seed != null ? `, seed=${sampleData.params.seed}` : ''})
+                </span>
+                <span className="text-muted-foreground/60">via query.sample()</span>
+                <button
+                  className="ml-auto text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={() => setSampleData(null)}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            )}
+
             {/* Data grid */}
+            {(() => {
+              const displayCols = sampleData ? sampleData.columns : rowData?.columns ?? []
+              const displayRows = sampleData ? sampleData.rows : filteredRows
+              const isEmpty = !sampleData && (!rowData || rowData.rows.length === 0)
+              const isFilterEmpty = !sampleData && filteredRows.length === 0 && rowData && rowData.rows.length > 0
+
+              return (
             <div className="flex-1 overflow-auto">
-              {isLoadingRows ? (
+              {isLoadingRows || isSampling ? (
                 <div className="flex items-center justify-center h-full">
                   <Loader2 className="h-5 w-5 animate-spin text-k-yellow" />
                 </div>
-              ) : !rowData || rowData.rows.length === 0 ? (
+              ) : isEmpty ? (
                 <div className="flex flex-col items-center justify-center h-full gap-2">
                   <Rows3 className="h-8 w-8 text-muted-foreground/15" />
                   <p className="text-xs text-muted-foreground">No rows in this table</p>
                 </div>
-              ) : filteredRows.length === 0 ? (
+              ) : isFilterEmpty ? (
                 <div className="flex flex-col items-center justify-center h-full gap-2">
                   <Search className="h-8 w-8 text-muted-foreground/15" />
                   <p className="text-xs text-muted-foreground">No rows match "{rowFilter}"</p>
@@ -573,7 +640,7 @@ export function DatabasePage() {
                     Clear filter
                   </button>
                 </div>
-              ) : (
+              ) : displayRows.length > 0 ? (
                 <div className="min-w-full">
                   <table className="w-full text-[11px]">
                     <thead className="sticky top-0 bg-card/90 backdrop-blur-sm z-10">
@@ -581,7 +648,7 @@ export function DatabasePage() {
                         <th className="px-3 py-2 text-left font-medium text-muted-foreground/60 text-[9px] w-10">
                           #
                         </th>
-                        {rowData.columns.map((col) => (
+                        {displayCols.map((col) => (
                           <th
                             key={col}
                             className="px-3 py-2 text-left font-medium text-muted-foreground font-mono whitespace-nowrap"
@@ -592,15 +659,15 @@ export function DatabasePage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredRows.map((row, idx) => (
+                      {displayRows.map((row, idx) => (
                         <tr
                           key={idx}
                           className="border-b border-border/30 hover:bg-accent/30 transition-colors"
                         >
                           <td className="px-3 py-1.5 text-muted-foreground/40 tabular-nums">
-                            {rowFilter ? idx + 1 : rowData.offset + idx + 1}
+                            {sampleData || rowFilter ? idx + 1 : (rowData?.offset ?? 0) + idx + 1}
                           </td>
-                          {rowData.columns.map((col) => {
+                          {displayCols.map((col) => {
                             const val = row[col]
                             const displayVal = formatCellValue(val)
                             return (
@@ -618,8 +685,10 @@ export function DatabasePage() {
                     </tbody>
                   </table>
                 </div>
-              )}
+              ) : null}
             </div>
+              )
+            })()}
 
             {/* Pagination footer */}
             {rowData && (rowData.total > rowData.limit || rowFilter) && (

@@ -471,6 +471,22 @@ export interface TableColumn {
   name: string
   type: string
   is_computed: boolean
+  comment?: string
+  custom_metadata?: Record<string, unknown>
+}
+
+export interface SampleResponse {
+  path: string
+  columns: string[]
+  rows: Record<string, unknown>[]
+  sample_count: number
+  total: number
+  params: {
+    n: number | null
+    fraction: number | null
+    stratify_by: string | null
+    seed: number | null
+  }
 }
 
 export interface TableInfo {
@@ -524,6 +540,8 @@ export interface PipelineColumn {
   func_type: 'builtin' | 'custom_udf' | 'query' | 'unknown' | null
   error_count: number
   depends_on?: string[]
+  comment?: string
+  custom_metadata?: Record<string, unknown>
 }
 
 export interface PipelineIndex {

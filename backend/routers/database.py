@@ -41,11 +41,18 @@ def _column_info(tbl) -> list[dict]:
     columns = []
     for name in tbl.columns():
         info = col_meta.get(name, {})
-        columns.append({
+        entry: dict = {
             "name": name,
             "type": info.get("type_", "unknown"),
             "is_computed": info.get("computed_with") is not None,
-        })
+        }
+        comment = info.get("comment")
+        if comment:
+            entry["comment"] = comment
+        custom_meta = info.get("custom_metadata")
+        if custom_meta:
+            entry["custom_metadata"] = custom_meta
+        columns.append(entry)
     return columns
 
 
@@ -102,9 +109,7 @@ def get_table_rows(path: str, limit: int = 50, offset: int = 0):
         total = tbl.count()
         col_names = tbl.columns()
 
-        raw_rows = tbl.select().limit(limit).collect()
-        # Apply offset manually (Pixeltable collect doesn't have skip)
-        # Actually we can use head/tail but let's keep it simple with limit for now
+        raw_rows = tbl.select().limit(limit, offset=offset).collect()
 
         rows = []
         for raw in raw_rows:
@@ -150,6 +155,82 @@ def get_table_schema(path: str):
 
     except Exception as e:
         logger.error(f"Error getting schema for {path}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class SampleRequest(BaseModel):
+    path: str
+    n: int | None = None
+    fraction: float | None = None
+    stratify_by: str | None = None
+    seed: int | None = 42
+    limit: int = 100
+
+
+@router.post("/sample")
+@pxt_retry()
+def sample_table(body: SampleRequest):
+    """Sample rows from a table using Pixeltable's query.sample().
+
+    Supports fixed count (n), percentage (fraction), stratified sampling
+    (stratify_by column), and reproducible seeds.
+    """
+    try:
+        tbl = pxt.get_table(body.path)
+    except Exception:
+        raise HTTPException(status_code=404, detail=f"Table '{body.path}' not found")
+
+    if not body.n and not body.fraction:
+        raise HTTPException(status_code=400, detail="Provide either 'n' or 'fraction'")
+
+    try:
+        total = tbl.count()
+        query = tbl.select()
+
+        sample_kwargs: dict = {}
+        if body.n is not None:
+            sample_kwargs["n"] = min(body.n, total)
+        elif body.fraction is not None:
+            sample_kwargs["fraction"] = max(0.0, min(1.0, body.fraction))
+
+        if body.seed is not None:
+            sample_kwargs["seed"] = body.seed
+
+        if body.stratify_by:
+            col_names = tbl.columns()
+            if body.stratify_by not in col_names:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Column '{body.stratify_by}' not found in {body.path}",
+                )
+            sample_kwargs["stratify_by"] = getattr(tbl, body.stratify_by)
+
+        raw_rows = query.sample(**sample_kwargs).collect()
+
+        col_names = tbl.columns()
+        rows = []
+        for raw in raw_rows:
+            row = {col: _safe_value(raw.get(col)) for col in col_names}
+            rows.append(row)
+
+        return {
+            "path": body.path,
+            "columns": col_names,
+            "rows": rows,
+            "sample_count": len(rows),
+            "total": total,
+            "params": {
+                "n": body.n,
+                "fraction": body.fraction,
+                "stratify_by": body.stratify_by,
+                "seed": body.seed,
+            },
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Sample error for {body.path}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -442,7 +523,7 @@ def get_pipeline():
                     func_name = _extract_func_name(cw_str) if is_computed else None
                     func_type = _classify_func(func_name) if func_name else None
 
-                    col_entry = {
+                    col_entry: dict = {
                         "name": col_name,
                         "type": info.get("type_", "unknown"),
                         "is_computed": is_computed,
@@ -452,6 +533,12 @@ def get_pipeline():
                         "func_name": func_name,
                         "func_type": func_type,
                     }
+                    comment = info.get("comment")
+                    if comment:
+                        col_entry["comment"] = comment
+                    custom_meta = info.get("custom_metadata")
+                    if custom_meta:
+                        col_entry["custom_metadata"] = custom_meta
                     columns.append(col_entry)
                     if is_computed:
                         computed_cols.append(col_name)
