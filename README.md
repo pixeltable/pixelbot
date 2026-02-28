@@ -174,15 +174,6 @@ frontend/src/
 └── types/index.ts          shared interfaces
 ```
 
-## Related Projects
-
-| Project | Description |
-|:--------|:------------|
-| [**Pixeltable**](https://github.com/pixeltable/pixeltable) | The core library — declarative AI data infrastructure |
-| [**Pixelagent**](https://github.com/pixeltable/pixelagent) | Lightweight agent framework with built-in memory |
-| [**Pixelmemory**](https://github.com/pixeltable/pixelmemory) | Persistent memory layer for AI apps |
-| [**MCP Server**](https://github.com/pixeltable/mcp-server-pixeltable-developer) | Model Context Protocol server for Claude, Cursor, AI IDEs |
-
 ## Contributing
 
 Rough edges are expected. If you find a Pixeltable feature that's missing or awkward, open an issue or PR.
