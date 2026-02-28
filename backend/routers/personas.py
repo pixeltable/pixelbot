@@ -7,7 +7,7 @@ import pixeltable as pxt
 
 import config
 import queries
-from models import UserPersonaRow
+from models import UserPersonaRow, MessageResponse, DeleteResponse
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["personas"])
@@ -51,7 +51,7 @@ def get_personas():
 
 # ── Create Persona ────────────────────────────────────────────────────────────
 
-@router.post("/personas", status_code=201)
+@router.post("/personas", status_code=201, response_model=MessageResponse)
 def create_persona(body: PersonaRequest):
     """Create a new persona."""
     user_id = config.DEFAULT_USER_ID
@@ -88,7 +88,7 @@ def create_persona(body: PersonaRequest):
 
 # ── Update Persona ────────────────────────────────────────────────────────────
 
-@router.put("/personas/{persona_name:path}")
+@router.put("/personas/{persona_name:path}", response_model=MessageResponse)
 def update_persona(persona_name: str, body: PersonaUpdateRequest):
     """Update an existing persona."""
     user_id = config.DEFAULT_USER_ID
@@ -122,7 +122,7 @@ def update_persona(persona_name: str, body: PersonaUpdateRequest):
 
 # ── Delete Persona ────────────────────────────────────────────────────────────
 
-@router.delete("/personas/{persona_name:path}")
+@router.delete("/personas/{persona_name:path}", response_model=DeleteResponse)
 def delete_persona(persona_name: str):
     """Delete a persona by name."""
     user_id = config.DEFAULT_USER_ID

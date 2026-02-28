@@ -12,7 +12,7 @@ import pixeltable as pxt
 import config
 from utils import pxt_retry
 import queries
-from models import MemoryBankRow
+from models import MemoryBankRow, DeleteMemoryResponse, MessageResponse
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["memory"])
@@ -67,13 +67,13 @@ def _insert_memory(body: SaveMemoryRequest) -> dict:
     raise HTTPException(status_code=500, detail=str(last_error))
 
 
-@router.post("/memory", status_code=201)
+@router.post("/memory", status_code=201, response_model=MessageResponse)
 def save_memory(body: SaveMemoryRequest):
     """Save a memory item (code or text)."""
     return _insert_memory(body)
 
 
-@router.post("/memory/manual", status_code=201)
+@router.post("/memory/manual", status_code=201, response_model=MessageResponse)
 def add_memory_manual(body: SaveMemoryRequest):
     """Save a manually added memory item (backward-compatible alias)."""
     return _insert_memory(body)
@@ -111,11 +111,6 @@ def get_memory(search: str | None = Query(default=None)):
 
 
 # ── Delete Memory ─────────────────────────────────────────────────────────────
-
-class DeleteMemoryResponse(BaseModel):
-    message: str
-    num_deleted: int
-
 
 @router.delete("/memory/{timestamp_str}", response_model=DeleteMemoryResponse)
 def delete_memory(timestamp_str: str):

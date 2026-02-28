@@ -1,0 +1,28 @@
+[project]
+name = "pixelbot"
+version = "2.0.0"
+description = "Multimodal AI Agent powered by Pixeltable"
+requires-python = ">=3.10"
+dependencies = [
+    # Web Framework
+    "fastapi",
+    "uvicorn[standard]",
+    "python-dotenv",
+    "python-multipart",
+    # AI and ML
+    "pixeltable",
+    "anthropic",
+    "openai",
+    "mistralai",
+    "sentence-transformers",
+    "tiktoken",
+    "spacy",
+    "numpy",
+    "umap-learn",
+    "Pillow",
+    "openpyxl",
+    # Tools & Data
+    "duckduckgo-search",
+    "serpapi",
+    "yfinance",
+]

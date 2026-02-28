@@ -12,6 +12,7 @@ from PIL import Image
 import pixeltable as pxt
 
 from utils import pxt_retry
+from models import UploadResponse, AddUrlResponse, DeleteFileResponse, DeleteAllResponse
 
 import config
 import functions
@@ -130,11 +131,6 @@ def _source_to_filename(source) -> str:
 
 # ── Upload ────────────────────────────────────────────────────────────────────
 
-class UploadResponse(BaseModel):
-    message: str
-    filename: str
-    uuid: str
-
 
 @router.post("/upload", response_model=UploadResponse)
 async def upload_file(file: UploadFile = File(...)):
@@ -244,13 +240,6 @@ class AddUrlRequest(BaseModel):
     url: str
 
 
-class AddUrlResponse(BaseModel):
-    message: str
-    url: str
-    filename: str
-    uuid: str
-
-
 @router.post("/add_url", response_model=AddUrlResponse)
 @pxt_retry()
 def add_url(body: AddUrlRequest):
@@ -306,11 +295,6 @@ def add_url(body: AddUrlRequest):
 
 # ── Delete File ───────────────────────────────────────────────────────────────
 
-class DeleteFileResponse(BaseModel):
-    message: str
-    db_deleted: bool
-    file_deleted: bool
-    uuid: str
 
 
 @router.delete("/delete_file/{file_uuid}/{file_type}", response_model=DeleteFileResponse)
@@ -379,11 +363,6 @@ def delete_file(file_uuid: str, file_type: str):
 
 class DeleteAllRequest(BaseModel):
     type: str
-
-
-class DeleteAllResponse(BaseModel):
-    message: str
-    should_refresh: bool = True
 
 
 @router.post("/delete_all", response_model=DeleteAllResponse)

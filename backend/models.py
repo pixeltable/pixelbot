@@ -131,3 +131,224 @@ class DocumentSummary(BaseModel):
     title: str = Field(description="Inferred document title")
     summary: str = Field(description="2-3 sentence summary of the document")
     key_topics: list[str] = Field(description="3-5 key topics covered")
+
+
+# ── API Response Models ──────────────────────────────────────────────────────
+# Shared response models used by routers. Centralised here so the full API
+# contract is discoverable in one file and reusable across endpoints.
+
+class MessageResponse(BaseModel):
+    message: str
+
+
+class DeleteResponse(BaseModel):
+    message: str
+    num_deleted: int
+
+
+# ── Chat ─────────────────────────────────────────────────────────────────────
+
+class QueryMetadata(BaseModel):
+    timestamp: str
+    has_doc_context: bool
+    has_image_context: bool
+    has_tool_output: bool
+    has_history_context: bool
+    has_memory_context: bool
+    has_chat_memory_context: bool
+
+
+class QueryResponse(BaseModel):
+    answer: str
+    metadata: QueryMetadata
+    image_context: list[dict]
+    video_frame_context: list[dict]
+    follow_up_text: str | None
+
+
+# ── Files ────────────────────────────────────────────────────────────────────
+
+class UploadResponse(BaseModel):
+    message: str
+    filename: str
+    uuid: str
+
+
+class AddUrlResponse(BaseModel):
+    message: str
+    url: str
+    filename: str
+    uuid: str
+
+
+class DeleteFileResponse(BaseModel):
+    message: str
+    db_deleted: bool
+    file_deleted: bool
+    uuid: str
+
+
+class DeleteAllResponse(BaseModel):
+    message: str
+    should_refresh: bool = True
+
+
+# ── History ──────────────────────────────────────────────────────────────────
+
+class ConversationSummary(BaseModel):
+    conversation_id: str
+    title: str
+    created_at: str
+    updated_at: str
+    message_count: int
+
+
+class ChatMessageItem(BaseModel):
+    role: str
+    content: str
+    timestamp: str
+
+
+class ConversationDetail(BaseModel):
+    conversation_id: str
+    messages: list[ChatMessageItem]
+
+
+# ── Images / Generation ──────────────────────────────────────────────────────
+
+class GenerateImageResponse(BaseModel):
+    generated_image_base64: str
+    timestamp: str
+    prompt: str
+    provider: str
+
+
+class SaveToCollectionResponse(BaseModel):
+    message: str
+    uuid: str
+
+
+class GenerateSpeechResponse(BaseModel):
+    audio_url: str
+    audio_path: str
+    timestamp: str
+    voice: str
+
+
+# ── Studio ───────────────────────────────────────────────────────────────────
+
+class SaveImageToCollectionResponse(BaseModel):
+    message: str
+    uuid: str
+    filename: str
+
+
+# ── Memory ───────────────────────────────────────────────────────────────────
+
+class DeleteMemoryResponse(BaseModel):
+    message: str
+    num_deleted: int
+
+
+# ── Experiments ──────────────────────────────────────────────────────────────
+
+class ModelInfo(BaseModel):
+    id: str
+    name: str
+    provider: str
+    available: bool
+
+
+class ExperimentResult(BaseModel):
+    model_id: str
+    model_name: str
+    provider: str
+    response: str | None = None
+    response_time_ms: float = 0.0
+    word_count: int = 0
+    char_count: int = 0
+    error: str | None = None
+
+
+class RunExperimentResponse(BaseModel):
+    experiment_id: str
+    task: str
+    system_prompt: str
+    user_prompt: str
+    temperature: float
+    max_tokens: int
+    results: list[ExperimentResult]
+    timestamp: str | None = None
+
+
+class ExperimentSummary(BaseModel):
+    experiment_id: str
+    task: str
+    user_prompt: str
+    model_ids: list[str]
+    results_count: int
+    timestamp: str | None = None
+
+
+# ── Database ─────────────────────────────────────────────────────────────────
+
+class ColumnInfo(BaseModel):
+    name: str
+    type: str
+    is_computed: bool
+    comment: str | None = None
+    custom_metadata: dict | None = None
+
+
+class TableInfo(BaseModel):
+    path: str
+    display_name: str
+    columns: list[ColumnInfo]
+    row_count: int
+    is_view: bool
+    base_table: str | None = None
+
+
+class TableListResponse(BaseModel):
+    tables: list[TableInfo]
+
+
+class TableRowsResponse(BaseModel):
+    path: str
+    columns: list[str]
+    rows: list[dict]
+    total: int
+    offset: int
+    limit: int
+
+
+class SampleResponse(BaseModel):
+    path: str
+    rows: list[dict]
+    count: int
+    params: dict
+
+
+# ── Export ────────────────────────────────────────────────────────────────────
+
+class ExportTableInfo(BaseModel):
+    path: str
+    columns: list[str]
+    row_count: int
+
+
+class ExportTablesResponse(BaseModel):
+    tables: list[ExportTableInfo]
+
+
+class JsonColumnResponse(BaseModel):
+    path: str
+    column: str
+    rows: list[dict]
+    count: int
+
+
+class PreviewResponse(BaseModel):
+    columns: list[str]
+    rows: list[dict]
+    count: int

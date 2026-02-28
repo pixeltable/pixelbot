@@ -26,6 +26,7 @@ import {
   Clock,
 } from 'lucide-react'
 import { marked } from 'marked'
+import DOMPurify from 'dompurify'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/components/ui/toast'
@@ -41,7 +42,7 @@ marked.setOptions({
 })
 
 function renderMarkdown(text: string): string {
-  return marked.parse(text) as string
+  return DOMPurify.sanitize(marked.parse(text) as string)
 }
 
 function parseFollowUpQuestions(text: string): string[] {

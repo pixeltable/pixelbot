@@ -12,6 +12,9 @@ from pydantic import BaseModel
 
 import config
 from utils import pxt_retry
+from models import (
+    ModelInfo, ExperimentResult, RunExperimentResponse, ExperimentSummary,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/experiments", tags=["experiments"])
@@ -76,43 +79,6 @@ class RunExperimentRequest(BaseModel):
     temperature: float = 0.7
     max_tokens: int = 1024
 
-
-class ExperimentResult(BaseModel):
-    model_id: str
-    model_name: str
-    provider: str
-    response: str | None = None
-    response_time_ms: float = 0.0
-    word_count: int = 0
-    char_count: int = 0
-    error: str | None = None
-
-
-class RunExperimentResponse(BaseModel):
-    experiment_id: str
-    task: str
-    system_prompt: str
-    user_prompt: str
-    temperature: float
-    max_tokens: int
-    timestamp: str
-    results: list[ExperimentResult]
-
-
-class ExperimentSummary(BaseModel):
-    experiment_id: str
-    task: str
-    user_prompt: str
-    model_ids: list[str]
-    results_count: int
-    timestamp: str
-
-
-class ModelInfo(BaseModel):
-    id: str
-    name: str
-    provider: str
-    available: bool
 
 
 # ── Pixeltable Table ─────────────────────────────────────────────────────────

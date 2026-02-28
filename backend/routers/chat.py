@@ -6,7 +6,7 @@ from pydantic import BaseModel
 import pixeltable as pxt
 
 import config
-from models import ToolAgentRow, ChatHistoryRow
+from models import ToolAgentRow, ChatHistoryRow, QueryMetadata, QueryResponse
 from utils import pxt_retry
 
 logger = logging.getLogger(__name__)
@@ -17,24 +17,6 @@ class QueryRequest(BaseModel):
     query: str
     persona_id: str | None = None
     conversation_id: str | None = None
-
-
-class QueryMetadata(BaseModel):
-    timestamp: str
-    has_doc_context: bool
-    has_image_context: bool
-    has_tool_output: bool
-    has_history_context: bool
-    has_memory_context: bool
-    has_chat_memory_context: bool
-
-
-class QueryResponse(BaseModel):
-    answer: str
-    metadata: QueryMetadata
-    image_context: list[dict]
-    video_frame_context: list[dict]
-    follow_up_text: str | None
 
 
 @router.post("/query", response_model=QueryResponse)

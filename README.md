@@ -123,15 +123,16 @@ Every row maps to a Pixeltable feature exercised in this app:
 
 ```bash
 # Install
-cd backend && python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
+cd backend && uv sync && source .venv/bin/activate
+python -m spacy download en_core_web_sm    # required by document splitter
 cd ../frontend && npm install
 
 # Configure — create backend/.env with your API keys
 
 # Run
-cd backend && python setup_pixeltable.py   # first time only
-python main.py                             # :8000
-cd ../frontend && npm run dev              # :5173 → proxies /api to :8000
+cd ../backend && python setup_pixeltable.py   # first time only
+python main.py                                # :8000
+cd ../frontend && npm run dev                 # :5173 → proxies /api to :8000
 ```
 
 **Production:** `cd frontend && npm run build` → `backend/static/`, then `python main.py` serves at `:8000`.

@@ -21,7 +21,7 @@ from pixeltable.functions import image as pxt_image
 from pixeltable.functions import video as pxt_video
 
 import config
-from models import ImageRow, VideoRow
+from models import ImageRow, VideoRow, SaveImageToCollectionResponse
 from utils import encode_image_base64, create_thumbnail_base64
 
 logger = logging.getLogger(__name__)
@@ -1435,13 +1435,8 @@ def detect_objects(body: DetectRequest):
 
 # ── Save Transformed Image ───────────────────────────────────────────────────
 
-class SaveImageResponse(BaseModel):
-    message: str
-    uuid: str
-    filename: str
 
-
-@router.post("/save/image", response_model=SaveImageResponse)
+@router.post("/save/image", response_model=SaveImageToCollectionResponse)
 @pxt_retry()
 def save_transformed_image(body: TransformRequest):
     """Apply transform at full resolution and save as a new image in Pixeltable."""

@@ -47,10 +47,11 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS — allow Vite dev server and production
+import config as app_config
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=app_config.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -76,8 +77,7 @@ def health():
 
 @app.get("/api/user_info")
 def user_info():
-    import config
-    return {"user_name": config.DEFAULT_USER_NAME}
+    return {"user_name": app_config.DEFAULT_USER_NAME}
 
 
 # Serve frontend static build (production)
@@ -106,5 +106,4 @@ if __name__ == "__main__":
         port=8000,
         reload=True,
         reload_excludes=["data/*", "*.log"],
-        loop="asyncio",
     )

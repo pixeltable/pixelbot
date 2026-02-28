@@ -10,6 +10,7 @@ from fastapi.responses import StreamingResponse
 import pixeltable as pxt
 
 from utils import pxt_retry
+from models import ExportTablesResponse, JsonColumnResponse, PreviewResponse
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/export", tags=["export"])
@@ -57,7 +58,7 @@ def _collect_rows(table_path: str, limit: int, columns: list[str] | None) -> tup
 
 # ── List exportable tables ───────────────────────────────────────────────────
 
-@router.get("/tables")
+@router.get("/tables", response_model=ExportTablesResponse)
 @pxt_retry()
 def list_exportable_tables():
     """Return all tables with their column info for the export picker."""
@@ -180,7 +181,7 @@ def export_parquet(
 
 # ── Preview (first N rows as JSON for the UI) ───────────────────────────────
 
-@router.get("/json_column/{table_path:path}")
+@router.get("/json_column/{table_path:path}", response_model=JsonColumnResponse)
 @pxt_retry()
 def export_json_column(
     table_path: str,
@@ -220,7 +221,7 @@ def export_json_column(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/preview/{table_path:path}")
+@router.get("/preview/{table_path:path}", response_model=PreviewResponse)
 @pxt_retry()
 def preview_table(
     table_path: str,

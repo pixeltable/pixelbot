@@ -5,11 +5,11 @@ from datetime import datetime
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
 import pixeltable as pxt
 
 import config
 from utils import pxt_retry
+from models import ConversationSummary, ConversationDetail, ChatMessageItem, DeleteResponse
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["history"])
@@ -17,7 +17,7 @@ router = APIRouter(prefix="/api", tags=["history"])
 
 # ── Conversations ─────────────────────────────────────────────────────────────
 
-@router.get("/conversations")
+@router.get("/conversations", response_model=list[ConversationSummary])
 @pxt_retry()
 def list_conversations():
     """List all conversations, grouped by conversation_id."""
@@ -63,7 +63,7 @@ def list_conversations():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/conversations/{conversation_id}")
+@router.get("/conversations/{conversation_id}", response_model=ConversationDetail)
 @pxt_retry()
 def get_conversation(conversation_id: str):
     """Get all messages for a specific conversation."""
@@ -93,7 +93,7 @@ def get_conversation(conversation_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.delete("/conversations/{conversation_id}")
+@router.delete("/conversations/{conversation_id}", response_model=DeleteResponse)
 @pxt_retry()
 def delete_conversation(conversation_id: str):
     """Delete all messages in a conversation."""
@@ -167,12 +167,7 @@ def get_workflow_detail(timestamp_str: str):
 
 # ── Delete History Entry ──────────────────────────────────────────────────────
 
-class DeleteHistoryResponse(BaseModel):
-    message: str
-    num_deleted: int
-
-
-@router.delete("/delete_history/{timestamp_str:path}", response_model=DeleteHistoryResponse)
+@router.delete("/delete_history/{timestamp_str:path}", response_model=DeleteResponse)
 def delete_history_entry(timestamp_str: str):
     """Delete a specific history entry by timestamp."""
     user_id = config.DEFAULT_USER_ID
@@ -187,7 +182,7 @@ def delete_history_entry(timestamp_str: str):
         if status.num_rows == 0:
             raise HTTPException(status_code=404, detail="No entry found with that timestamp")
 
-        return DeleteHistoryResponse(message="History entry deleted", num_deleted=status.num_rows)
+        return DeleteResponse(message="History entry deleted", num_deleted=status.num_rows)
 
     except HTTPException:
         raise

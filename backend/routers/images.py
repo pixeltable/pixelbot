@@ -12,7 +12,11 @@ from PIL import Image
 import pixeltable as pxt
 
 import config
-from models import AudioRow, ImageGenRow, ImageRow, VideoGenRow, VideoRow
+from models import (
+    AudioRow, ImageGenRow, ImageRow, VideoGenRow, VideoRow,
+    GenerateImageResponse, SaveToCollectionResponse, GenerateSpeechResponse,
+    DeleteResponse,
+)
 from utils import encode_image_base64, create_thumbnail_base64, pxt_retry
 
 logger = logging.getLogger(__name__)
@@ -40,11 +44,6 @@ class GenerateImageRequest(BaseModel):
     prompt: str
 
 
-class GenerateImageResponse(BaseModel):
-    generated_image_base64: str
-    timestamp: str
-    prompt: str
-    provider: str
 
 
 @router.post("/generate_image", response_model=GenerateImageResponse)
@@ -160,11 +159,6 @@ def get_image_history():
 
 
 # ── Delete Generated Image ───────────────────────────────────────────────────
-
-class DeleteResponse(BaseModel):
-    message: str
-    num_deleted: int
-
 
 @router.delete("/delete_image/{timestamp_str}", response_model=DeleteResponse)
 @pxt_retry()
@@ -342,11 +336,6 @@ class SaveToCollectionRequest(BaseModel):
     timestamp: str
 
 
-class SaveToCollectionResponse(BaseModel):
-    message: str
-    uuid: str
-
-
 @router.post("/save_generated_image", response_model=SaveToCollectionResponse)
 @pxt_retry()
 def save_generated_image_to_collection(body: SaveToCollectionRequest):
@@ -462,11 +451,6 @@ class GenerateSpeechRequest(BaseModel):
     voice: str = "alloy"
 
 
-class GenerateSpeechResponse(BaseModel):
-    audio_url: str
-    audio_path: str
-    timestamp: str
-    voice: str
 
 
 @router.post("/generate_speech", response_model=GenerateSpeechResponse)
