@@ -590,3 +590,37 @@ export interface PipelineResponse {
   edges: PipelineEdge[]
 }
 
+// Integrations
+export interface IntegrationInfo {
+  id: string
+  name: string
+  description: string
+  configured: boolean
+  env_var: string
+}
+
+export interface IntegrationsStatusResponse {
+  integrations: IntegrationInfo[]
+  total_configured: number
+}
+
+export interface TestNotificationResponse {
+  service: string
+  status: string
+  result: string
+  timestamp: string
+}
+
+export interface NotificationLogEntry {
+  service: string
+  message: string
+  status: string
+  response_code: number
+  timestamp: string
+}
+
+export interface NotificationLogResponse {
+  notifications: NotificationLogEntry[]
+  total: number
+}
+

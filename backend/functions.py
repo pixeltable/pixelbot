@@ -174,6 +174,57 @@ def fetch_financial_data(ticker: str) -> str:
         return f"Error fetching financial data for {ticker}: {str(e)}."
 
 
+# ── Notification UDFs ─────────────────────────────────────────────────────────
+# Each wraps a simple HTTP POST. Registered as agent tools so the chat agent
+# can send notifications on the user's behalf ("summarize my docs and post to Slack").
+
+
+@pxt.udf
+def send_slack_message(message: str) -> str:
+    """Send a message to a configured Slack channel via incoming webhook."""
+    webhook_url = os.environ.get("SLACK_WEBHOOK_URL", "")
+    if not webhook_url:
+        return "Error: SLACK_WEBHOOK_URL not configured."
+    try:
+        resp = requests.post(webhook_url, json={"text": message}, timeout=10)
+        if resp.status_code == 200:
+            return f"Slack message sent successfully."
+        return f"Slack error ({resp.status_code}): {resp.text}"
+    except requests.RequestException as e:
+        return f"Slack request failed: {e}"
+
+
+@pxt.udf
+def send_discord_message(message: str) -> str:
+    """Send a message to a configured Discord channel via webhook."""
+    webhook_url = os.environ.get("DISCORD_WEBHOOK_URL", "")
+    if not webhook_url:
+        return "Error: DISCORD_WEBHOOK_URL not configured."
+    try:
+        resp = requests.post(webhook_url, json={"content": message}, timeout=10)
+        if resp.status_code in (200, 204):
+            return f"Discord message sent successfully."
+        return f"Discord error ({resp.status_code}): {resp.text}"
+    except requests.RequestException as e:
+        return f"Discord request failed: {e}"
+
+
+@pxt.udf
+def send_webhook(message: str, url: str = "") -> str:
+    """POST a JSON payload to any webhook URL. Connects to n8n, Zapier, Make, or custom endpoints."""
+    target_url = url or os.environ.get("WEBHOOK_URL", "")
+    if not target_url:
+        return "Error: No webhook URL provided and WEBHOOK_URL not configured."
+    try:
+        payload = {"text": message, "source": "pixelbot", "timestamp": datetime.utcnow().isoformat()}
+        resp = requests.post(target_url, json=payload, timeout=10)
+        if resp.status_code < 300:
+            return f"Webhook delivered ({resp.status_code})."
+        return f"Webhook error ({resp.status_code}): {resp.text}"
+    except requests.RequestException as e:
+        return f"Webhook request failed: {e}"
+
+
 @pxt.udf
 def extract_document_text(doc: pxt.Document) -> Optional[str]:
     """Extract full text from a document file, truncated for LLM summarization."""
@@ -251,6 +302,24 @@ def extract_document_text(doc: pxt.Document) -> Optional[str]:
 
     except Exception as e:
         return f"[Error extracting text: {str(e)}]"
+
+
+@pxt.udf
+def build_tool_selection_messages(
+    prompt: str,
+    history_context: Optional[List[Dict[str, Any]]] = None,
+) -> List[Dict[str, Any]]:
+    """Build the messages array for the tool-selection LLM call, including
+    recent chat history so the model knows what 'that' or 'it' refers to."""
+    msgs: List[Dict[str, Any]] = []
+    if history_context:
+        for item in reversed(history_context):
+            role = item.get("role")
+            content = item.get("content")
+            if role and content:
+                msgs.append({"role": role, "content": content})
+    msgs.append({"role": "user", "content": prompt})
+    return msgs
 
 
 @pxt.udf

@@ -450,12 +450,31 @@ prompt_experiments = pxt.create_table(
     if_exists="ignore",
 )
 
+# ── Notifications (integration activity log) ─────────────────────────────────
+
+notifications = pxt.create_table(
+    "agents.notifications",
+    {
+        "service": pxt.String,
+        "destination": pxt.String,
+        "message": pxt.String,
+        "status": pxt.String,
+        "response_code": pxt.Int,
+        "timestamp": pxt.Timestamp,
+        "user_id": pxt.String,
+    },
+    if_exists="ignore",
+)
+
 # ── Agent Workflow ────────────────────────────────────────────────────────────
 
 tools = pxt.tools(
     functions.get_latest_news,
     functions.fetch_financial_data,
     functions.search_news,
+    functions.send_slack_message,
+    functions.send_discord_message,
+    functions.send_webhook,
     search_video_transcripts,
     search_audio_transcripts,
 )
@@ -474,13 +493,28 @@ tool_agent = pxt.create_table(
     if_exists="ignore",
 )
 
+# Step 0: Fetch recent chat history so the tool-selection call has conversational context
+# (e.g. the user says "send that to Slack" — Claude needs to know what "that" was).
+tool_agent.add_computed_column(
+    history_context=get_recent_chat_history(tool_agent.user_id),
+    if_exists="replace",
+)
+
+# Step 0.5: Build messages array with history + current prompt
+tool_agent.add_computed_column(
+    tool_selection_messages=functions.build_tool_selection_messages(
+        tool_agent.prompt, tool_agent.history_context,
+    ),
+    if_exists="replace",
+)
+
 # Step 1: Initial LLM reasoning (tool selection)
 # Note: Only include non-nullable params in model_kwargs.
 # The Anthropic API rejects None values for optional params like top_k, top_p, stop_sequences.
 tool_agent.add_computed_column(
     initial_response=messages(
         model=config.CLAUDE_MODEL_ID,
-        messages=[{"role": "user", "content": tool_agent.prompt}],
+        messages=tool_agent.tool_selection_messages,
         tools=tools,
         tool_choice=tools.choice(required=True),
         max_tokens=tool_agent.max_tokens,
@@ -502,8 +536,7 @@ tool_agent.add_computed_column(video_frame_context=search_video_frames(tool_agen
 tool_agent.add_computed_column(memory_context=search_memory(tool_agent.prompt, tool_agent.user_id), if_exists="ignore")
 tool_agent.add_computed_column(chat_memory_context=search_chat_history(tool_agent.prompt, tool_agent.user_id), if_exists="ignore")
 
-# Step 4: Recent chat history
-tool_agent.add_computed_column(history_context=get_recent_chat_history(tool_agent.user_id), if_exists="ignore")
+# Step 4: (history_context already computed in step 0)
 
 # Step 5: Assemble multimodal context
 tool_agent.add_computed_column(

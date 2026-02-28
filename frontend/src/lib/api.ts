@@ -622,6 +622,23 @@ export async function deleteExperiment(experimentId: string): Promise<{ message:
   return request<{ message: string }>(`/experiments/${experimentId}`, { method: 'DELETE' })
 }
 
+// ── Integrations ────────────────────────────────────────────────────────────
+
+export async function getIntegrationsStatus(): Promise<import('@/types').IntegrationsStatusResponse> {
+  return request<import('@/types').IntegrationsStatusResponse>('/integrations/status')
+}
+
+export async function testNotification(service: string, message: string): Promise<import('@/types').TestNotificationResponse> {
+  return request<import('@/types').TestNotificationResponse>('/integrations/test', {
+    method: 'POST',
+    body: JSON.stringify({ service, message }),
+  })
+}
+
+export async function getNotificationLog(limit = 50): Promise<import('@/types').NotificationLogResponse> {
+  return request<import('@/types').NotificationLogResponse>(`/integrations/log?limit=${limit}`)
+}
+
 // ── Health ───────────────────────────────────────────────────────────────────
 
 export async function healthCheck(): Promise<{ status: string }> {

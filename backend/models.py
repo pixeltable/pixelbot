@@ -352,3 +352,54 @@ class PreviewResponse(BaseModel):
     columns: list[str]
     rows: list[dict]
     count: int
+
+
+# ── Integrations ─────────────────────────────────────────────────────────────
+
+class NotificationRow(BaseModel):
+    """Row model for the agents.notifications table."""
+    service: str
+    destination: str
+    message: str
+    status: str
+    response_code: int
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    user_id: str = config.DEFAULT_USER_ID
+
+
+class IntegrationInfo(BaseModel):
+    id: str
+    name: str
+    description: str
+    configured: bool
+    env_var: str
+
+
+class IntegrationsStatusResponse(BaseModel):
+    integrations: list[IntegrationInfo]
+    total_configured: int
+
+
+class TestNotificationRequest(BaseModel):
+    service: str
+    message: str = "Test notification from Pixelbot"
+
+
+class TestNotificationResponse(BaseModel):
+    service: str
+    status: str
+    result: str
+    timestamp: str
+
+
+class NotificationLogEntry(BaseModel):
+    service: str
+    message: str
+    status: str
+    response_code: int
+    timestamp: str
+
+
+class NotificationLogResponse(BaseModel):
+    notifications: list[NotificationLogEntry]
+    total: int

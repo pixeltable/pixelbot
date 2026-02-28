@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 
 import pixeltable as pxt
 
-from routers import chat, files, history, memory, images, personas, studio, database, experiments, export
+from routers import chat, files, history, memory, images, personas, studio, database, experiments, export, integrations
 
 load_dotenv(override=True)
 
@@ -68,6 +68,7 @@ app.include_router(studio.router)
 app.include_router(database.router)
 app.include_router(experiments.router)
 app.include_router(export.router)
+app.include_router(integrations.router)
 
 
 @app.get("/api/health")

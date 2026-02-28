@@ -49,6 +49,32 @@ ALLOWED_EXTENSIONS = {
 DEFAULT_USER_ID = "local_user"
 DEFAULT_USER_NAME = "Pierre"
 
+# --- Integrations (webhook URLs for notification UDFs) ---
+SLACK_WEBHOOK_URL = os.getenv("SLACK_WEBHOOK_URL", "")
+DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL", "")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL", "")
+
+INTEGRATIONS = {
+    "slack": {
+        "name": "Slack",
+        "env_var": "SLACK_WEBHOOK_URL",
+        "configured": bool(os.getenv("SLACK_WEBHOOK_URL", "")),
+        "description": "Send messages to a Slack channel via incoming webhook",
+    },
+    "discord": {
+        "name": "Discord",
+        "env_var": "DISCORD_WEBHOOK_URL",
+        "configured": bool(os.getenv("DISCORD_WEBHOOK_URL", "")),
+        "description": "Send messages to a Discord channel via webhook",
+    },
+    "webhook": {
+        "name": "Generic Webhook",
+        "env_var": "WEBHOOK_URL",
+        "configured": bool(os.getenv("WEBHOOK_URL", "")),
+        "description": "POST JSON to any URL — connects to n8n, Zapier, Make, or custom endpoints",
+    },
+}
+
 # --- CORS ---
 CORS_ORIGINS: list[str] = [
     origin.strip()

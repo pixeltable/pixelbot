@@ -14,6 +14,7 @@ import {
   FlaskConical,
   Code2,
   SquarePen,
+  Plug,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -35,6 +36,7 @@ const NAV_GROUPS: NavGroup[] = [
       { to: '/images', icon: ImageIcon, label: 'Media Library' },
       { to: '/studio', icon: Wand2, label: 'Studio' },
       { to: '/experiments', icon: FlaskConical, label: 'Prompt Lab' },
+      { to: '/integrations', icon: Plug, label: 'Integrations' },
     ],
   },
   {
