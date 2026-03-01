@@ -85,19 +85,19 @@ All FastAPI endpoints use `def`, not `async def`. Pixeltable operations are sync
 
 Run once to initialize or reset the schema. Uses `drop_dir("agents", force=True)` for a clean slate, then creates everything idempotently. The schema defines:
 
-1. **Document pipeline** — table → `DocumentSplitter` view → sentence-transformer embedding → auto-summarization via Gemini structured output
-2. **Image pipeline** — table → thumbnail computed column → CLIP embedding index
-3. **Video pipeline** — table → `FrameIterator` view (keyframes + CLIP) → audio extraction → Whisper transcription → `StringSplitter` view → embedding index
-4. **Audio pipeline** — table → `AudioSplitter` → Whisper transcription → `StringSplitter` → embedding index
-5. **Chat history** — table with embedding index for memory retrieval
-6. **Memory bank** — user-managed knowledge base with embedding search
+1. **Document pipeline** — table → `DocumentSplitter` view → Gemini embedding → auto-summarization via Gemini structured output
+2. **Image pipeline** — table → thumbnail → CLIP visual embedding index → Gemini captioner (table-as-UDF)
+3. **Video pipeline** — table → `FrameIterator` view (keyframes + CLIP) → audio extraction → Whisper transcription → `StringSplitter` view → Gemini embedding
+4. **Audio pipeline** — table → `AudioSplitter` → Whisper transcription → `StringSplitter` → Gemini embedding
+5. **Chat history** — table with Gemini embedding index for memory retrieval
+6. **Memory bank** — user-managed knowledge base with Gemini embedding search
 7. **Personas** — customizable agent behavior profiles
-8. **Image generation** — provider-switchable (Gemini Imagen / OpenAI DALL-E)
+8. **Image generation** — Gemini Imagen
 9. **Video generation** — Gemini Veo
 10. **Speech generation** — OpenAI TTS
 11. **CSV registry** — tracks user-uploaded tabular data
 12. **Prompt experiments** — multi-model comparison workspace
-13. **Agent pipeline** — 11 chained computed columns on `agents.tools`
+13. **Agent pipeline** — 11 chained computed columns on `agents.tools` (all Gemini)
 
 ### Agent pipeline as computed columns
 
@@ -111,15 +111,15 @@ Every `table.insert()` goes through a validated Pydantic model from `models.py`.
 
 ### Structured LLM outputs
 
-`FollowUpResponse` and `DocumentSummary` in `models.py` define the JSON shape forced by Gemini's `response_schema`. The LLM returns validated, parseable JSON instead of free-form text.
+`FollowUpResponse` and `DocumentSummary` in `models.py` define the JSON shapes enforced by Gemini's `response_schema`. The LLM returns validated, parseable JSON instead of free-form text. Gemini's `response_mime_type: "application/json"` + `response_schema` is the native way to get structured output.
 
 ### `@pxt_retry` for production resilience
 
 Every router function that touches Pixeltable is wrapped with `@pxt_retry(max_attempts=3, delay=0.5, backoff=2.0)` from `utils.py`. This retries on transient connection errors (psycopg `INTRANS`, closed connections, assertion guards) that occur under concurrent load.
 
-### `model_kwargs` must exclude `None` values
+### Gemini-first LLM strategy
 
-The Anthropic API rejects `None` for optional params like `top_k`, `top_p`, `stop_sequences`. When building `model_kwargs` for `messages()`, only include non-nullable values.
+All LLM calls use `gemini.generate_content()` and `gemini.generate_embedding()`. Only exceptions: Whisper (transcription), TTS (speech), CLIP (visual embeddings). Claude/Mistral/OpenAI models are still available in the Prompt Lab for multi-model comparison, but the agent pipeline is all-Gemini. Message format uses `role: "user"/"model"` with `parts: [{text: "..."}]`.
 
 ### Single-user local mode
 
@@ -144,13 +144,14 @@ Operational knowledge for working with Pixeltable in this codebase:
 - **Server-side pagination**: `query.limit(n, offset=)` for proper page skipping (not client-side slicing).
 - **Data sampling**: `query.sample(n=, fraction=, stratify_by=, seed=)` for random or stratified subsets.
 - **Cross-table joins**: `table1.join(table2, on=col1 == col2, how='inner'|'left'|'cross')`.
-- **Views + Iterators**: `DocumentSplitter` (separators `"page, sentence"`), `FrameIterator` (`keyframes_only=True`), `AudioSplitter` (`chunk_duration_sec=`) for data transformation.
+- **Views + Iterators**: `DocumentSplitter` (separators `"page, sentence"`), `FrameIterator` (`keyframes_only=True`), `AudioSplitter` (`duration=`) for data transformation.
 - **Video UDFs**: `pixeltable.functions.video` — `get_metadata`, `get_duration`, `extract_frame`, `clip`, `overlay_text`, `crop`, `scene_detect_content`.
 - **Column metadata**: `get_metadata()['columns'][name]` may include `comment` (string) and `custom_metadata` (dict).
 - **JSON `dumps()` UDF**: `pixeltable.functions.json.dumps(column)` serializes complex columns to JSON strings.
 - **Reve AI**: `pixeltable.functions.reve` — `create(prompt)`, `edit(image, instruction)`, `remix(prompt, images)`. Requires `REVE_API_KEY`.
 - **Notification UDFs**: `send_slack_message`, `send_discord_message`, `send_webhook` in `functions.py`. Each wraps a simple `requests.post()` (~10 lines). Registered as agent tools so the chat agent can send notifications autonomously. Activity logged to `agents.notifications` table. Configure via `SLACK_WEBHOOK_URL`, `DISCORD_WEBHOOK_URL`, `WEBHOOK_URL` in `.env`.
-- **Event loop**: `main.py` omits `loop=` in `uvicorn.run()` so uvicorn auto-detects `uvloop` when available.
+- **Table-as-UDF**: `agents.captioner` encapsulates a Gemini vision pipeline (image → caption text). `pxt.udf(captioner, return_value=captioner.caption)` converts the table into a callable function. Used as a computed column on `agents.images` so every uploaded image gets auto-captioned. Captions are included in `search_images` results.
+- **Event loop**: `main.py` omits `loop=` in `uvicorn.run()` so uvicorn auto-detects uvloop. Pixeltable ≥ 0.5.19 has native uvloop compatibility (#1164).
 
 ## Key Patterns to Follow
 
@@ -177,6 +178,21 @@ table.add_computed_column(
 1. Define the function with `@pxt.udf` or `@pxt.query`
 2. Add it to the `pxt.tools()` call in `setup_pixeltable.py`
 3. Re-run `python setup_pixeltable.py`
+
+**Using a table as a UDF (pipeline reuse):**
+```python
+# 1. Create a table with computed columns (the pipeline)
+agent_table = pxt.create_table('ns.agent', {'input': pxt.String})
+agent_table.add_computed_column(step1=llm_call(agent_table.input))
+agent_table.add_computed_column(result=extract(agent_table.step1))
+
+# 2. Wrap as a callable UDF
+agent_fn = pxt.udf(agent_table, return_value=agent_table.result)
+
+# 3. Use in any other table's computed column
+other_table.add_computed_column(output=agent_fn(input=other_table.col))
+```
+See `agents.captioner` in `setup_pixeltable.py` for a working example.
 
 **Table introspection:**
 Use `tbl.get_metadata()` — returns columns (with `type_`, `computed_with`, `is_stored`), `is_view`, `base`, `indices`, `version`. Do NOT call `tbl.column_types()` (Pixeltable's `__getattr__` intercepts it as a column name).

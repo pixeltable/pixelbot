@@ -10,11 +10,12 @@ dependencies = [
     "python-dotenv",
     "python-multipart",
     # AI and ML
-    "pixeltable",
+    "pixeltable>=0.5.19",
     "anthropic",
     "openai",
     "mistralai",
     "sentence-transformers",
+    "timm",
     "tiktoken",
     "spacy",
     "numpy",

@@ -31,9 +31,9 @@ THUMB_SIZE = (128, 128)
 def get_generation_config():
     """Return the active image/video generation providers and model IDs."""
     return {
-        "image_provider": config.IMAGE_GEN_PROVIDER,
-        "image_model": config.IMAGEN_MODEL_ID if config.IMAGE_GEN_PROVIDER == "gemini" else config.DALLE_MODEL_ID,
-        "video_provider": config.VIDEO_GEN_PROVIDER,
+        "image_provider": "gemini",
+        "image_model": config.IMAGEN_MODEL_ID,
+        "video_provider": "gemini",
         "video_model": config.VEO_MODEL_ID,
     }
 
@@ -84,7 +84,7 @@ def generate_image(body: GenerateImageRequest):
             generated_image_base64=img_base64,
             timestamp=current_timestamp.isoformat(),
             prompt=body.prompt,
-            provider=config.IMAGE_GEN_PROVIDER,
+            provider="gemini",
         )
 
     except HTTPException:
@@ -148,7 +148,7 @@ def get_image_history():
                     "timestamp": timestamp.strftime("%Y-%m-%d %H:%M:%S.%f") if timestamp else None,
                     "thumbnail_image": thumbnail_b64,
                     "full_image": full_image_b64,
-                    "provider": config.IMAGE_GEN_PROVIDER,
+                    "provider": "gemini",
                 })
 
         return image_history

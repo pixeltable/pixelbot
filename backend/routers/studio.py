@@ -15,7 +15,8 @@ from PIL import Image, ImageFilter, ImageEnhance, ImageOps
 from pydantic import BaseModel
 from umap import UMAP
 import pixeltable as pxt
-from pixeltable.functions.huggingface import sentence_transformer, clip
+from pixeltable.functions.huggingface import clip
+from pixeltable.functions import gemini
 from utils import pxt_retry
 from pixeltable.functions import image as pxt_image
 from pixeltable.functions import video as pxt_video
@@ -874,7 +875,7 @@ def _normalize_thumbnail(raw_thumb) -> str | None:
 
 # ── Embedding Visualization ──────────────────────────────────────────────────
 
-EMBED_TEXT_FN = sentence_transformer.using(model_id=config.EMBEDDING_MODEL_ID)
+EMBED_TEXT_FN = gemini.generate_embedding.using(model=config.GEMINI_EMBEDDING_MODEL_ID)
 EMBED_CLIP_FN = clip.using(model_id=config.CLIP_MODEL_ID)
 
 

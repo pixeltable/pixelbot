@@ -73,12 +73,23 @@ def test_notification(req: TestNotificationRequest):
     )
 
 
+_NOTIFICATION_TOOLS = ("send_slack_message", "send_discord_message", "send_webhook")
+_TOOL_SERVICE_MAP = {
+    "send_slack_message": "slack",
+    "send_discord_message": "discord",
+    "send_webhook": "webhook",
+}
+
+
 @router.get("/log", response_model=NotificationLogResponse)
 @pxt_retry()
 def get_notification_log(limit: int = 50):
-    """Get recent notification activity."""
+    """Get recent notification activity from both manual tests and agent tool calls."""
+    entries: list[NotificationLogEntry] = []
+
+    # Source 1: explicit notification table (manual test sends)
     notifications = pxt.get_table("agents.notifications")
-    rows = (
+    manual_rows = (
         notifications
         .select(
             notifications.service,
@@ -92,19 +103,49 @@ def get_notification_log(limit: int = 50):
         .collect()
         .to_pandas()
     )
-
-    entries = [
-        NotificationLogEntry(
+    for _, r in manual_rows.iterrows():
+        entries.append(NotificationLogEntry(
             service=r["service"],
             message=r["message"],
             status=r["status"],
             response_code=int(r["response_code"]) if r["response_code"] is not None else 0,
             timestamp=r["timestamp"].isoformat() if hasattr(r["timestamp"], "isoformat") else str(r["timestamp"]),
-        )
-        for _, r in rows.iterrows()
-    ]
+            source="manual",
+        ))
 
-    return NotificationLogResponse(notifications=entries, total=notifications.count())
+    # Source 2: agent tool calls that invoked notification tools
+    try:
+        tools_table = pxt.get_table("agents.tools")
+        agent_rows = (
+            tools_table
+            .select(tools_table.prompt, tools_table.tool_output, tools_table.timestamp)
+            .order_by(tools_table.timestamp, asc=False)
+            .limit(limit)
+            .collect()
+        )
+        for r in agent_rows:
+            tool_output = r.get("tool_output")
+            if not isinstance(tool_output, dict):
+                continue
+            for tool_name in _NOTIFICATION_TOOLS:
+                result = tool_output.get(tool_name)
+                if not result:
+                    continue
+                result_str = result[0] if isinstance(result, list) and result else str(result)
+                is_success = "successfully" in result_str.lower() or "delivered" in result_str.lower()
+                entries.append(NotificationLogEntry(
+                    service=_TOOL_SERVICE_MAP[tool_name],
+                    message=r.get("prompt", "")[:200],
+                    status="success" if is_success else "error",
+                    response_code=200 if is_success else 0,
+                    timestamp=r["timestamp"].isoformat() if hasattr(r["timestamp"], "isoformat") else str(r["timestamp"]),
+                    source="agent",
+                ))
+    except Exception as e:
+        logger.warning("Could not read agent tool calls: %s", e)
+
+    entries.sort(key=lambda e: e.timestamp, reverse=True)
+    return NotificationLogResponse(notifications=entries[:limit], total=len(entries))
 
 
 def _send_notification(service: str, message: str) -> str | None:

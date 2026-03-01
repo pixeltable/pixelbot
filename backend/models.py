@@ -398,6 +398,7 @@ class NotificationLogEntry(BaseModel):
     status: str
     response_code: int
     timestamp: str
+    source: str = "manual"  # "manual" (test button) or "agent" (tool call)
 
 
 class NotificationLogResponse(BaseModel):

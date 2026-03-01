@@ -216,7 +216,7 @@ export function IntegrationsPage() {
                 {
                   step: '3',
                   title: 'Activity Log',
-                  desc: 'Every notification is logged to the agents.notifications Pixeltable table.',
+                  desc: 'Merges manual test sends and agent tool calls into a unified timeline.',
                 },
               ].map(item => (
                 <div
@@ -281,6 +281,14 @@ export function IntegrationsPage() {
                           ) : (
                             <XCircle className="h-3 w-3 text-red-400" />
                           )}
+                          <span className={cn(
+                            'rounded px-1 py-0.5 text-[9px] font-medium uppercase tracking-wide',
+                            entry.source === 'agent'
+                              ? 'bg-violet-500/10 text-violet-400'
+                              : 'bg-blue-500/10 text-blue-400',
+                          )}>
+                            {entry.source === 'agent' ? 'agent' : 'test'}
+                          </span>
                           <span className="ml-auto text-[10px] text-muted-foreground/40">
                             {formatTimestamp(entry.timestamp)}
                           </span>

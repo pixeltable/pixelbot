@@ -617,6 +617,7 @@ export interface NotificationLogEntry {
   status: string
   response_code: number
   timestamp: string
+  source: 'manual' | 'agent'
 }
 
 export interface NotificationLogResponse {

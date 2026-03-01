@@ -1,5 +1,12 @@
 # setup_pixeltable.py - Schema definition for the Pixeltable Agent
 # Run this script once to initialize (or reset) the database schema.
+#
+# LLM strategy:
+#   - Gemini (gemini-2.5-flash)         → all generation, reasoning, structured output
+#   - Gemini (gemini-embedding-001)     → all text embeddings
+#   - CLIP (openai/clip-vit-base-patch32) → video frame visual embeddings only
+#   - OpenAI Whisper                    → audio/video transcription
+#   - OpenAI TTS                        → speech generation
 from dotenv import load_dotenv
 
 import config
@@ -7,8 +14,8 @@ import pixeltable as pxt
 
 from pixeltable.functions import image as pxt_image
 from pixeltable.functions.video import extract_audio
-from pixeltable.functions.anthropic import invoke_tools, messages
-from pixeltable.functions.huggingface import sentence_transformer, clip
+from pixeltable.functions.gemini import invoke_tools
+from pixeltable.functions.huggingface import clip
 from pixeltable.functions import openai
 from pixeltable.functions import gemini
 from pixeltable.iterators import (
@@ -49,9 +56,11 @@ chunks = pxt.create_view(
     if_exists="ignore",
 )
 
+gemini_embed = gemini.generate_embedding.using(model=config.GEMINI_EMBEDDING_MODEL_ID)
+
 chunks.add_embedding_index(
     "text",
-    string_embed=sentence_transformer.using(model_id=config.EMBEDDING_MODEL_ID),
+    string_embed=gemini_embed,
     if_exists="ignore",
 )
 
@@ -64,7 +73,7 @@ documents.add_computed_column(
 documents.add_computed_column(
     summary_response=gemini.generate_content(
         contents=documents.document_text,
-        model=config.SUMMARIZATION_MODEL_ID,
+        model=config.GEMINI_MODEL_ID,
         config={
             "system_instruction": "Analyze the document text and return a structured summary.",
             "response_mime_type": "application/json",
@@ -78,7 +87,7 @@ documents.add_computed_column(
     summary=documents.summary_response.candidates[0].content.parts[0].text,
     if_exists="ignore",
 )
-print(f"Document auto-summarization: Gemini ({config.SUMMARIZATION_MODEL_ID})")
+print(f"Document auto-summarization: Gemini ({config.GEMINI_MODEL_ID})")
 
 
 @pxt.query
@@ -106,11 +115,45 @@ images.add_computed_column(
     if_exists="ignore",
 )
 
+# CLIP visual embedding — direct pixel-level similarity search
 images.add_embedding_index(
     "image",
     embedding=clip.using(model_id=config.CLIP_MODEL_ID),
     if_exists="ignore",
 )
+
+
+# ── Image Captioner (table-as-UDF pattern) ────────────────────────────────────
+# A separate table encapsulates a multi-step vision pipeline.  pxt.udf() turns
+# it into a callable function that other tables can use as a computed column.
+
+captioner = pxt.create_table(
+    "agents.captioner",
+    {"image": pxt.Image},
+    if_exists="ignore",
+)
+
+# Gemini multimodal: pass the PIL Image column directly
+captioner.add_computed_column(
+    response=gemini.generate_content(
+        contents=[captioner.image, "Describe this image in one detailed sentence."],
+        model=config.GEMINI_MODEL_ID,
+    ),
+    if_exists="ignore",
+)
+
+captioner.add_computed_column(
+    caption=captioner.response.candidates[0].content.parts[0].text,
+    if_exists="ignore",
+)
+
+auto_caption = pxt.udf(captioner, return_value=captioner.caption)
+
+images.add_computed_column(
+    caption=auto_caption(image=images.image),
+    if_exists="ignore",
+)
+print(f"Image auto-captioning: Gemini ({config.GEMINI_MODEL_ID}) via table-as-UDF")
 
 
 @pxt.query
@@ -119,7 +162,11 @@ def search_images(query_text: str, user_id: str):
     return (
         images.where((images.user_id == user_id) & (sim > 0.25))
         .order_by(sim, asc=False)
-        .select(encoded_image=pxt_image.b64_encode(pxt_image.resize(images.image, size=(224, 224)), "png"), sim=sim)
+        .select(
+            encoded_image=pxt_image.b64_encode(pxt_image.resize(images.image, size=(224, 224)), "png"),
+            sim=sim,
+            caption=images.caption,
+        )
         .limit(5)
     )
 
@@ -169,7 +216,7 @@ videos.add_computed_column(audio=extract_audio(videos.video, format="mp3"), if_e
 video_audio_chunks_view = pxt.create_view(
     "agents.video_audio_chunks",
     videos,
-    iterator=AudioSplitter.create(audio=videos.audio, chunk_duration_sec=30.0),
+    iterator=AudioSplitter.create(audio=videos.audio, duration=30.0),
     if_exists="ignore",
 )
 
@@ -185,10 +232,8 @@ video_transcript_sentences_view = pxt.create_view(
     if_exists="ignore",
 )
 
-sentence_embed_model = sentence_transformer.using(model_id=config.EMBEDDING_MODEL_ID)
-
 video_transcript_sentences_view.add_embedding_index(
-    column="text", string_embed=sentence_embed_model, if_exists="ignore"
+    column="text", string_embed=gemini_embed, if_exists="ignore"
 )
 
 
@@ -215,7 +260,7 @@ audios = pxt.create_table(
 audio_chunks_view = pxt.create_view(
     "agents.audio_chunks",
     audios,
-    iterator=AudioSplitter.create(audio=audios.audio, chunk_duration_sec=60.0),
+    iterator=AudioSplitter.create(audio=audios.audio, duration=60.0),
     if_exists="ignore",
 )
 
@@ -232,7 +277,7 @@ audio_transcript_sentences_view = pxt.create_view(
 )
 
 audio_transcript_sentences_view.add_embedding_index(
-    column="text", string_embed=sentence_embed_model, if_exists="ignore"
+    column="text", string_embed=gemini_embed, if_exists="ignore"
 )
 
 
@@ -263,7 +308,7 @@ memory_bank = pxt.create_table(
     if_exists="ignore",
 )
 
-memory_bank.add_embedding_index(column="content", string_embed=sentence_embed_model, if_exists="ignore")
+memory_bank.add_embedding_index(column="content", string_embed=gemini_embed, if_exists="ignore")
 
 
 @pxt.query
@@ -300,7 +345,7 @@ chat_history = pxt.create_table(
     if_exists="ignore",
 )
 
-chat_history.add_embedding_index(column="content", string_embed=sentence_embed_model, if_exists="ignore")
+chat_history.add_embedding_index(column="content", string_embed=gemini_embed, if_exists="ignore")
 
 
 @pxt.query
@@ -339,7 +384,7 @@ user_personas = pxt.create_table(
     if_exists="ignore",
 )
 
-# ── Image Generation (provider-switchable) ───────────────────────────────────
+# ── Image Generation (Gemini Imagen) ──────────────────────────────────────────
 
 image_gen_tasks = pxt.create_table(
     "agents.image_generation_tasks",
@@ -347,25 +392,14 @@ image_gen_tasks = pxt.create_table(
     if_exists="ignore",
 )
 
-if config.IMAGE_GEN_PROVIDER == "gemini":
-    image_gen_tasks.add_computed_column(
-        generated_image=gemini.generate_images(
-            prompt=image_gen_tasks.prompt,
-            model=config.IMAGEN_MODEL_ID,
-        ),
-        if_exists="ignore",
-    )
-    print(f"Image generation: Gemini Imagen ({config.IMAGEN_MODEL_ID})")
-else:
-    image_gen_tasks.add_computed_column(
-        generated_image=openai.image_generations(
-            prompt=image_gen_tasks.prompt,
-            model=config.DALLE_MODEL_ID,
-            model_kwargs={"size": "1024x1024"},
-        ),
-        if_exists="ignore",
-    )
-    print(f"Image generation: OpenAI DALL-E ({config.DALLE_MODEL_ID})")
+image_gen_tasks.add_computed_column(
+    generated_image=gemini.generate_images(
+        prompt=image_gen_tasks.prompt,
+        model=config.IMAGEN_MODEL_ID,
+    ),
+    if_exists="ignore",
+)
+print(f"Image generation: Gemini Imagen ({config.IMAGEN_MODEL_ID})")
 
 THUMB_SIZE_GEN = (128, 128)
 image_gen_tasks.add_computed_column(
@@ -509,24 +543,20 @@ tool_agent.add_computed_column(
 )
 
 # Step 1: Initial LLM reasoning (tool selection)
-# Note: Only include non-nullable params in model_kwargs.
-# The Anthropic API rejects None values for optional params like top_k, top_p, stop_sequences.
 tool_agent.add_computed_column(
-    initial_response=messages(
-        model=config.CLAUDE_MODEL_ID,
-        messages=tool_agent.tool_selection_messages,
+    initial_response=gemini.generate_content(
+        contents=tool_agent.tool_selection_messages,
+        model=config.GEMINI_MODEL_ID,
         tools=tools,
-        tool_choice=tools.choice(required=True),
-        max_tokens=tool_agent.max_tokens,
-        model_kwargs={
-            "system": tool_agent.initial_system_prompt,
+        config={
+            "system_instruction": tool_agent.initial_system_prompt,
             "temperature": tool_agent.temperature,
         },
     ),
     if_exists="replace",
 )
 
-# Step 2: Tool execution
+# Step 2: Tool execution — invoke_tools is imported from gemini
 tool_agent.add_computed_column(tool_output=invoke_tools(tools, tool_agent.initial_response), if_exists="replace")
 
 # Step 3: Context retrieval
@@ -557,12 +587,11 @@ tool_agent.add_computed_column(
 
 # Step 7: Final LLM reasoning (answer generation)
 tool_agent.add_computed_column(
-    final_response=messages(
-        model=config.CLAUDE_MODEL_ID,
-        messages=tool_agent.final_prompt_messages,
-        max_tokens=tool_agent.max_tokens,
-        model_kwargs={
-            "system": tool_agent.final_system_prompt,
+    final_response=gemini.generate_content(
+        contents=tool_agent.final_prompt_messages,
+        model=config.GEMINI_MODEL_ID,
+        config={
+            "system_instruction": tool_agent.final_system_prompt,
             "temperature": tool_agent.temperature,
         },
     ),
@@ -570,7 +599,10 @@ tool_agent.add_computed_column(
 )
 
 # Step 8: Extract answer text
-tool_agent.add_computed_column(answer=tool_agent.final_response.content[0].text, if_exists="replace")
+tool_agent.add_computed_column(
+    answer=tool_agent.final_response.candidates[0].content.parts[0].text,
+    if_exists="replace",
+)
 
 # Step 9: Follow-up question prompt
 tool_agent.add_computed_column(
@@ -578,11 +610,11 @@ tool_agent.add_computed_column(
     if_exists="replace",
 )
 
-# Step 10: Generate follow-up suggestions (Gemini — Pydantic-enforced structured output)
+# Step 10: Generate follow-up suggestions (Gemini — structured JSON output)
 tool_agent.add_computed_column(
     follow_up_raw_response=gemini.generate_content(
         contents=tool_agent.follow_up_input_message,
-        model=config.SUMMARIZATION_MODEL_ID,
+        model=config.GEMINI_MODEL_ID,
         config={
             "system_instruction": "Generate exactly 3 relevant follow-up questions based on the conversation.",
             "response_mime_type": "application/json",

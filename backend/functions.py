@@ -309,16 +309,18 @@ def build_tool_selection_messages(
     prompt: str,
     history_context: Optional[List[Dict[str, Any]]] = None,
 ) -> List[Dict[str, Any]]:
-    """Build the messages array for the tool-selection LLM call, including
-    recent chat history so the model knows what 'that' or 'it' refers to."""
+    """Build the messages array for the tool-selection LLM call (Gemini format).
+    Includes recent chat history so the model knows what 'that' or 'it' refers to."""
     msgs: List[Dict[str, Any]] = []
     if history_context:
         for item in reversed(history_context):
             role = item.get("role")
             content = item.get("content")
             if role and content:
-                msgs.append({"role": role, "content": content})
-    msgs.append({"role": "user", "content": prompt})
+                # Gemini uses "model" instead of "assistant"
+                gemini_role = "model" if role == "assistant" else role
+                msgs.append({"role": gemini_role, "parts": [{"text": content}]})
+    msgs.append({"role": "user", "parts": [{"text": prompt}]})
     return msgs
 
 
@@ -403,7 +405,11 @@ def assemble_final_messages(
     image_context: Optional[List[Dict[str, Any]]] = None,
     video_frame_context: Optional[List[Dict[str, Any]]] = None,
 ) -> List[Dict[str, Any]]:
-    """Construct the final list of messages for the LLM, incorporating all context types."""
+    """Construct the final list of messages for Gemini, incorporating all context types.
+
+    Gemini format: role is "user"/"model", content is a list of parts
+    ({"text": "..."} or {"inline_data": {"mime_type": ..., "data": base64}}).
+    """
     messages = []
 
     if history_context:
@@ -411,9 +417,10 @@ def assemble_final_messages(
             role = item.get("role")
             content = item.get("content")
             if role and content:
-                messages.append({"role": role, "content": content})
+                gemini_role = "model" if role == "assistant" else role
+                messages.append({"role": gemini_role, "parts": [{"text": content}]})
 
-    final_user_content = []
+    final_parts: List[Dict[str, Any]] = []
 
     if image_context:
         for item in image_context:
@@ -423,76 +430,33 @@ def assemble_final_messages(
                     image_data = image_data.decode("utf-8")
                 elif not isinstance(image_data, str):
                     continue
-                final_user_content.append({
-                    "type": "image",
-                    "source": {
-                        "type": "base64",
-                        "media_type": "image/png",
-                        "data": image_data,
-                    },
+                final_parts.append({
+                    "inline_data": {"mime_type": "image/png", "data": image_data},
                 })
 
     if video_frame_context:
         for item in video_frame_context:
-            if isinstance(item, dict) and "encoded_video_frame" in item:
-                video_frame_data = item["encoded_video_frame"]
-                if isinstance(video_frame_data, bytes):
-                    video_frame_data = video_frame_data.decode("utf-8")
-                elif not isinstance(video_frame_data, str):
-                    continue
-                final_user_content.append({
-                    "type": "video_frame",
-                    "source": {
-                        "type": "base64",
-                        "media_type": "image/png",
-                        "data": video_frame_data,
-                    },
-                })
+            # search_video_frames returns "encoded_frame" key
+            frame_data = None
+            if isinstance(item, dict):
+                frame_data = item.get("encoded_frame") or item.get("encoded_video_frame")
+            if frame_data is None:
+                continue
+            if isinstance(frame_data, bytes):
+                frame_data = frame_data.decode("utf-8")
+            elif not isinstance(frame_data, str):
+                continue
+            final_parts.append({
+                "inline_data": {"mime_type": "image/png", "data": frame_data},
+            })
 
-    final_user_content.append({
-        "type": "text",
-        "text": multimodal_context_text,
-    })
-
-    messages.append({"role": "user", "content": final_user_content})
+    final_parts.append({"text": multimodal_context_text})
+    messages.append({"role": "user", "parts": final_parts})
     return messages
 
 
 @pxt.udf
 def assemble_follow_up_prompt(original_prompt: str, answer_text: str) -> str:
-    """Construct the formatted prompt string for the follow-up question LLM."""
-    follow_up_system_prompt_template = """You are an expert assistant tasked with generating **exactly 3** relevant and concise follow-up questions based on an original user query and the provided answer. Focus *only* on the content provided.
-
-**Instructions:**
-1.  Read the <ORIGINAL_PROMPT_START> and <ANSWER_TEXT_START> sections carefully.
-2.  Generate 3 distinct questions that logically follow from the information presented.
-3.  The questions should encourage deeper exploration of the topic discussed.
-4.  **Output ONLY the 3 questions**, one per line. Do NOT include numbering, bullet points, or any other text.
-
-**Example:**
-
-<ORIGINAL_PROMPT_START>
-What are the main benefits of using Pixeltable for AI workflows?
-</ORIGINAL_PROMPT_END>
-
-<ANSWER_TEXT_START>
-Pixeltable simplifies AI workflows by providing automated data orchestration, native multimodal support (text, images, video, audio), a declarative interface, and integrations with LLMs and ML models. It handles complex tasks like data versioning, incremental computation, and vector indexing automatically.
-</ANSWER_TEXT_END>
-
-How does Pixeltable handle data versioning specifically?
-Can you elaborate on the declarative interface of Pixeltable?
-What specific LLMs and ML models does Pixeltable integrate with?
-
-**Now, generate questions for the following input:**
-
-<ORIGINAL_PROMPT_START>
-{original_prompt}
-</ORIGINAL_PROMPT_END>
-
-<ANSWER_TEXT_START>
-{answer_text}
-</ANSWER_TEXT_END>
-"""
-    return follow_up_system_prompt_template.format(
-        original_prompt=original_prompt, answer_text=answer_text
-    )
+    """Construct the user content for the follow-up question LLM call.
+    The system instruction lives in the Gemini config; this is just the user turn."""
+    return f"Question: {original_prompt}\n\nAnswer: {answer_text}"

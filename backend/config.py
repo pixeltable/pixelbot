@@ -5,19 +5,19 @@ import os
 APP_NAMESPACE = "agents"
 
 # --- LLM & Model IDs ---
-EMBEDDING_MODEL_ID = os.getenv("EMBEDDING_MODEL", "intfloat/multilingual-e5-large-instruct")
+# Primary LLM — all generation, reasoning, and structured output
+GEMINI_MODEL_ID = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+# Text embeddings (document chunks, memory, chat history)
+GEMINI_EMBEDDING_MODEL_ID = os.getenv("GEMINI_EMBEDDING_MODEL", "gemini-embedding-001")
+# Visual embeddings for video frames (no Gemini equivalent yet)
 CLIP_MODEL_ID = os.getenv("CLIP_MODEL", "openai/clip-vit-base-patch32")
+# Audio transcription (OpenAI Whisper — Gemini audio handling not yet in pxt)
 WHISPER_MODEL_ID = os.getenv("WHISPER_MODEL", "whisper-1")
+# Kept for Prompt Lab multi-model comparison
 CLAUDE_MODEL_ID = os.getenv("CLAUDE_MODEL", "claude-sonnet-4-20250514")
 MISTRAL_MODEL_ID = os.getenv("MISTRAL_MODEL", "mistral-small-latest")
-SUMMARIZATION_MODEL_ID = os.getenv("SUMMARIZATION_MODEL", "gemini-2.5-flash")
 
-# --- Generation Providers ("openai" | "gemini") ---
-IMAGE_GEN_PROVIDER = os.getenv("IMAGE_GEN_PROVIDER", "gemini")
-VIDEO_GEN_PROVIDER = os.getenv("VIDEO_GEN_PROVIDER", "gemini")
-
-# Provider-specific model IDs
-DALLE_MODEL_ID = os.getenv("DALLE_MODEL", "dall-e-3")
+# --- Generation Model IDs (all Gemini) ---
 IMAGEN_MODEL_ID = os.getenv("IMAGEN_MODEL", "imagen-4.0-generate-001")
 VEO_MODEL_ID = os.getenv("VEO_MODEL", "veo-3.0-generate-001")
 
