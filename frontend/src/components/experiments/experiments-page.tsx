@@ -32,15 +32,15 @@ import type {
   ExperimentSummary,
 } from '@/types'
 
-const PROVIDER_STYLES: Record<string, { color: string; bg: string; border: string; text: string }> = {
-  anthropic: { color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/30', text: 'text-amber-300' },
-  google: { color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/30', text: 'text-blue-300' },
-  mistral: { color: 'text-cyan-400', bg: 'bg-cyan-500/10', border: 'border-cyan-500/30', text: 'text-cyan-300' },
-  openai: { color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/30', text: 'text-emerald-300' },
+const PROVIDER_LABELS: Record<string, string> = {
+  anthropic: 'Anthropic',
+  google: 'Google',
+  mistral: 'Mistral',
+  openai: 'OpenAI',
 }
 
-function getProviderStyle(provider: string) {
-  return PROVIDER_STYLES[provider] ?? PROVIDER_STYLES.openai
+function getProviderLabel(provider: string) {
+  return PROVIDER_LABELS[provider] ?? provider
 }
 
 export function ExperimentsPage() {
@@ -198,8 +198,8 @@ export function ExperimentsPage() {
         {/* Header */}
         <div className="px-5 pt-5 pb-4 border-b border-border/40">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-500/15">
-              <FlaskConical className="h-4 w-4 text-violet-400" />
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-k-yellow/10">
+              <FlaskConical className="h-4 w-4 text-k-yellow" />
             </div>
             <div>
               <h1 className="text-[15px] font-semibold text-foreground">Prompt Lab</h1>
@@ -255,7 +255,6 @@ export function ExperimentsPage() {
             </label>
             <div className="space-y-1">
               {availableModels.map((model) => {
-                const style = getProviderStyle(model.provider)
                 const isSelected = selectedModels.includes(model.id)
                 const isEditing = editingModelId === model.id
                 const hasOverride = !!modelOverrides[model.id]
@@ -266,7 +265,7 @@ export function ExperimentsPage() {
                         'flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left transition-all',
                         'border',
                         isSelected
-                          ? `${style.bg} ${style.border}`
+                          ? 'border-k-yellow/30 bg-k-yellow/5'
                           : 'border-transparent hover:bg-accent/30',
                         !model.available && 'opacity-40 cursor-not-allowed',
                       )}
@@ -276,7 +275,7 @@ export function ExperimentsPage() {
                       <div
                         className={cn(
                           'h-3.5 w-3.5 rounded border-2 shrink-0 transition-colors',
-                          isSelected ? `${style.border} bg-current` : 'border-muted-foreground/30',
+                          isSelected ? 'border-k-yellow bg-k-yellow' : 'border-muted-foreground/30',
                         )}
                       >
                         {isSelected && (
@@ -284,7 +283,7 @@ export function ExperimentsPage() {
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <span className={cn('text-[12px] font-medium', isSelected ? style.text : 'text-foreground')}>
+                        <span className={cn('text-[12px] font-medium', isSelected ? 'text-foreground' : 'text-foreground/80')}>
                           {model.name}
                         </span>
                         {hasOverride && (
@@ -293,12 +292,9 @@ export function ExperimentsPage() {
                           </span>
                         )}
                       </div>
-                      <Badge
-                        variant="secondary"
-                        className={cn('text-[9px] px-1.5 py-0', style.color)}
-                      >
-                        {model.provider}
-                      </Badge>
+                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                        {getProviderLabel(model.provider)}
+                      </span>
                       {!model.available && (
                         <span className="text-[9px] text-muted-foreground/50">no key</span>
                       )}
@@ -371,7 +367,7 @@ export function ExperimentsPage() {
                       <option value="openai">OpenAI</option>
                     </select>
                     <button
-                      className="h-6 rounded bg-violet-600 px-2.5 text-[10px] font-medium text-white hover:bg-violet-500 disabled:opacity-40"
+                      className="h-6 rounded bg-k-yellow px-2.5 text-[10px] font-medium text-primary-foreground hover:bg-k-yellow-hover disabled:opacity-40"
                       disabled={!customModelId.trim()}
                       onClick={() => {
                         if (!customModelId.trim()) return
@@ -450,7 +446,7 @@ export function ExperimentsPage() {
           <button
             className={cn(
               'flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-[13px] font-semibold transition-all',
-              'bg-violet-600 text-white hover:bg-violet-500 active:bg-violet-700',
+              'bg-k-yellow text-primary-foreground hover:bg-k-yellow-hover active:bg-k-yellow-hover',
               'disabled:opacity-50 disabled:cursor-not-allowed',
             )}
             onClick={handleRun}
@@ -487,7 +483,7 @@ export function ExperimentsPage() {
             <Sparkles className="h-3.5 w-3.5" />
             Results
             {rightTab === 'results' && (
-              <span className="absolute bottom-0 left-4 right-4 h-[2px] bg-violet-500 rounded-full" />
+              <span className="absolute bottom-0 left-4 right-4 h-[2px] bg-k-yellow rounded-full" />
             )}
           </button>
           <button
@@ -507,7 +503,7 @@ export function ExperimentsPage() {
               </Badge>
             )}
             {rightTab === 'history' && (
-              <span className="absolute bottom-0 left-4 right-4 h-[2px] bg-violet-500 rounded-full" />
+              <span className="absolute bottom-0 left-4 right-4 h-[2px] bg-k-yellow rounded-full" />
             )}
           </button>
         </div>
@@ -520,25 +516,24 @@ export function ExperimentsPage() {
               {isRunning && !currentRun && (
                 <div className="p-6 space-y-4">
                   <div className="flex items-center gap-2.5 mb-6">
-                    <Sparkles className="h-4 w-4 text-violet-400 animate-pulse" />
+                    <Sparkles className="h-4 w-4 text-k-yellow animate-pulse" />
                     <h2 className="text-[14px] font-semibold text-foreground">Running experiment...</h2>
                   </div>
                   {selectedModels.map((modelId) => {
                     const model = availableModels.find((m) => m.id === modelId)
-                    const style = getProviderStyle(model?.provider ?? '')
                     return (
                       <div
                         key={modelId}
-                        className={cn('rounded-xl border p-5 animate-pulse', style.border, style.bg)}
+                        className="rounded-xl border border-border/40 bg-card/30 p-5 animate-pulse"
                       >
                         <div className="flex items-center gap-2.5 mb-3">
-                          <Loader2 className={cn('h-3.5 w-3.5 animate-spin', style.color)} />
-                          <span className={cn('text-[13px] font-semibold', style.text)}>
+                          <Loader2 className="h-3.5 w-3.5 animate-spin text-k-yellow" />
+                          <span className="text-[13px] font-semibold text-foreground">
                             {model?.name ?? modelId}
                           </span>
-                          <Badge variant="secondary" className={cn('text-[9px]', style.color)}>
-                            {model?.provider}
-                          </Badge>
+                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                            {getProviderLabel(model?.provider ?? '')}
+                          </span>
                         </div>
                         <div className="space-y-2">
                           <div className="h-3 rounded bg-foreground/5 w-full" />
@@ -556,7 +551,7 @@ export function ExperimentsPage() {
                 <div className="p-6 space-y-4">
                   <div className="flex items-center gap-3 mb-2">
                     <div className="flex items-center gap-2">
-                      <FlaskConical className="h-4 w-4 text-violet-400" />
+                      <FlaskConical className="h-4 w-4 text-k-yellow" />
                       <h2 className="text-[14px] font-semibold text-foreground">{currentRun.task}</h2>
                     </div>
                     <Badge variant="outline" className="text-[9px] px-2 py-0 font-mono">
@@ -605,8 +600,8 @@ export function ExperimentsPage() {
                 <div className="flex items-center justify-center h-full">
                   <div className="text-center max-w-md">
                     <div className="flex justify-center mb-4">
-                      <div className="h-16 w-16 rounded-2xl bg-violet-500/10 flex items-center justify-center">
-                        <FlaskConical className="h-8 w-8 text-violet-400/60" />
+                      <div className="h-16 w-16 rounded-2xl bg-k-yellow/10 flex items-center justify-center">
+                        <FlaskConical className="h-8 w-8 text-k-yellow/60" />
                       </div>
                     </div>
                     <h3 className="text-[15px] font-semibold text-foreground mb-2">
@@ -618,18 +613,14 @@ export function ExperimentsPage() {
                       with Pixeltable's automatic versioning.
                     </p>
                     <div className="flex flex-wrap justify-center gap-2">
-                      {availableModels.filter((m) => m.available).map((m) => {
-                        const style = getProviderStyle(m.provider)
-                        return (
-                          <Badge
-                            key={m.id}
-                            variant="secondary"
-                            className={cn('text-[10px]', style.color)}
-                          >
-                            {m.name}
-                          </Badge>
-                        )
-                      })}
+                      {availableModels.filter((m) => m.available).map((m) => (
+                        <span
+                          key={m.id}
+                          className="text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground"
+                        >
+                          {m.name}
+                        </span>
+                      ))}
                     </div>
                   </div>
                 </div>
@@ -658,7 +649,7 @@ export function ExperimentsPage() {
                       key={exp.experiment_id}
                       className={cn(
                         'px-5 py-4 flex items-center gap-3 hover:bg-accent/30 transition-colors cursor-pointer group',
-                        currentRun?.experiment_id === exp.experiment_id && 'bg-violet-500/5 border-l-2 border-l-violet-500',
+                        currentRun?.experiment_id === exp.experiment_id && 'bg-k-yellow/5 border-l-2 border-l-k-yellow',
                       )}
                       onClick={() => handleLoadExperiment(exp.experiment_id)}
                     >
@@ -677,15 +668,13 @@ export function ExperimentsPage() {
                         <div className="flex items-center gap-2">
                           {exp.model_ids.map((mid) => {
                             const model = availableModels.find((m) => m.id === mid)
-                            const style = getProviderStyle(model?.provider ?? '')
                             return (
-                              <Badge
+                              <span
                                 key={mid}
-                                variant="secondary"
-                                className={cn('text-[8px] px-1.5 py-0', style.color)}
+                                className="text-[8px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground"
                               >
                                 {model?.name ?? mid}
-                              </Badge>
+                              </span>
                             )
                           })}
                           <span className="text-[10px] text-muted-foreground/40 ml-auto flex items-center gap-1">
@@ -729,20 +718,19 @@ function ResultCard({
   copiedId: string | null
   onCopy: (text: string, modelId: string) => void
 }) {
-  const style = getProviderStyle(result.provider)
   const isFastest = result.response_time_ms > 0 && result.response_time_ms === fastestTime
 
   if (result.error) {
     return (
-      <div className={cn('rounded-xl border p-5', 'border-destructive/30 bg-destructive/5')}>
+      <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-5">
         <div className="flex items-center gap-2.5 mb-3">
           <AlertCircle className="h-3.5 w-3.5 text-destructive" />
-          <span className={cn('text-[13px] font-semibold', style.text)}>
+          <span className="text-[13px] font-semibold text-foreground">
             {result.model_name}
           </span>
-          <Badge variant="secondary" className={cn('text-[9px]', style.color)}>
-            {result.provider}
-          </Badge>
+          <span className="text-[9px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+            {getProviderLabel(result.provider)}
+          </span>
         </div>
         <p className="text-[12px] text-destructive/80 font-mono">{result.error}</p>
       </div>
@@ -750,15 +738,15 @@ function ResultCard({
   }
 
   return (
-    <div className={cn('rounded-xl border p-5 transition-all', style.border, 'bg-card/40 hover:bg-card/60')}>
+    <div className="rounded-xl border border-border/40 bg-card/40 hover:bg-card/60 p-5 transition-all">
       {/* Header */}
       <div className="flex items-center gap-2.5 mb-3">
-        <span className={cn('text-[13px] font-semibold', style.text)}>
+        <span className="text-[13px] font-semibold text-foreground">
           {result.model_name}
         </span>
-        <Badge variant="secondary" className={cn('text-[9px]', style.color)}>
-          {result.provider}
-        </Badge>
+        <span className="text-[9px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+          {getProviderLabel(result.provider)}
+        </span>
         <div className="flex-1" />
         <button
           className="text-muted-foreground/40 hover:text-foreground transition-colors"
@@ -784,14 +772,14 @@ function ResultCard({
           icon={Clock}
           label={formatTime(result.response_time_ms)}
           highlight={isFastest}
-          highlightColor="text-emerald-400"
+          highlightColor="text-k-yellow"
         />
         <MetricBadge icon={Type} label={`${result.word_count} words`} />
         <MetricBadge icon={Hash} label={`${result.char_count} chars`} />
         {isFastest && (
-          <Badge variant="secondary" className="text-[9px] text-emerald-400 bg-emerald-500/10 border-emerald-500/20">
+          <span className="text-[9px] px-1.5 py-0.5 rounded bg-k-yellow/10 text-k-yellow font-medium">
             Fastest
-          </Badge>
+          </span>
         )}
       </div>
     </div>
@@ -817,17 +805,16 @@ function ComparisonBar({ results }: { results: ExperimentResult[] }) {
       <div className="space-y-2 mb-4">
         <span className="text-[10px] text-muted-foreground/60">Response Time</span>
         {validResults.map((r) => {
-          const style = getProviderStyle(r.provider)
           const pct = maxTime > 0 ? (r.response_time_ms / maxTime) * 100 : 0
           return (
             <div key={`time-${r.model_id}`} className="flex items-center gap-2">
-              <span className={cn('text-[10px] font-medium w-28 shrink-0 truncate', style.text)}>
+              <span className="text-[10px] font-medium w-28 shrink-0 truncate text-foreground/80">
                 {r.model_name}
               </span>
               <div className="flex-1 h-2 rounded-full bg-foreground/5 overflow-hidden">
                 <div
-                  className={cn('h-full rounded-full transition-all', style.bg)}
-                  style={{ width: `${pct}%`, backgroundColor: `hsl(var(--${r.provider === 'anthropic' ? 'amber' : r.provider === 'google' ? 'blue' : r.provider === 'mistral' ? 'cyan' : 'emerald'}-400) / 0.6)` }}
+                  className="h-full rounded-full bg-k-yellow/60 transition-all"
+                  style={{ width: `${pct}%` }}
                 />
               </div>
               <span className="text-[9px] font-mono text-muted-foreground w-16 text-right shrink-0">
@@ -842,16 +829,15 @@ function ComparisonBar({ results }: { results: ExperimentResult[] }) {
       <div className="space-y-2">
         <span className="text-[10px] text-muted-foreground/60">Word Count</span>
         {validResults.map((r) => {
-          const style = getProviderStyle(r.provider)
           const pct = maxWords > 0 ? (r.word_count / maxWords) * 100 : 0
           return (
             <div key={`words-${r.model_id}`} className="flex items-center gap-2">
-              <span className={cn('text-[10px] font-medium w-28 shrink-0 truncate', style.text)}>
+              <span className="text-[10px] font-medium w-28 shrink-0 truncate text-foreground/80">
                 {r.model_name}
               </span>
               <div className="flex-1 h-2 rounded-full bg-foreground/5 overflow-hidden">
                 <div
-                  className={cn('h-full rounded-full transition-all', style.bg)}
+                  className="h-full rounded-full bg-foreground/20 transition-all"
                   style={{ width: `${pct}%` }}
                 />
               </div>
