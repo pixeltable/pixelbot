@@ -876,7 +876,14 @@ def _normalize_thumbnail(raw_thumb) -> str | None:
 # ── Embedding Visualization ──────────────────────────────────────────────────
 
 EMBED_TEXT_FN = gemini.generate_embedding.using(model=config.GEMINI_EMBEDDING_MODEL_ID)
-EMBED_CLIP_FN = clip.using(model_id=config.CLIP_MODEL_ID)
+_embed_clip_fn = None
+
+
+def _get_embed_clip_fn():
+    global _embed_clip_fn
+    if _embed_clip_fn is None:
+        _embed_clip_fn = clip.using(model_id=config.CLIP_MODEL_ID)
+    return _embed_clip_fn
 
 
 @router.get("/embeddings")
@@ -1034,7 +1041,7 @@ def _collect_visual_embeddings(
             .select(
                 uuid_col=img_table.uuid,
                 thumb=img_table.thumbnail,
-                emb=EMBED_CLIP_FN(img_table.image),
+                emb=_get_embed_clip_fn()(img_table.image),
             )
             .limit(per_type_limit)
             .collect()
@@ -1062,7 +1069,7 @@ def _collect_visual_embeddings(
                 uuid_col=frames_view.uuid,
                 frame=frames_view.frame,
                 pos_msec=frames_view.pos_msec,
-                emb=EMBED_CLIP_FN(frames_view.frame),
+                emb=_get_embed_clip_fn()(frames_view.frame),
             )
             .limit(per_type_limit)
             .collect()

@@ -7,7 +7,14 @@
 #   - CLIP (openai/clip-vit-base-patch32) → video frame visual embeddings only
 #   - OpenAI Whisper                    → audio/video transcription
 #   - OpenAI TTS                        → speech generation
+import os
 from dotenv import load_dotenv
+
+load_dotenv()
+
+# Alias GEMINI_API_KEY → GOOGLE_API_KEY for the Google GenAI SDK
+if os.environ.get("GEMINI_API_KEY") and not os.environ.get("GOOGLE_API_KEY"):
+    os.environ["GOOGLE_API_KEY"] = os.environ["GEMINI_API_KEY"]
 
 import config
 import pixeltable as pxt
@@ -28,8 +35,6 @@ from pixeltable.functions import string as pxt_str
 
 import functions
 from models import FollowUpResponse, DocumentSummary
-
-load_dotenv()
 
 # WARNING: drops ALL data in 'agents' directory on each run
 pxt.drop_dir("agents", force=True)

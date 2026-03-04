@@ -639,6 +639,169 @@ export async function getNotificationLog(limit = 50): Promise<import('@/types').
   return request<import('@/types').NotificationLogResponse>(`/integrations/log?limit=${limit}`)
 }
 
+// ── Database Management ──────────────────────────────────────────────────────
+
+export async function createDir(path: string, parents = false): Promise<import('@/types').MgmtResponse> {
+  return request<import('@/types').MgmtResponse>('/db/create_dir', {
+    method: 'POST',
+    body: JSON.stringify({ path, parents }),
+  })
+}
+
+export async function dropDir(path: string, force = false): Promise<import('@/types').MgmtResponse> {
+  return request<import('@/types').MgmtResponse>('/db/drop_dir', {
+    method: 'POST',
+    body: JSON.stringify({ path, force }),
+  })
+}
+
+export async function createTable(params: {
+  path: string
+  schema: Record<string, string>
+  primary_key?: string | string[] | null
+  comment?: string
+}): Promise<import('@/types').MgmtResponse> {
+  return request<import('@/types').MgmtResponse>('/db/create_table', {
+    method: 'POST',
+    body: JSON.stringify(params),
+  })
+}
+
+export async function dropTable(path: string, force = false): Promise<import('@/types').MgmtResponse> {
+  return request<import('@/types').MgmtResponse>('/db/drop_table', {
+    method: 'POST',
+    body: JSON.stringify({ path, force }),
+  })
+}
+
+export async function renameTable(path: string, newPath: string): Promise<import('@/types').MgmtResponse> {
+  return request<import('@/types').MgmtResponse>('/db/rename_table', {
+    method: 'POST',
+    body: JSON.stringify({ path, new_path: newPath }),
+  })
+}
+
+export async function revertTable(path: string): Promise<import('@/types').MgmtResponse> {
+  return request<import('@/types').MgmtResponse>('/db/revert_table', {
+    method: 'POST',
+    body: JSON.stringify({ path }),
+  })
+}
+
+export async function insertRows(
+  path: string,
+  rows: Record<string, unknown>[],
+): Promise<import('@/types').MgmtResponse> {
+  return request<import('@/types').MgmtResponse>('/db/insert_rows', {
+    method: 'POST',
+    body: JSON.stringify({ path, rows }),
+  })
+}
+
+export async function deleteRows(
+  path: string,
+  where: Record<string, unknown>,
+): Promise<import('@/types').MgmtResponse> {
+  return request<import('@/types').MgmtResponse>('/db/delete_rows', {
+    method: 'POST',
+    body: JSON.stringify({ path, where }),
+  })
+}
+
+export async function addColumn(
+  path: string,
+  columnName: string,
+  columnType: string,
+): Promise<import('@/types').MgmtResponse> {
+  return request<import('@/types').MgmtResponse>('/db/add_column', {
+    method: 'POST',
+    body: JSON.stringify({ path, column_name: columnName, column_type: columnType }),
+  })
+}
+
+export async function addComputedColumn(
+  path: string,
+  columnName: string,
+  expression: string,
+  ifExists: string = 'error',
+): Promise<import('@/types').MgmtResponse> {
+  return request<import('@/types').MgmtResponse>('/db/add_computed_column', {
+    method: 'POST',
+    body: JSON.stringify({ path, column_name: columnName, expression, if_exists: ifExists }),
+  })
+}
+
+export async function dropColumn(
+  path: string,
+  columnName: string,
+): Promise<import('@/types').MgmtResponse> {
+  return request<import('@/types').MgmtResponse>('/db/drop_column', {
+    method: 'POST',
+    body: JSON.stringify({ path, column_name: columnName }),
+  })
+}
+
+export async function renameColumn(
+  path: string,
+  oldName: string,
+  newName: string,
+): Promise<import('@/types').MgmtResponse> {
+  return request<import('@/types').MgmtResponse>('/db/rename_column', {
+    method: 'POST',
+    body: JSON.stringify({ path, old_name: oldName, new_name: newName }),
+  })
+}
+
+export async function createView(params: {
+  path: string
+  base_table: string
+  iterator_type?: string | null
+  iterator_args?: Record<string, unknown> | null
+  comment?: string
+}): Promise<import('@/types').MgmtResponse> {
+  return request<import('@/types').MgmtResponse>('/db/create_view', {
+    method: 'POST',
+    body: JSON.stringify(params),
+  })
+}
+
+export async function addEmbeddingIndex(params: {
+  path: string
+  column: string
+  embedding_function: string
+  metric?: string
+}): Promise<import('@/types').MgmtResponse> {
+  return request<import('@/types').MgmtResponse>('/db/add_embedding_index', {
+    method: 'POST',
+    body: JSON.stringify(params),
+  })
+}
+
+export async function dropEmbeddingIndex(
+  path: string,
+  column: string,
+): Promise<import('@/types').MgmtResponse> {
+  return request<import('@/types').MgmtResponse>('/db/drop_embedding_index', {
+    method: 'POST',
+    body: JSON.stringify({ path, column }),
+  })
+}
+
+export async function getTableVersions(
+  path: string,
+  limit = 20,
+): Promise<import('@/types').VersionsResponse> {
+  return request<import('@/types').VersionsResponse>(`/db/table/${path}/versions?limit=${limit}`)
+}
+
+export async function getAvailableTypes(): Promise<import('@/types').TypesResponse> {
+  return request<import('@/types').TypesResponse>('/db/types')
+}
+
+export async function getAvailableFunctions(): Promise<import('@/types').FunctionsResponse> {
+  return request<import('@/types').FunctionsResponse>('/db/functions')
+}
+
 // ── Health ───────────────────────────────────────────────────────────────────
 
 export async function healthCheck(): Promise<{ status: string }> {

@@ -27,10 +27,12 @@ import {
   X,
   Zap,
   Search as SearchIcon,
+  ArrowLeft,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import * as api from '@/lib/api'
 import type { PipelineNode, PipelineColumn, PipelineResponse } from '@/types'
+import { ColumnFlowDiagram } from './column-flow-diagram'
 
 // ── Function type styling ────────────────────────────────────────────────────
 
@@ -211,11 +213,14 @@ const nodeTypes = { tableNode: TableNode }
 function DetailPanel({
   node,
   onClose,
+  onShowColumnFlow,
 }: {
   node: PipelineNode
   onClose: () => void
+  onShowColumnFlow: () => void
 }) {
   const [showVersions, setShowVersions] = useState(false)
+  const hasColumnDeps = node.columns.some((c) => c.depends_on && c.depends_on.length > 0)
 
   const computed = node.columns.filter((c) => c.is_computed)
   const insertable = node.columns.filter((c) => !c.is_computed)
@@ -269,6 +274,23 @@ function DetailPanel({
           </div>
         ))}
       </div>
+
+      {/* Column Data Flow button */}
+      {hasColumnDeps && (
+        <div className="px-5 py-3 border-b border-border">
+          <button
+            onClick={onShowColumnFlow}
+            className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg border border-k-yellow/20 bg-k-yellow/5 hover:bg-k-yellow/10 transition-colors text-left group"
+          >
+            <GitBranch className="h-4 w-4 text-k-yellow/70 shrink-0" />
+            <div className="min-w-0 flex-1">
+              <div className="text-[11px] font-semibold text-foreground">Column Data Flow</div>
+              <div className="text-[10px] text-muted-foreground/60">Visualize column dependencies</div>
+            </div>
+            <ChevronDown className="h-3.5 w-3.5 text-muted-foreground/40 -rotate-90 group-hover:text-k-yellow/70 transition-colors shrink-0" />
+          </button>
+        </div>
+      )}
 
       {/* Lineage */}
       {node.base && (
@@ -544,6 +566,7 @@ export function PipelineInspector() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedPath, setSelectedPath] = useState<string | null>(null)
+  const [columnFlowNode, setColumnFlowNode] = useState<PipelineNode | null>(null)
   const [nodes, setNodes, onNodesChange] = useNodesState([])
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
 
@@ -633,6 +656,40 @@ export function PipelineInspector() {
     )
   }
 
+  // Column Data Flow drill-down: replaces the main canvas
+  if (columnFlowNode) {
+    return (
+      <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+        <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border/40 shrink-0">
+          <button
+            onClick={() => setColumnFlowNode(null)}
+            className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors rounded-md px-2 py-1 hover:bg-accent"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Pipeline
+          </button>
+          <span className="text-muted-foreground/30 text-[11px]">/</span>
+          <div className="flex items-center gap-1.5">
+            {columnFlowNode.is_view ? (
+              <Eye className="h-3 w-3 text-muted-foreground/50" />
+            ) : (
+              <Table2 className="h-3 w-3 text-muted-foreground/50" />
+            )}
+            <span className="text-[11px] font-semibold text-foreground">{columnFlowNode.name}</span>
+          </div>
+          <span className="text-muted-foreground/30 text-[11px]">/</span>
+          <div className="flex items-center gap-1.5">
+            <GitBranch className="h-3 w-3 text-k-yellow/60" />
+            <span className="text-[11px] font-medium text-k-yellow/80">Column Data Flow</span>
+          </div>
+        </div>
+        <div className="flex-1 min-h-0">
+          <ColumnFlowDiagram columns={columnFlowNode.columns} />
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
       {/* Stats bar */}
@@ -684,7 +741,11 @@ export function PipelineInspector() {
         </div>
 
         {selectedNode && (
-          <DetailPanel node={selectedNode} onClose={() => setSelectedPath(null)} />
+          <DetailPanel
+            node={selectedNode}
+            onClose={() => setSelectedPath(null)}
+            onShowColumnFlow={() => setColumnFlowNode(selectedNode)}
+          />
         )}
       </div>
     </div>

@@ -329,6 +329,98 @@ class SampleResponse(BaseModel):
     params: dict
 
 
+# ── Database Management (CRUD) ───────────────────────────────────────────────
+
+# Tables
+
+class CreateTableRequest(BaseModel):
+    path: str
+    columns: dict[str, str] = Field(alias="schema")
+    primary_key: str | list[str] | None = None
+    comment: str = ""
+
+    model_config = {"populate_by_name": True}
+
+class DropTableRequest(BaseModel):
+    path: str
+    force: bool = False
+
+class RenameTableRequest(BaseModel):
+    path: str
+    new_path: str
+
+class InsertRowsRequest(BaseModel):
+    path: str
+    rows: list[dict]
+
+class DeleteRowsRequest(BaseModel):
+    path: str
+    where: dict
+
+class RevertTableRequest(BaseModel):
+    path: str
+
+# Columns
+
+class AddColumnRequest(BaseModel):
+    path: str
+    column_name: str
+    column_type: str
+
+class AddComputedColumnRequest(BaseModel):
+    path: str
+    column_name: str
+    expression: str
+    if_exists: str = "error"
+
+class DropColumnRequest(BaseModel):
+    path: str
+    column_name: str
+
+class RenameColumnRequest(BaseModel):
+    path: str
+    old_name: str
+    new_name: str
+
+# Views
+
+class CreateViewRequest(BaseModel):
+    path: str
+    base_table: str
+    iterator_type: str | None = None
+    iterator_args: dict | None = None
+    comment: str = ""
+
+# Embedding indexes
+
+class AddEmbeddingIndexRequest(BaseModel):
+    path: str
+    column: str
+    embedding_function: str
+    metric: str = "cosine"
+
+class DropEmbeddingIndexRequest(BaseModel):
+    path: str
+    column: str
+
+# Directories
+
+class CreateDirRequest(BaseModel):
+    path: str
+    parents: bool = False
+
+class DropDirRequest(BaseModel):
+    path: str
+    force: bool = False
+
+# Generic success response for management ops
+class MgmtResponse(BaseModel):
+    success: bool
+    message: str
+    path: str | None = None
+    detail: dict | None = None
+
+
 # ── Export ────────────────────────────────────────────────────────────────────
 
 class ExportTableInfo(BaseModel):

@@ -590,6 +590,73 @@ export interface PipelineResponse {
   edges: PipelineEdge[]
 }
 
+// ── Database Management ──────────────────────────────────────────────────────
+
+export interface MgmtResponse {
+  success: boolean
+  message: string
+  path?: string
+  detail?: Record<string, unknown>
+}
+
+export interface ColumnTypeInfo {
+  name: string
+  key: string
+  description: string
+}
+
+export interface FunctionInfo {
+  name: string
+  description: string
+  example: string
+}
+
+export interface FunctionCategory {
+  category: string
+  functions: FunctionInfo[]
+}
+
+export interface IteratorInfo {
+  name: string
+  description: string
+  column_arg: string
+  example_args: Record<string, unknown>
+}
+
+export interface EmbeddingFunctionInfo {
+  name: string
+  description: string
+  modality: string
+}
+
+export interface TypesResponse {
+  types: ColumnTypeInfo[]
+}
+
+export interface FunctionsResponse {
+  functions: FunctionCategory[]
+  iterators: IteratorInfo[]
+  embedding_functions: EmbeddingFunctionInfo[]
+}
+
+export interface VersionEntry {
+  version: number
+  created_at: string | null
+  change_type: string | null
+  inserts: number
+  updates: number
+  deletes: number
+  errors: number
+  schema_change?: string | null
+}
+
+export interface VersionsResponse {
+  path: string
+  current_version: number
+  can_revert: boolean
+  versions: VersionEntry[]
+}
+
 // Integrations
 export interface IntegrationInfo {
   id: string

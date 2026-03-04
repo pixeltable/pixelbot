@@ -1,4 +1,4 @@
-"""Database introspection router — browse the Pixeltable catalog."""
+"""Database introspection + management router — browse and modify the Pixeltable catalog."""
 
 import logging
 import re
@@ -7,12 +7,158 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 import pixeltable as pxt
 
+import config
 from utils import pxt_retry
+from models import (
+    CreateTableRequest, DropTableRequest, RenameTableRequest,
+    InsertRowsRequest, DeleteRowsRequest, RevertTableRequest,
+    AddColumnRequest, AddComputedColumnRequest, DropColumnRequest, RenameColumnRequest,
+    CreateViewRequest,
+    AddEmbeddingIndexRequest, DropEmbeddingIndexRequest,
+    CreateDirRequest, DropDirRequest,
+    MgmtResponse,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/db", tags=["database"])
 
 NAMESPACE = "agents"
+
+
+# ── Type & Expression Helpers ─────────────────────────────────────────────────
+
+_TYPE_MAP: dict[str, object] = {
+    "string": pxt.String,
+    "int": pxt.Int,
+    "float": pxt.Float,
+    "bool": pxt.Bool,
+    "timestamp": pxt.Timestamp,
+    "json": pxt.Json,
+    "image": pxt.Image,
+    "video": pxt.Video,
+    "audio": pxt.Audio,
+    "document": pxt.Document,
+}
+
+
+def _resolve_type(type_name: str) -> object:
+    """Convert a string type name to a Pixeltable column type."""
+    key = type_name.lower().strip()
+    if key.startswith("array[") and key.endswith("]"):
+        inner = key[6:-1].strip()
+        inner_type = _TYPE_MAP.get(inner)
+        if inner_type is None:
+            raise ValueError(f"Unknown array element type: {inner}")
+        return pxt.Array(inner_type)
+    if key in _TYPE_MAP:
+        return _TYPE_MAP[key]
+    raise ValueError(
+        f"Unknown type '{type_name}'. Available: {', '.join(sorted(_TYPE_MAP))} or Array[<type>]"
+    )
+
+
+def _resolve_schema(schema_dict: dict[str, str]) -> dict:
+    """Convert {column_name: type_string} to {column_name: pxt_type}."""
+    return {col: _resolve_type(t) for col, t in schema_dict.items()}
+
+
+def _build_expression_namespace(tbl) -> dict:
+    """Build a namespace for safely evaluating Pixeltable column expressions.
+
+    The namespace provides:
+      - ``table`` / ``tbl``: the table object (so ``table.col`` works)
+      - Pixeltable function modules: ``gemini``, ``openai``, ``image``, ``video``, ``string``
+      - Direct column name references for convenience
+    """
+    from pixeltable.functions import gemini as gemini_fn
+    from pixeltable.functions import openai as openai_fn
+    from pixeltable.functions import image as image_fn
+    from pixeltable.functions import video as video_fn
+    from pixeltable.functions import string as string_fn
+
+    ns: dict = {
+        "table": tbl,
+        "tbl": tbl,
+        "pxt": pxt,
+        "gemini": gemini_fn,
+        "openai": openai_fn,
+        "image": image_fn,
+        "video": video_fn,
+        "string": string_fn,
+    }
+
+    safe_builtins = {
+        "str": str, "int": int, "float": float, "bool": bool, "len": len,
+        "min": min, "max": max, "abs": abs, "round": round, "list": list,
+        "dict": dict, "tuple": tuple, "set": set, "True": True, "False": False,
+        "None": None,
+    }
+    ns["__builtins__"] = safe_builtins
+
+    for col_name in tbl.columns():
+        try:
+            ns[col_name] = getattr(tbl, col_name)
+        except Exception:
+            pass
+
+    return ns
+
+
+def _resolve_embedding_function(name: str):
+    """Map a shorthand name to a Pixeltable embedding function.
+
+    Supported shorthands: "gemini", "clip".
+    Falls back to eval with the expression namespace for custom expressions.
+    """
+    key = name.lower().strip()
+    if key == "gemini":
+        from pixeltable.functions import gemini as gemini_fn
+        return gemini_fn.generate_embedding.using(model=config.GEMINI_EMBEDDING_MODEL_ID)
+    if key == "clip":
+        from pixeltable.functions.huggingface import clip
+        return clip.using(model_id=config.CLIP_MODEL_ID)
+    raise ValueError(
+        f"Unknown embedding function '{name}'. Use 'gemini' or 'clip'."
+    )
+
+
+_ITERATOR_COL_ARGS: dict[str, str] = {
+    "DocumentSplitter": "document",
+    "FrameIterator": "video",
+    "AudioSplitter": "audio",
+    "StringSplitter": "text",
+}
+
+
+def _resolve_iterator(iterator_type: str, iterator_args: dict, base_tbl):
+    """Build an iterator create() call from type name, args, and base table."""
+    from pixeltable.iterators import (
+        DocumentSplitter, FrameIterator, AudioSplitter, StringSplitter,
+    )
+
+    iterators = {
+        "DocumentSplitter": DocumentSplitter,
+        "FrameIterator": FrameIterator,
+        "AudioSplitter": AudioSplitter,
+        "StringSplitter": StringSplitter,
+    }
+
+    cls = iterators.get(iterator_type)
+    if cls is None:
+        raise ValueError(
+            f"Unknown iterator type '{iterator_type}'. "
+            f"Available: {', '.join(sorted(iterators))}"
+        )
+
+    col_arg_name = _ITERATOR_COL_ARGS.get(iterator_type)
+    kwargs: dict = {}
+    for k, v in iterator_args.items():
+        if k == col_arg_name:
+            kwargs[k] = getattr(base_tbl, v)
+        else:
+            kwargs[k] = v
+
+    return cls.create(**kwargs)
 
 
 def _safe_value(val: object) -> object:
@@ -655,3 +801,571 @@ def get_pipeline():
     except Exception as e:
         logger.error(f"Pipeline error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  Pipeline Management Endpoints
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+# ── Directory Management ──────────────────────────────────────────────────────
+
+@router.post("/create_dir", response_model=MgmtResponse)
+@pxt_retry()
+def create_directory(body: CreateDirRequest):
+    """Create a new Pixeltable directory (namespace)."""
+    try:
+        if body.parents:
+            parts = body.path.split("/")
+            for i in range(1, len(parts) + 1):
+                pxt.create_dir("/".join(parts[:i]), if_exists="ignore")
+        else:
+            pxt.create_dir(body.path, if_exists="ignore")
+        return MgmtResponse(success=True, message=f"Directory '{body.path}' created", path=body.path)
+    except Exception as e:
+        logger.error(f"create_dir error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/drop_dir", response_model=MgmtResponse)
+@pxt_retry()
+def drop_directory(body: DropDirRequest):
+    """Drop a Pixeltable directory and optionally all contents."""
+    try:
+        pxt.drop_dir(body.path, force=body.force)
+        return MgmtResponse(success=True, message=f"Directory '{body.path}' dropped", path=body.path)
+    except Exception as e:
+        logger.error(f"drop_dir error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Table Management ──────────────────────────────────────────────────────────
+
+@router.post("/create_table", response_model=MgmtResponse)
+@pxt_retry()
+def create_table(body: CreateTableRequest):
+    """Create a new Pixeltable base table."""
+    try:
+        schema = _resolve_schema(body.columns)
+
+        kwargs: dict = {"if_exists": "error"}
+        if body.primary_key:
+            kwargs["primary_key"] = body.primary_key
+
+        tbl = pxt.create_table(body.path, schema, **kwargs)
+        col_count = len(tbl.columns())
+
+        return MgmtResponse(
+            success=True,
+            message=f"Table '{body.path}' created with {col_count} column(s)",
+            path=body.path,
+            detail={"columns": list(schema.keys()), "row_count": 0},
+        )
+    except Exception as e:
+        logger.error(f"create_table error: {e}", exc_info=True)
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/drop_table", response_model=MgmtResponse)
+@pxt_retry()
+def drop_table(body: DropTableRequest):
+    """Drop (delete) a Pixeltable table or view."""
+    try:
+        pxt.drop_table(body.path, force=body.force)
+        return MgmtResponse(success=True, message=f"Table '{body.path}' dropped", path=body.path)
+    except Exception as e:
+        logger.error(f"drop_table error: {e}", exc_info=True)
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/rename_table", response_model=MgmtResponse)
+@pxt_retry()
+def rename_table(body: RenameTableRequest):
+    """Rename or move a table to a new path."""
+    try:
+        pxt.move(body.path, body.new_path)
+        return MgmtResponse(
+            success=True,
+            message=f"Table moved: '{body.path}' → '{body.new_path}'",
+            path=body.new_path,
+        )
+    except Exception as e:
+        logger.error(f"rename_table error: {e}", exc_info=True)
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/revert_table", response_model=MgmtResponse)
+@pxt_retry()
+def revert_table(body: RevertTableRequest):
+    """Undo the last operation on a table (insert, update, delete, or schema change)."""
+    try:
+        tbl = pxt.get_table(body.path)
+        tbl.revert()
+        new_count = tbl.count()
+        return MgmtResponse(
+            success=True,
+            message=f"Reverted last operation on '{body.path}'",
+            path=body.path,
+            detail={"row_count": new_count},
+        )
+    except Exception as e:
+        logger.error(f"revert_table error: {e}", exc_info=True)
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/insert_rows", response_model=MgmtResponse)
+@pxt_retry()
+def insert_rows(body: InsertRowsRequest):
+    """Insert rows into a table."""
+    try:
+        tbl = pxt.get_table(body.path)
+    except Exception:
+        raise HTTPException(status_code=404, detail=f"Table '{body.path}' not found")
+
+    if not body.rows:
+        raise HTTPException(status_code=400, detail="No rows provided")
+
+    try:
+        status = tbl.insert(body.rows)
+        return MgmtResponse(
+            success=True,
+            message=f"Inserted {len(body.rows)} row(s) into '{body.path}'",
+            path=body.path,
+            detail={
+                "rows_inserted": len(body.rows),
+                "errors": status.num_excs if hasattr(status, "num_excs") else 0,
+            },
+        )
+    except Exception as e:
+        logger.error(f"insert_rows error: {e}", exc_info=True)
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/delete_rows", response_model=MgmtResponse)
+@pxt_retry()
+def delete_rows(body: DeleteRowsRequest):
+    """Delete rows matching a simple equality filter.
+
+    The ``where`` dict maps column names to values.  All conditions are ANDed.
+    Example: ``{"user_id": "local_user", "role": "assistant"}``
+    """
+    try:
+        tbl = pxt.get_table(body.path)
+    except Exception:
+        raise HTTPException(status_code=404, detail=f"Table '{body.path}' not found")
+
+    if not body.where:
+        raise HTTPException(status_code=400, detail="Empty where clause — refusing to delete all rows")
+
+    try:
+        col_names = set(tbl.columns())
+        condition = None
+        for col_name, value in body.where.items():
+            if col_name not in col_names:
+                raise HTTPException(status_code=400, detail=f"Column '{col_name}' not found in {body.path}")
+            col_ref = getattr(tbl, col_name)
+            clause = col_ref == value
+            condition = clause if condition is None else (condition & clause)
+
+        count_before = tbl.count()
+        tbl.delete(where=condition)
+        count_after = tbl.count()
+        deleted = count_before - count_after
+
+        return MgmtResponse(
+            success=True,
+            message=f"Deleted {deleted} row(s) from '{body.path}'",
+            path=body.path,
+            detail={"rows_deleted": deleted, "remaining": count_after},
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"delete_rows error: {e}", exc_info=True)
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# ── Column Management ─────────────────────────────────────────────────────────
+
+@router.post("/add_column", response_model=MgmtResponse)
+@pxt_retry()
+def add_column(body: AddColumnRequest):
+    """Add a plain (non-computed) column to an existing table."""
+    try:
+        tbl = pxt.get_table(body.path)
+    except Exception:
+        raise HTTPException(status_code=404, detail=f"Table '{body.path}' not found")
+
+    try:
+        col_type = _resolve_type(body.column_type)
+        tbl.add_column(**{body.column_name: col_type})
+
+        return MgmtResponse(
+            success=True,
+            message=f"Column '{body.column_name}' ({body.column_type}) added to '{body.path}'",
+            path=body.path,
+            detail={"column": body.column_name, "type": body.column_type},
+        )
+    except Exception as e:
+        logger.error(f"add_column error: {e}", exc_info=True)
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/add_computed_column", response_model=MgmtResponse)
+@pxt_retry()
+def add_computed_column(body: AddComputedColumnRequest):
+    """Add a computed column to an existing table.
+
+    The ``expression`` is a Python expression evaluated with access to:
+      - ``table.col_name`` — column references
+      - ``gemini``, ``openai``, ``image``, ``video``, ``string`` — Pixeltable function modules
+      - ``pxt`` — the Pixeltable module itself
+
+    Examples::
+
+        table.col1 + table.col2
+        gemini.generate_content(table.prompt, model='gemini-2.5-flash')
+        image.resize(table.image, width=256, height=256)
+    """
+    try:
+        tbl = pxt.get_table(body.path)
+    except Exception:
+        raise HTTPException(status_code=404, detail=f"Table '{body.path}' not found")
+
+    try:
+        ns = _build_expression_namespace(tbl)
+        expr = eval(body.expression, ns)  # noqa: S307
+
+        tbl.add_computed_column(**{body.column_name: expr}, if_exists=body.if_exists)
+
+        return MgmtResponse(
+            success=True,
+            message=f"Computed column '{body.column_name}' added to '{body.path}'",
+            path=body.path,
+            detail={"column": body.column_name, "expression": body.expression},
+        )
+    except SyntaxError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid expression syntax: {e}")
+    except NameError as e:
+        raise HTTPException(status_code=400, detail=f"Unknown name in expression: {e}")
+    except Exception as e:
+        logger.error(f"add_computed_column error: {e}", exc_info=True)
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/drop_column", response_model=MgmtResponse)
+@pxt_retry()
+def drop_column(body: DropColumnRequest):
+    """Remove a column from a table."""
+    try:
+        tbl = pxt.get_table(body.path)
+    except Exception:
+        raise HTTPException(status_code=404, detail=f"Table '{body.path}' not found")
+
+    try:
+        tbl.drop_column(body.column_name)
+        return MgmtResponse(
+            success=True,
+            message=f"Column '{body.column_name}' dropped from '{body.path}'",
+            path=body.path,
+            detail={"column": body.column_name},
+        )
+    except Exception as e:
+        logger.error(f"drop_column error: {e}", exc_info=True)
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/rename_column", response_model=MgmtResponse)
+@pxt_retry()
+def rename_column(body: RenameColumnRequest):
+    """Rename a column in a table."""
+    try:
+        tbl = pxt.get_table(body.path)
+    except Exception:
+        raise HTTPException(status_code=404, detail=f"Table '{body.path}' not found")
+
+    try:
+        tbl.rename_column(body.old_name, body.new_name)
+        return MgmtResponse(
+            success=True,
+            message=f"Column renamed: '{body.old_name}' → '{body.new_name}' in '{body.path}'",
+            path=body.path,
+            detail={"old_name": body.old_name, "new_name": body.new_name},
+        )
+    except Exception as e:
+        logger.error(f"rename_column error: {e}", exc_info=True)
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# ── View Management ───────────────────────────────────────────────────────────
+
+@router.post("/create_view", response_model=MgmtResponse)
+@pxt_retry()
+def create_view(body: CreateViewRequest):
+    """Create a view of an existing table, optionally with an iterator.
+
+    Supported ``iterator_type`` values: DocumentSplitter, FrameIterator,
+    AudioSplitter, StringSplitter.
+
+    ``iterator_args`` example for DocumentSplitter::
+
+        {
+            "document": "document",
+            "separators": "page, sentence",
+            "metadata": "title, heading, page"
+        }
+
+    Column-reference args (e.g. "document") are resolved against the base table.
+    """
+    try:
+        base_tbl = pxt.get_table(body.base_table)
+    except Exception:
+        raise HTTPException(status_code=404, detail=f"Base table '{body.base_table}' not found")
+
+    try:
+        kwargs: dict = {"if_exists": "error"}
+
+        if body.iterator_type:
+            if not body.iterator_args:
+                raise HTTPException(
+                    status_code=400,
+                    detail="iterator_args required when iterator_type is specified",
+                )
+            iterator = _resolve_iterator(body.iterator_type, body.iterator_args, base_tbl)
+            kwargs["iterator"] = iterator
+
+        view = pxt.create_view(body.path, base_tbl, **kwargs)
+        col_count = len(view.columns())
+
+        return MgmtResponse(
+            success=True,
+            message=f"View '{body.path}' created on '{body.base_table}'",
+            path=body.path,
+            detail={
+                "base_table": body.base_table,
+                "iterator_type": body.iterator_type,
+                "columns": col_count,
+            },
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"create_view error: {e}", exc_info=True)
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# ── Embedding Index Management ────────────────────────────────────────────────
+
+@router.post("/add_embedding_index", response_model=MgmtResponse)
+@pxt_retry()
+def add_embedding_index(body: AddEmbeddingIndexRequest):
+    """Add an embedding index to a column for similarity search.
+
+    ``embedding_function``: use ``"gemini"`` for text or ``"clip"`` for images.
+    ``metric``: ``"cosine"`` (default) or ``"ip"`` (inner product).
+    """
+    try:
+        tbl = pxt.get_table(body.path)
+    except Exception:
+        raise HTTPException(status_code=404, detail=f"Table '{body.path}' not found")
+
+    col_names = tbl.columns()
+    if body.column not in col_names:
+        raise HTTPException(status_code=400, detail=f"Column '{body.column}' not in {body.path}")
+
+    try:
+        embed_fn = _resolve_embedding_function(body.embedding_function)
+
+        idx_kwargs: dict = {"column": body.column, "if_exists": "ignore", "metric": body.metric}
+        # Gemini embeds text (string_embed), CLIP embeds images (image_embed)
+        key = body.embedding_function.lower().strip()
+        if key == "clip":
+            idx_kwargs["image_embed"] = embed_fn
+        else:
+            idx_kwargs["string_embed"] = embed_fn
+
+        tbl.add_embedding_index(**idx_kwargs)
+
+        return MgmtResponse(
+            success=True,
+            message=f"Embedding index added on '{body.column}' in '{body.path}'",
+            path=body.path,
+            detail={
+                "column": body.column,
+                "embedding": body.embedding_function,
+                "metric": body.metric,
+            },
+        )
+    except Exception as e:
+        logger.error(f"add_embedding_index error: {e}", exc_info=True)
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/drop_embedding_index", response_model=MgmtResponse)
+@pxt_retry()
+def drop_embedding_index(body: DropEmbeddingIndexRequest):
+    """Remove an embedding index from a column."""
+    try:
+        tbl = pxt.get_table(body.path)
+    except Exception:
+        raise HTTPException(status_code=404, detail=f"Table '{body.path}' not found")
+
+    try:
+        tbl.drop_embedding_index(column=body.column)
+        return MgmtResponse(
+            success=True,
+            message=f"Embedding index dropped from '{body.column}' in '{body.path}'",
+            path=body.path,
+            detail={"column": body.column},
+        )
+    except Exception as e:
+        logger.error(f"drop_embedding_index error: {e}", exc_info=True)
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# ── Version History ───────────────────────────────────────────────────────────
+
+@router.get("/table/{path:path}/versions")
+@pxt_retry()
+def get_table_versions(path: str, limit: int = 20):
+    """Get the version history for a specific table."""
+    try:
+        tbl = pxt.get_table(path)
+    except Exception:
+        raise HTTPException(status_code=404, detail=f"Table '{path}' not found")
+
+    try:
+        raw_versions = tbl.get_versions()
+        versions = []
+        for v in raw_versions[:limit]:
+            versions.append({
+                "version": v["version"],
+                "created_at": v["created_at"].isoformat() if v.get("created_at") else None,
+                "change_type": v.get("change_type"),
+                "inserts": v.get("inserts", 0),
+                "updates": v.get("updates", 0),
+                "deletes": v.get("deletes", 0),
+                "errors": v.get("errors", 0),
+                "schema_change": v.get("schema_change"),
+            })
+
+        return {
+            "path": path,
+            "current_version": versions[0]["version"] if versions else 0,
+            "can_revert": len(versions) > 1,
+            "versions": versions,
+        }
+    except Exception as e:
+        logger.error(f"get_versions error for {path}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Discovery ─────────────────────────────────────────────────────────────────
+
+@router.get("/types")
+def list_available_types():
+    """List all Pixeltable column types available for schema definitions."""
+    types = [
+        {"name": "String", "key": "string", "description": "Text data"},
+        {"name": "Int", "key": "int", "description": "Integer numbers"},
+        {"name": "Float", "key": "float", "description": "Floating-point numbers"},
+        {"name": "Bool", "key": "bool", "description": "True/False values"},
+        {"name": "Timestamp", "key": "timestamp", "description": "Date and time"},
+        {"name": "Json", "key": "json", "description": "Arbitrary JSON data"},
+        {"name": "Image", "key": "image", "description": "Image files (PIL)"},
+        {"name": "Video", "key": "video", "description": "Video files"},
+        {"name": "Audio", "key": "audio", "description": "Audio files"},
+        {"name": "Document", "key": "document", "description": "Document files (PDF, etc.)"},
+        {"name": "Array[T]", "key": "array", "description": "Typed arrays, e.g. Array[Float]"},
+    ]
+    return {"types": types}
+
+
+@router.get("/functions")
+def list_available_functions():
+    """List Pixeltable functions available for computed column expressions."""
+    functions = [
+        {
+            "category": "gemini",
+            "functions": [
+                {"name": "gemini.generate_content", "description": "Generate text with Gemini", "example": "gemini.generate_content(table.prompt, model='gemini-2.5-flash')"},
+                {"name": "gemini.generate_embedding", "description": "Generate text embedding", "example": "gemini.generate_embedding(table.text, model='gemini-embedding-001')"},
+                {"name": "gemini.generate_images", "description": "Generate images with Imagen", "example": "gemini.generate_images(table.prompt)"},
+                {"name": "gemini.generate_videos", "description": "Generate videos with Veo", "example": "gemini.generate_videos(table.prompt)"},
+            ],
+        },
+        {
+            "category": "openai",
+            "functions": [
+                {"name": "openai.chat_completions", "description": "OpenAI chat completion", "example": "openai.chat_completions(messages=table.messages, model='gpt-4o')"},
+                {"name": "openai.transcriptions", "description": "Whisper transcription", "example": "openai.transcriptions(table.audio, model='whisper-1')"},
+                {"name": "openai.speech", "description": "Text-to-speech", "example": "openai.speech(table.text, model='tts-1')"},
+            ],
+        },
+        {
+            "category": "image",
+            "functions": [
+                {"name": "image.resize", "description": "Resize an image", "example": "image.resize(table.image, width=256, height=256)"},
+                {"name": "image.b64_encode", "description": "Base64-encode an image", "example": "image.b64_encode(table.image)"},
+            ],
+        },
+        {
+            "category": "video",
+            "functions": [
+                {"name": "video.extract_audio", "description": "Extract audio track from video", "example": "video.extract_audio(table.video, format='mp3')"},
+                {"name": "video.get_metadata", "description": "Get video metadata", "example": "video.get_metadata(table.video)"},
+                {"name": "video.extract_frame", "description": "Extract a single frame", "example": "video.extract_frame(table.video, timestamp=1.0)"},
+            ],
+        },
+        {
+            "category": "string",
+            "functions": [
+                {"name": "string.format", "description": "Format a string template", "example": "string.format('{} - {}', table.title, table.author)"},
+            ],
+        },
+        {
+            "category": "custom_udf",
+            "functions": [
+                {"name": n, "description": "Custom UDF", "example": ""}
+                for n in sorted(_CUSTOM_UDFS)
+            ],
+        },
+    ]
+
+    iterators = [
+        {
+            "name": "DocumentSplitter",
+            "description": "Split documents into pages/sentences",
+            "column_arg": "document",
+            "example_args": {"document": "document", "separators": "page, sentence", "metadata": "title, heading, page"},
+        },
+        {
+            "name": "FrameIterator",
+            "description": "Extract video frames",
+            "column_arg": "video",
+            "example_args": {"video": "video", "keyframes_only": True},
+        },
+        {
+            "name": "AudioSplitter",
+            "description": "Split audio into chunks",
+            "column_arg": "audio",
+            "example_args": {"audio": "audio", "duration": 30},
+        },
+        {
+            "name": "StringSplitter",
+            "description": "Split text into segments",
+            "column_arg": "text",
+            "example_args": {"text": "transcript", "separators": "sentence"},
+        },
+    ]
+
+    embedding_functions = [
+        {"name": "gemini", "description": "Gemini text embedding (gemini-embedding-001)", "modality": "text"},
+        {"name": "clip", "description": "CLIP visual embedding (openai/clip-vit-base-patch32)", "modality": "image"},
+    ]
+
+    return {
+        "functions": functions,
+        "iterators": iterators,
+        "embedding_functions": embedding_functions,
+    }

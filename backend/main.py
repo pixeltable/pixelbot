@@ -15,6 +15,11 @@ from routers import chat, files, history, memory, images, personas, studio, data
 
 load_dotenv(override=True)
 
+# Alias GEMINI_API_KEY → GOOGLE_API_KEY so the Google GenAI SDK (used by
+# Pixeltable's gemini functions) picks it up automatically.
+if os.environ.get("GEMINI_API_KEY") and not os.environ.get("GOOGLE_API_KEY"):
+    os.environ["GOOGLE_API_KEY"] = os.environ["GEMINI_API_KEY"]
+
 # Logging
 logging.basicConfig(
     level=logging.INFO,
