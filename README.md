@@ -1,6 +1,6 @@
 <div align="center">
 
-**Open-source sandbox for exploring everything [Pixeltable](https://github.com/pixeltable/pixeltable) can do**
+**Open-source sandbox for exploring everything [Pixeltable](https://github.com/pixeltable/pixeltable) can do.**
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-0530AD.svg)](https://opensource.org/licenses/Apache-2.0) [![Discord](https://img.shields.io/badge/Discord-%235865F2.svg)](https://discord.gg/QPyqFYx2UN)
 
