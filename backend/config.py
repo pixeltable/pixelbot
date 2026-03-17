@@ -8,7 +8,8 @@ APP_NAMESPACE = "agents"
 # Primary LLM — all generation, reasoning, and structured output
 GEMINI_MODEL_ID = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 # Text embeddings (document chunks, memory, chat history)
-GEMINI_EMBEDDING_MODEL_ID = os.getenv("GEMINI_EMBEDDING_MODEL", "gemini-embedding-001")
+OPENAI_EMBEDDING_MODEL_ID = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
+GEMINI_EMBEDDING_MODEL_ID = os.getenv("GEMINI_EMBEDDING_MODEL", "gemini-embedding-001")  # legacy
 # Visual embeddings for video frames (no Gemini equivalent yet)
 CLIP_MODEL_ID = os.getenv("CLIP_MODEL", "openai/clip-vit-base-patch32")
 # Audio transcription (OpenAI Whisper — Gemini audio handling not yet in pxt)

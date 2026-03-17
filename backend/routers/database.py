@@ -111,14 +111,14 @@ def _resolve_embedding_function(name: str):
     Falls back to eval with the expression namespace for custom expressions.
     """
     key = name.lower().strip()
-    if key == "gemini":
-        from pixeltable.functions import gemini as gemini_fn
-        return gemini_fn.generate_embedding.using(model=config.GEMINI_EMBEDDING_MODEL_ID)
+    if key in ("gemini", "openai", "text"):
+        from pixeltable.functions import openai as openai_fn
+        return openai_fn.embeddings.using(model=config.OPENAI_EMBEDDING_MODEL_ID)
     if key == "clip":
         from pixeltable.functions.huggingface import clip
         return clip.using(model_id=config.CLIP_MODEL_ID)
     raise ValueError(
-        f"Unknown embedding function '{name}'. Use 'gemini' or 'clip'."
+        f"Unknown embedding function '{name}'. Use 'gemini', 'openai', or 'clip'."
     )
 
 
@@ -1289,7 +1289,7 @@ def list_available_functions():
             "category": "gemini",
             "functions": [
                 {"name": "gemini.generate_content", "description": "Generate text with Gemini", "example": "gemini.generate_content(table.prompt, model='gemini-2.5-flash')"},
-                {"name": "gemini.generate_embedding", "description": "Generate text embedding", "example": "gemini.generate_embedding(table.text, model='gemini-embedding-001')"},
+                {"name": "openai.embeddings", "description": "Generate text embedding", "example": "openai.embeddings(table.text, model='text-embedding-3-small')"},
                 {"name": "gemini.generate_images", "description": "Generate images with Imagen", "example": "gemini.generate_images(table.prompt)"},
                 {"name": "gemini.generate_videos", "description": "Generate videos with Veo", "example": "gemini.generate_videos(table.prompt)"},
             ],

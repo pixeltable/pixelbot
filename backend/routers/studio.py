@@ -17,6 +17,7 @@ from umap import UMAP
 import pixeltable as pxt
 from pixeltable.functions.huggingface import clip
 from pixeltable.functions import gemini
+from pixeltable.functions import openai as openai_fn
 from utils import pxt_retry
 from pixeltable.functions import image as pxt_image
 from pixeltable.functions import video as pxt_video
@@ -875,7 +876,7 @@ def _normalize_thumbnail(raw_thumb) -> str | None:
 
 # ── Embedding Visualization ──────────────────────────────────────────────────
 
-EMBED_TEXT_FN = gemini.generate_embedding.using(model=config.GEMINI_EMBEDDING_MODEL_ID)
+EMBED_TEXT_FN = openai_fn.embeddings.using(model=config.OPENAI_EMBEDDING_MODEL_ID)
 _embed_clip_fn = None
 
 

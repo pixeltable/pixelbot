@@ -3,7 +3,7 @@
 #
 # LLM strategy:
 #   - Gemini (gemini-2.5-flash)         → all generation, reasoning, structured output
-#   - Gemini (gemini-embedding-001)     → all text embeddings
+#   - OpenAI (text-embedding-3-small)   → all text embeddings
 #   - CLIP (openai/clip-vit-base-patch32) → video frame visual embeddings only
 #   - OpenAI Whisper                    → audio/video transcription
 #   - OpenAI TTS                        → speech generation
@@ -61,11 +61,11 @@ chunks = pxt.create_view(
     if_exists="ignore",
 )
 
-gemini_embed = gemini.generate_embedding.using(model=config.GEMINI_EMBEDDING_MODEL_ID)
+openai_embed = openai.embeddings.using(model=config.OPENAI_EMBEDDING_MODEL_ID)
 
 chunks.add_embedding_index(
     "text",
-    string_embed=gemini_embed,
+    string_embed=openai_embed,
     if_exists="ignore",
 )
 
