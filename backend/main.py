@@ -1,4 +1,4 @@
-# main.py - FastAPI application entrypoint
+# main.py — FastAPI application entrypoint
 import logging
 import os
 from contextlib import asynccontextmanager
