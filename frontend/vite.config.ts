@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
 
+// Dev server proxies /api to the FastAPI backend on :8000
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: {
