@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Instructions for AI coding agents working with this project.
+Architecture guide and instructions for AI coding agents working with this project.
 
 ## Pixeltable Resources
 
