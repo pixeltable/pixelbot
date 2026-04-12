@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useCallback } from 'react'
+import { useMountEffect } from '@/hooks/use-mount-effect'
 import {
   Plug,
   Send,
@@ -64,7 +65,7 @@ export function IntegrationsPage() {
     }
   }, [addToast])
 
-  useEffect(() => { fetchData() }, [fetchData])
+  useMountEffect(() => { fetchData() })
 
   const handleTest = async (serviceId: string) => {
     const message = testMessages[serviceId]?.trim() || 'Test notification from Pixelbot'

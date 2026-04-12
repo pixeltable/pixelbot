@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useCallback } from 'react'
+import { useMountEffect } from '@/hooks/use-mount-effect'
 import { Plus, Trash2, Save, Loader2, Settings, User, Sliders } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -37,9 +38,9 @@ export function SettingsPage() {
     }
   }, [addToast])
 
-  useEffect(() => {
+  useMountEffect(() => {
     fetchPersonas()
-  }, [fetchPersonas])
+  })
 
   const handleSelectPersona = useCallback(
     (name: string) => {

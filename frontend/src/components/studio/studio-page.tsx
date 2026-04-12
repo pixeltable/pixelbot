@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef } from 'react'
+import { useMountEffect } from '@/hooks/use-mount-effect'
 import {
   FileText,
   ImageIcon,
@@ -249,7 +250,7 @@ export function StudioPage() {
   }, [handleUpload])
 
   // Load files and operations on mount
-  useEffect(() => {
+  useMountEffect(() => {
     const loadData = async () => {
       setIsLoadingFiles(true)
       try {
@@ -277,7 +278,7 @@ export function StudioPage() {
       }
     }
     loadData()
-  }, [addToast])
+  })
 
   // Load preview when selecting a file
   const handleSelectFile = useCallback(
@@ -1191,6 +1192,7 @@ export function StudioPage() {
                     {/* CSV table viewer */}
                     {selectedFile.type === 'csv' && (
                       <CsvWorkspace
+                        key={selectedFile.table_name || selectedFile.uuid}
                         csvData={csvData}
                         isLoading={isLoadingCsv}
                         tableName={selectedFile.table_name ?? ''}
@@ -1868,7 +1870,12 @@ function CsvWorkspace({
   const [editingCell, setEditingCell] = useState<{ rowIdx: number; col: string } | null>(null)
   const [editValue, setEditValue] = useState('')
   const [isSaving, setIsSaving] = useState(false)
-  const editInputRef = useRef<HTMLInputElement>(null)
+  const editInputRef = useCallback((el: HTMLInputElement | null) => {
+    if (el) {
+      el.focus()
+      el.select()
+    }
+  }, [])
 
   // Add row state
   const [isAddingRow, setIsAddingRow] = useState(false)
@@ -1900,17 +1907,9 @@ function CsvWorkspace({
     }
   }, [tableName])
 
-  useEffect(() => {
+  useMountEffect(() => {
     loadVersions()
-  }, [loadVersions])
-
-  // Focus the edit input when editing starts
-  useEffect(() => {
-    if (editingCell) {
-      editInputRef.current?.focus()
-      editInputRef.current?.select()
-    }
-  }, [editingCell])
+  })
 
   const handleStartEdit = useCallback((rowIdx: number, col: string, currentValue: unknown) => {
     setEditingCell({ rowIdx, col })

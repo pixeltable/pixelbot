@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo } from 'react'
+import { useMountEffect } from '@/hooks/use-mount-effect'
 import {
   Database,
   Table2,
@@ -267,7 +268,7 @@ export function DatabasePage() {
     setIsSampling(false)
   }, [selectedTable, addToast])
 
-  useEffect(() => {
+  useMountEffect(() => {
     async function load() {
       try {
         const [tablesResult, typesResult, funcsResult] = await Promise.all([
@@ -285,7 +286,7 @@ export function DatabasePage() {
       }
     }
     load()
-  }, [addToast])
+  })
 
   const handleSelectTable = useCallback(
     async (table: TableInfo) => {

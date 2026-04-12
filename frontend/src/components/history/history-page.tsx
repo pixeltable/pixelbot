@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useCallback } from 'react'
+import { useMountEffect } from '@/hooks/use-mount-effect'
 import { useNavigate } from 'react-router-dom'
 import {
   Trash2,
@@ -54,25 +55,28 @@ export function HistoryPage() {
     }
   }, [addToast])
 
-  useEffect(() => {
+  useMountEffect(() => {
     fetchConversations()
-  }, [fetchConversations])
+  })
 
-  useEffect(() => {
-    if (view !== 'timeline') return
-    async function loadTimeline() {
-      setIsLoadingTimeline(true)
-      try {
-        const result = await api.getTimeline(200)
-        setTimelineEvents(result.events)
-      } catch (err) {
-        addToast(err instanceof Error ? err.message : 'Failed to load timeline', 'error')
-      } finally {
-        setIsLoadingTimeline(false)
-      }
+  const loadTimeline = useCallback(async () => {
+    setIsLoadingTimeline(true)
+    try {
+      const result = await api.getTimeline(200)
+      setTimelineEvents(result.events)
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : 'Failed to load timeline', 'error')
+    } finally {
+      setIsLoadingTimeline(false)
     }
-    loadTimeline()
-  }, [view, addToast])
+  }, [addToast])
+
+  const handleSetView = useCallback((newView: HistoryView) => {
+    setView(newView)
+    if (newView === 'timeline') {
+      loadTimeline()
+    }
+  }, [loadTimeline])
 
   const handleOpenConversation = useCallback(
     (conversationId: string) => {
@@ -148,7 +152,7 @@ export function HistoryPage() {
                   ? 'bg-accent text-foreground'
                   : 'text-muted-foreground hover:text-foreground',
               )}
-              onClick={() => setView('conversations')}
+              onClick={() => handleSetView('conversations')}
             >
               <MessageSquare className="h-3 w-3 inline mr-1" />
               Conversations
@@ -160,7 +164,7 @@ export function HistoryPage() {
                   ? 'bg-accent text-foreground'
                   : 'text-muted-foreground hover:text-foreground',
               )}
-              onClick={() => setView('timeline')}
+              onClick={() => handleSetView('timeline')}
             >
               <Clock className="h-3 w-3 inline mr-1" />
               Timeline

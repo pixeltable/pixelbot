@@ -110,6 +110,8 @@ export interface GeneratedVideo {
 export interface GenerationConfig {
   image_provider: string
   image_model: string
+  flux_provider: string
+  flux_model: string
   video_provider: string
   video_model: string
 }

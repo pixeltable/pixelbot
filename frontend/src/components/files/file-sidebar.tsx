@@ -1,4 +1,5 @@
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useRef } from 'react'
+import { useMountEffect } from '@/hooks/use-mount-effect'
 import { Upload, Link, Trash2, FileText, ImageIcon, Film, Music, Loader2, X } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { useToast } from '@/components/ui/toast'
@@ -49,9 +50,9 @@ export function FileSidebar() {
     }
   }, [])
 
-  useEffect(() => {
+  useMountEffect(() => {
     fetchFiles()
-  }, [fetchFiles])
+  })
 
   const handleUpload = useCallback(
     async (files: FileList | null) => {

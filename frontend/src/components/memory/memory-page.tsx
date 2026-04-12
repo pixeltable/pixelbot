@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef } from 'react'
+import { useMountEffect } from '@/hooks/use-mount-effect'
 import { Trash2, Download, Search, Plus, Loader2, Brain, Code, FileText, Clock } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -23,34 +24,28 @@ export function MemoryPage() {
   const [newContent, setNewContent] = useState('')
   const [newType, setNewType] = useState<'text' | 'code'>('text')
   const [newLanguage, setNewLanguage] = useState('')
-  const [debouncedSearch, setDebouncedSearch] = useState('')
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  // Debounce search input - wait 400ms after last keystroke
-  useEffect(() => {
-    if (debounceRef.current) clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(() => {
-      setDebouncedSearch(search)
-    }, 400)
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current)
-    }
-  }, [search])
-
-  const fetchMemory = useCallback(async () => {
+  const fetchMemory = useCallback(async (query: string = '') => {
     setIsLoading(true)
     try {
-      const data = await api.getMemory(debouncedSearch || undefined)
+      const data = await api.getMemory(query || undefined)
       setItems(data)
     } catch {
       addToast('Failed to load memory', 'error')
     } finally {
       setIsLoading(false)
     }
-  }, [addToast, debouncedSearch])
+  }, [addToast])
 
-  useEffect(() => {
-    fetchMemory()
+  useMountEffect(() => {
+    fetchMemory('')
+  })
+
+  const handleSearchChange = useCallback((newSearch: string) => {
+    setSearch(newSearch)
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => {
+      fetchMemory(newSearch)
+    }, 400)
   }, [fetchMemory])
 
   const handleDelete = useCallback(
@@ -58,12 +53,12 @@ export function MemoryPage() {
       try {
         await api.deleteMemory(timestamp)
         addToast('Memory item deleted', 'success')
-        await fetchMemory()
+        await fetchMemory(search)
       } catch (err) {
         addToast(err instanceof Error ? err.message : 'Delete failed', 'error')
       }
     },
-    [addToast, fetchMemory],
+    [addToast, fetchMemory, search],
   )
 
   const handleAdd = useCallback(async () => {
@@ -78,11 +73,11 @@ export function MemoryPage() {
       setNewContent('')
       setNewLanguage('')
       setIsAddOpen(false)
-      await fetchMemory()
+      await fetchMemory(search)
     } catch (err) {
       addToast(err instanceof Error ? err.message : 'Failed to add', 'error')
     }
-  }, [newContent, newType, newLanguage, addToast, fetchMemory])
+  }, [newContent, newType, newLanguage, addToast, fetchMemory, search])
 
   const handleDownload = useCallback(async () => {
     try {
@@ -131,7 +126,7 @@ export function MemoryPage() {
           <Input
             placeholder="Semantic search across memory..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => handleSearchChange(e.target.value)}
             className="pl-9 h-9 rounded-lg text-sm"
           />
         </div>

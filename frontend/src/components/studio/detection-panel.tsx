@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo } from 'react'
+import { useMountEffect } from '@/hooks/use-mount-effect'
 import {
   ScanSearch,
   Loader2,
@@ -61,9 +62,9 @@ export function DetectionPanel({
   const [error, setError] = useState<string | null>(null)
 
   // Load available models
-  useEffect(() => {
+  useMountEffect(() => {
     api.getDetectionModels().then(setModels).catch(() => {})
-  }, [])
+  })
 
   const currentModelType = useMemo(() => {
     return models.find((m) => m.key === selectedModel)?.type ?? 'detection'
@@ -91,10 +92,10 @@ export function DetectionPanel({
     }
   }, [imageUuid, source, frameIdx, selectedModel, threshold])
 
-  // Reset result when switching models
-  useEffect(() => {
+  const handleModelChange = useCallback((newModel: string) => {
+    setSelectedModel(newModel)
     setResult(null)
-  }, [selectedModel])
+  }, [])
 
   const detections = result?.detections ?? []
   const classifications = result?.classifications ?? []
@@ -109,7 +110,7 @@ export function DetectionPanel({
           <select
             className="appearance-none rounded-lg border border-border bg-card px-3 py-1.5 pr-7 text-xs font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-k-yellow/40"
             value={selectedModel}
-            onChange={(e) => setSelectedModel(e.target.value)}
+            onChange={(e) => handleModelChange(e.target.value)}
           >
             {models.map((m) => (
               <option key={m.key} value={m.key}>

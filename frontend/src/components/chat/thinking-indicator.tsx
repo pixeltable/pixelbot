@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useRef, useMemo } from 'react'
+import { useMountEffect } from '@/hooks/use-mount-effect'
 import {
   Sparkles,
   Search,
@@ -34,24 +35,20 @@ const PIPELINE_STAGES: PipelineStage[] = [
 ]
 
 export function ThinkingIndicator() {
-  const [activeStageIdx, setActiveStageIdx] = useState(0)
   const [elapsedMs, setElapsedMs] = useState(0)
   const startTime = useRef(Date.now())
 
   // Elapsed time ticker (every 100ms for smooth display)
-  useEffect(() => {
+  useMountEffect(() => {
     const interval = setInterval(() => {
       setElapsedMs(Date.now() - startTime.current)
     }, 100)
     return () => clearInterval(interval)
-  }, [])
+  })
 
-  // Advance stages based on elapsed time
-  useEffect(() => {
-    const nextIdx = PIPELINE_STAGES.findIndex((s) => s.delay > elapsedMs)
-    const current = nextIdx === -1 ? PIPELINE_STAGES.length - 1 : Math.max(0, nextIdx - 1)
-    setActiveStageIdx(current)
-  }, [elapsedMs])
+  // Advance stages based on elapsed time inline (derived state)
+  const nextIdx = PIPELINE_STAGES.findIndex((s) => s.delay > elapsedMs)
+  const activeStageIdx = nextIdx === -1 ? PIPELINE_STAGES.length - 1 : Math.max(0, nextIdx - 1)
 
   const activeStage = PIPELINE_STAGES[activeStageIdx]
   const ActiveIcon = activeStage.icon

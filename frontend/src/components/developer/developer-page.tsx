@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useCallback } from 'react'
+import { useMountEffect } from '@/hooks/use-mount-effect'
 import {
   Code2,
   Download,
@@ -741,31 +742,24 @@ function ExportTab({ copyToClipboard }: { copyToClipboard: (text: string, label?
   const [isLoading, setIsLoading] = useState(false)
   const [preview, setPreview] = useState<{ columns: string[]; rows: Record<string, unknown>[]; count: number } | null>(null)
 
-  useEffect(() => {
+  useMountEffect(() => {
     fetch(`${BASE}/export/tables`)
       .then((r) => r.json())
       .then((data) => {
-        setTables(data.tables || [])
-        if (data.tables?.length > 0) setSelectedTable(data.tables[0].path)
+        const t = data.tables || []
+        setTables(t)
+        if (t.length > 0) {
+          setSelectedTable(t[0].path)
+          loadPreview(t[0].path)
+        }
       })
       .catch(() => {})
-  }, [])
+  })
 
-  const loadPreview = useCallback(async (path: string) => {
-    try {
-      const res = await fetch(`${BASE}/export/preview/${path}?limit=5`)
-      if (res.ok) {
-        const data = await res.json()
-        setPreview(data)
-      }
-    } catch {
-      setPreview(null)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (selectedTable) loadPreview(selectedTable)
-  }, [selectedTable, loadPreview])
+  const handleTableChange = useCallback((path: string) => {
+    setSelectedTable(path)
+    loadPreview(path)
+  }, [loadPreview])
 
   const handleDownload = useCallback(async () => {
     if (!selectedTable) return
@@ -808,7 +802,7 @@ function ExportTab({ copyToClipboard }: { copyToClipboard: (text: string, label?
             <select
               className="w-full h-9 rounded-lg border border-input bg-transparent px-3 text-[12px] font-mono"
               value={selectedTable ?? ''}
-              onChange={(e) => setSelectedTable(e.target.value)}
+              onChange={(e) => handleTableChange(e.target.value)}
             >
               {tables.map((t) => (
                 <option key={t.path} value={t.path}>

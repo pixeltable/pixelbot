@@ -17,7 +17,6 @@ from umap import UMAP
 import pixeltable as pxt
 from pixeltable.functions.huggingface import clip
 from pixeltable.functions import gemini
-from pixeltable.functions import openai as openai_fn
 from utils import pxt_retry
 from pixeltable.functions import image as pxt_image
 from pixeltable.functions import video as pxt_video
@@ -158,11 +157,16 @@ OPERATIONS_CATALOG = {
          "params": [{"name": "text", "type": "string", "default": "Hello World"},
                     {"name": "font_size", "type": "number", "default": 32, "min": 8, "max": 128},
                     {"name": "position", "type": "string", "default": "bottom"}]},
-        {"id": "crop_video", "label": "Crop Video", "description": "Crop a rectangular region of the video", "category": "transform",
-         "params": [{"name": "top", "type": "number", "default": 0, "min": 0},
-                    {"name": "left", "type": "number", "default": 0, "min": 0},
-                    {"name": "bottom", "type": "number", "default": 480, "min": 1},
-                    {"name": "right", "type": "number", "default": 640, "min": 1}]},
+        {"id": "crop_video", "label": "Crop Video", "description": "Crop a rectangular region (bbox) of the video", "category": "transform",
+         "params": [{"name": "x", "type": "number", "default": 0, "min": 0},
+                    {"name": "y", "type": "number", "default": 0, "min": 0},
+                    {"name": "width", "type": "number", "default": 640, "min": 1},
+                    {"name": "height", "type": "number", "default": 480, "min": 1}]},
+        {"id": "resize_video", "label": "Resize Video", "description": "Resize video to specific dimensions", "category": "transform",
+         "params": [{"name": "width", "type": "number", "default": 640, "min": 1},
+                    {"name": "height", "type": "number", "default": 480, "min": 1}]},
+        {"id": "concat_videos", "label": "Concat Videos", "description": "Concatenate multiple videos into one (same resolution required)", "category": "transform",
+         "params": [{"name": "uuids", "type": "string", "default": "", "description": "Comma-separated UUIDs of videos to concatenate"}]},
     ],
 }
 
@@ -876,7 +880,7 @@ def _normalize_thumbnail(raw_thumb) -> str | None:
 
 # ── Embedding Visualization ──────────────────────────────────────────────────
 
-EMBED_TEXT_FN = openai_fn.embeddings.using(model=config.OPENAI_EMBEDDING_MODEL_ID)
+EMBED_TEXT_FN = gemini.embed_content.using(model=config.GEMINI_EMBEDDING_MODEL_ID)
 _embed_clip_fn = None
 
 
@@ -1653,24 +1657,68 @@ def transform_video(body: TransformRequest):
             }
 
         elif body.operation == "crop_video":
-            top = int(body.params.get("top", 0))
-            left = int(body.params.get("left", 0))
-            bottom = int(body.params.get("bottom", 480))
-            right = int(body.params.get("right", 640))
+            x = int(body.params.get("x", 0))
+            y = int(body.params.get("y", 0))
+            w = int(body.params.get("width", 640))
+            h = int(body.params.get("height", 480))
+            bbox = [x, y, w, h]
             rows = match.select(
-                cropped=pxt_video.crop(vid_table.video, top=top, left=left, bottom=bottom, right=right),
+                cropped=pxt_video.crop(vid_table.video, bbox=bbox, bbox_format="xywh"),
             ).collect()
             if not rows:
                 raise HTTPException(status_code=404, detail="Video not found")
             cropped = rows[0].get("cropped")
             if cropped is None:
-                raise HTTPException(status_code=400, detail="Crop failed — check coordinates against video dimensions")
+                raise HTTPException(status_code=400, detail="Crop failed — check bbox against video dimensions")
             video_path = str(cropped)
             return {
                 "operation": "crop_video",
                 "video_url": f"/api/serve_video?path={video_path}",
                 "video_path": video_path,
-                "crop": {"top": top, "left": left, "bottom": bottom, "right": right},
+                "bbox": bbox,
+            }
+
+        elif body.operation == "resize_video":
+            w = int(body.params.get("width", 640))
+            h = int(body.params.get("height", 480))
+            # pxt_video.resize uses 'size=(w, h)' per typical PIL/Pixeltable patterns or 'width=w, height=h'
+            # Based on Pixeltable PR #1210 and image.resize, we will use size=(w,h) or w,h.
+            # However some functions use kwargs `width=w, height=h`. Let's try size=[w, h] or let's use kwargs directly based on `image.resize`
+            rows = match.select(
+                resized=pxt_video.resize(vid_table.video, size=[w, h]),
+            ).collect()
+            if not rows:
+                raise HTTPException(status_code=404, detail="Video not found")
+            resized = rows[0].get("resized")
+            if resized is None:
+                raise HTTPException(status_code=400, detail="Resize failed")
+            video_path = str(resized)
+            return {
+                "operation": "resize_video",
+                "video_url": f"/api/serve_video?path={video_path}",
+                "video_path": video_path,
+                "dimensions": [w, h],
+            }
+
+        elif body.operation == "concat_videos":
+            uuid_str = body.params.get("uuids", "")
+            uuids_list = [u.strip() for u in uuid_str.split(",") if u.strip()]
+            if len(uuids_list) < 2:
+                raise HTTPException(status_code=400, detail="Provide at least 2 comma-separated UUIDs")
+            vid_table = _get_pxt_table("video")
+            concat_result = (
+                vid_table.where(vid_table.uuid.isin(uuids_list))
+                .select(concat=pxt_video.concat_videos_agg(vid_table.timestamp, vid_table.video))
+                .collect()
+            )
+            if not concat_result or concat_result[0].get("concat") is None:
+                raise HTTPException(status_code=400, detail="Concat failed — ensure all videos share the same resolution")
+            video_path = str(concat_result[0]["concat"])
+            return {
+                "operation": "concat_videos",
+                "video_url": f"/api/serve_video?path={video_path}",
+                "video_path": video_path,
+                "source_uuids": uuids_list,
             }
 
         elif body.operation == "detect_scenes":
@@ -1934,7 +1982,7 @@ def reve_edit_image(body: ReveEditRequest):
             rows = gen_table.where(
                 (gen_table.timestamp == target_ts) & (gen_table.user_id == user_id)
             ).select(
-                edited=reve_fn.edit(gen_table.generated_image, body.instruction),
+                edited=reve_fn.edit(gen_table.generated_image, edit_instruction=body.instruction),
             ).collect()
             if rows:
                 edited_img = rows[0].get("edited")
@@ -1944,7 +1992,7 @@ def reve_edit_image(body: ReveEditRequest):
             rows = img_table.where(
                 (img_table.uuid == body.uuid) & (img_table.user_id == user_id)
             ).select(
-                edited=reve_fn.edit(img_table.image, body.instruction),
+                edited=reve_fn.edit(img_table.image, edit_instruction=body.instruction),
             ).collect()
             if rows:
                 edited_img = rows[0].get("edited")

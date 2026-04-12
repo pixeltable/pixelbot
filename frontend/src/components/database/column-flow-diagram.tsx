@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useCallback, useMemo, useRef } from 'react'
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -398,11 +398,6 @@ function ColumnFlowContent({ columns }: { columns: PipelineColumn[] }) {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const nodeClickedRef = useRef(false)
 
-  useEffect(() => {
-    setNodes(layoutedNodes)
-    setEdges(layoutedEdges)
-  }, [layoutedNodes, layoutedEdges, setNodes, setEdges])
-
   const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
     nodeClickedRef.current = true
     setSelectedNodeId((prev) => (node.id === prev ? null : node.id))
@@ -501,9 +496,10 @@ function ColumnFlowContent({ columns }: { columns: PipelineColumn[] }) {
 // ── Exported Component ───────────────────────────────────────────────────────
 
 export function ColumnFlowDiagram({ columns }: { columns: PipelineColumn[] }) {
+  const columnsKey = columns.map(c => c.name).join('|')
   return (
     <ReactFlowProvider>
-      <ColumnFlowContent columns={columns} />
+      <ColumnFlowContent key={columnsKey} columns={columns} />
     </ReactFlowProvider>
   )
 }

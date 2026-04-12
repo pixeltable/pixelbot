@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo } from 'react'
+import { useMountEffect } from '@/hooks/use-mount-effect'
 import {
   FlaskConical,
   Play,
@@ -67,8 +68,17 @@ export function ExperimentsPage() {
   const [rightTab, setRightTab] = useState<'results' | 'history'>('results')
   const [copiedId, setCopiedId] = useState<string | null>(null)
 
+  const loadHistory = useCallback(async () => {
+    try {
+      const data = await api.getExperimentHistory()
+      setHistory(data)
+    } catch {
+      // silent — history may not exist yet
+    }
+  }, [])
+
   // Load models and history on mount
-  useEffect(() => {
+  useMountEffect(() => {
     api.getExperimentModels().then((models) => {
       setAvailableModels(models)
       const available = models.filter((m) => m.available).map((m) => m.id)
@@ -79,16 +89,7 @@ export function ExperimentsPage() {
       console.error('Failed to load models:', err)
     })
     loadHistory()
-  }, [])
-
-  const loadHistory = useCallback(async () => {
-    try {
-      const data = await api.getExperimentHistory()
-      setHistory(data)
-    } catch {
-      // silent — history may not exist yet
-    }
-  }, [])
+  })
 
   const toggleModel = useCallback((modelId: string) => {
     setSelectedModels((prev) =>

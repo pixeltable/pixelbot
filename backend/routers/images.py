@@ -13,9 +13,9 @@ import pixeltable as pxt
 
 import config
 from models import (
-    AudioRow, ImageGenRow, ImageRow, VideoGenRow, VideoRow,
+    AudioRow, ImageGenRow, FluxGenRow, ImageRow, VideoGenRow, VideoRow,
     GenerateImageResponse, SaveToCollectionResponse, GenerateSpeechResponse,
-    DeleteResponse,
+    DeleteResponse, GenerateSlideshowRequest, GenerateSlideshowResponse
 )
 from utils import encode_image_base64, create_thumbnail_base64, pxt_retry
 
@@ -33,6 +33,8 @@ def get_generation_config():
     return {
         "image_provider": "gemini",
         "image_model": config.IMAGEN_MODEL_ID,
+        "flux_provider": "bfl",
+        "flux_model": config.FLUX_MODEL_ID,
         "video_provider": "gemini",
         "video_model": config.VEO_MODEL_ID,
     }
@@ -189,6 +191,195 @@ def delete_generated_image(timestamp_str: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ── Shared Request Models ────────────────────────────────────────────────────
+
+class SaveToCollectionRequest(BaseModel):
+    timestamp: str
+
+
+# ── FLUX Image Generation (BFL) ──────────────────────────────────────────────
+
+class GenerateFluxImageRequest(BaseModel):
+    prompt: str
+    width: int = 1024
+    height: int = 1024
+
+
+@router.post("/generate_flux_image", response_model=GenerateImageResponse)
+@pxt_retry()
+def generate_flux_image(body: GenerateFluxImageRequest):
+    """Generate an image using BFL FLUX.
+
+    Pixeltable's insert() blocks until the computed column is ready.
+    """
+    user_id = config.DEFAULT_USER_ID
+    current_timestamp = datetime.now()
+
+    w = max(64, (body.width // 16) * 16)
+    h = max(64, (body.height // 16) * 16)
+
+    try:
+        flux_table = pxt.get_table("agents.flux_generation_tasks")
+        flux_table.insert([FluxGenRow(
+            prompt=body.prompt,
+            width=w,
+            height=h,
+            timestamp=current_timestamp,
+            user_id=user_id,
+        )])
+
+        result = (
+            flux_table.where(
+                (flux_table.timestamp == current_timestamp) & (flux_table.user_id == user_id)
+            )
+            .select(generated_image=flux_table.generated_image)
+            .collect()
+        )
+
+        if len(result) == 0 or result[0].get("generated_image") is None:
+            raise HTTPException(status_code=500, detail="FLUX image generation failed")
+
+        img = result[0]["generated_image"]
+        if not isinstance(img, Image.Image):
+            raise HTTPException(status_code=500, detail=f"Expected PIL Image, got {type(img)}")
+
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        img_base64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+
+        return GenerateImageResponse(
+            generated_image_base64=img_base64,
+            timestamp=current_timestamp.isoformat(),
+            prompt=body.prompt,
+            provider="flux",
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error generating FLUX image: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/flux_image_history")
+@pxt_retry()
+def get_flux_image_history():
+    """Get history of FLUX-generated images."""
+    user_id = config.DEFAULT_USER_ID
+
+    try:
+        flux_table = pxt.get_table("agents.flux_generation_tasks")
+
+        has_thumbnail_col = hasattr(flux_table, "thumbnail")
+
+        select_kwargs: dict = {
+            "prompt": flux_table.prompt,
+            "timestamp": flux_table.timestamp,
+            "generated_image": flux_table.generated_image,
+            "width": flux_table.width,
+            "height": flux_table.height,
+        }
+        if has_thumbnail_col:
+            select_kwargs["thumbnail"] = flux_table.thumbnail
+
+        results = (
+            flux_table.where(flux_table.user_id == user_id)
+            .select(**select_kwargs)
+            .order_by(flux_table.timestamp, asc=False)
+            .limit(50)
+            .collect()
+        )
+
+        history = []
+        for entry in results:
+            img_data = entry.get("generated_image")
+            timestamp = entry.get("timestamp")
+
+            if not isinstance(img_data, Image.Image):
+                continue
+
+            thumbnail_b64 = entry.get("thumbnail") if has_thumbnail_col else None
+            if thumbnail_b64 and isinstance(thumbnail_b64, (str, bytes)):
+                if isinstance(thumbnail_b64, bytes):
+                    thumbnail_b64 = thumbnail_b64.decode("utf-8")
+                if not thumbnail_b64.startswith("data:"):
+                    thumbnail_b64 = f"data:image/png;base64,{thumbnail_b64}"
+            else:
+                thumbnail_b64 = create_thumbnail_base64(img_data, THUMB_SIZE)
+
+            full_image_b64 = encode_image_base64(img_data)
+
+            if thumbnail_b64 and full_image_b64:
+                history.append({
+                    "prompt": entry.get("prompt"),
+                    "timestamp": timestamp.strftime("%Y-%m-%d %H:%M:%S.%f") if timestamp else None,
+                    "thumbnail_image": thumbnail_b64,
+                    "full_image": full_image_b64,
+                    "width": entry.get("width"),
+                    "height": entry.get("height"),
+                    "provider": "flux",
+                })
+
+        return history
+
+    except Exception as e:
+        logger.error(f"Error fetching FLUX image history: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/save_flux_image", response_model=SaveToCollectionResponse)
+@pxt_retry()
+def save_flux_image_to_collection(body: SaveToCollectionRequest):
+    """Save a FLUX-generated image into agents.images for CLIP embedding + RAG."""
+    user_id = config.DEFAULT_USER_ID
+
+    try:
+        target_timestamp = datetime.strptime(body.timestamp, "%Y-%m-%d %H:%M:%S.%f")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid timestamp format")
+
+    try:
+        flux_table = pxt.get_table("agents.flux_generation_tasks")
+        result = (
+            flux_table.where(
+                (flux_table.timestamp == target_timestamp) & (flux_table.user_id == user_id)
+            )
+            .select(generated_image=flux_table.generated_image)
+            .collect()
+        )
+
+        if len(result) == 0 or result[0].get("generated_image") is None:
+            raise HTTPException(status_code=404, detail="FLUX image not found")
+
+        img = result[0]["generated_image"]
+        if not isinstance(img, Image.Image):
+            raise HTTPException(status_code=500, detail=f"Expected PIL Image, got {type(img)}")
+
+        os.makedirs(config.UPLOAD_FOLDER, exist_ok=True)
+        file_uuid = str(uuid.uuid4())
+        file_path = os.path.join(config.UPLOAD_FOLDER, f"{file_uuid}_flux.png")
+        img.save(file_path, format="PNG")
+
+        images_table = pxt.get_table("agents.images")
+        images_table.insert([ImageRow(
+            image=file_path,
+            uuid=file_uuid,
+            timestamp=datetime.now(),
+            user_id=user_id,
+        )])
+
+        return SaveToCollectionResponse(
+            message="FLUX image saved to collection — CLIP embedding and RAG indexing will run automatically",
+            uuid=file_uuid,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error saving FLUX image to collection: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ── Generate Video (Gemini Veo) ──────────────────────────────────────────────
 
 class GenerateVideoRequest(BaseModel):
@@ -232,7 +423,7 @@ def generate_video(body: GenerateVideoRequest):
         return {
             "timestamp": current_timestamp.isoformat(),
             "prompt": body.prompt,
-            "provider": config.VIDEO_GEN_PROVIDER,
+            "provider": "gemini",
             "video_path": video_path,
         }
 
@@ -279,7 +470,7 @@ def get_video_history():
                 "prompt": entry.get("prompt"),
                 "timestamp": timestamp.strftime("%Y-%m-%d %H:%M:%S.%f") if timestamp else None,
                 "video_path": video_path,
-                "provider": config.VIDEO_GEN_PROVIDER,
+                "provider": "gemini",
             })
 
         return video_history
@@ -331,10 +522,6 @@ def delete_generated_video(timestamp_str: str):
 
 
 # ── Save Generated Media to Collection ───────────────────────────────────────
-
-class SaveToCollectionRequest(BaseModel):
-    timestamp: str
-
 
 @router.post("/save_generated_image", response_model=SaveToCollectionResponse)
 @pxt_retry()
@@ -439,6 +626,120 @@ def save_generated_video_to_collection(body: SaveToCollectionRequest):
     except Exception as e:
         logger.error(f"Error saving generated video to collection: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Generate Slideshow ───────────────────────────────────────────────────────
+
+@router.post("/generate_slideshow", response_model=GenerateSlideshowResponse)
+@pxt_retry()
+def generate_slideshow(body: GenerateSlideshowRequest):
+    """Generate a video slideshow from a list of generated image timestamps."""
+    user_id = config.DEFAULT_USER_ID
+    current_timestamp = datetime.now()
+
+    if not body.timestamps or len(body.timestamps) < 2:
+        raise HTTPException(status_code=400, detail="Slideshow requires at least 2 images")
+
+    # Gather images from imagen and flux tables
+    images = []
+    
+    imagen_table = pxt.get_table("agents.image_generation_tasks")
+    flux_table = pxt.get_table("agents.flux_generation_tasks")
+
+    for ts_str in body.timestamps:
+        try:
+            target_ts = datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S.%f")
+        except ValueError:
+            continue
+        
+        # Try Imagen
+        res = imagen_table.where((imagen_table.timestamp == target_ts) & (imagen_table.user_id == user_id)).select(img=imagen_table.generated_image).collect()
+        if res and res[0].get("img"):
+            images.append(res[0]["img"])
+            continue
+        
+        # Try Flux
+        res = flux_table.where((flux_table.timestamp == target_ts) & (flux_table.user_id == user_id)).select(img=flux_table.generated_image).collect()
+        if res and res[0].get("img"):
+            images.append(res[0]["img"])
+
+    if len(images) < 2:
+        raise HTTPException(status_code=404, detail="Could not find at least 2 valid images matching timestamps")
+
+    # Force uniform dimensions (using first image's size)
+    from PIL import ImageOps
+    target_size = images[0].size
+    
+    os.makedirs(config.UPLOAD_FOLDER, exist_ok=True)
+    slideshow_id = uuid.uuid4().hex[:10]
+    
+    saved_paths = []
+    for i, img in enumerate(images):
+        if img.mode != "RGB":
+            img = img.convert("RGB")
+        if img.size != target_size:
+            img = ImageOps.fit(img, target_size, Image.Resampling.LANCZOS)
+            
+        p = os.path.join(config.UPLOAD_FOLDER, f"slide_{slideshow_id}_{i}.png")
+        img.save(p, format="PNG")
+        saved_paths.append(p)
+
+    temp_table_name = f"agents.temp_slideshow_{slideshow_id}"
+    try:
+        from pixeltable.functions import video as pxt_video
+        
+        # Create temp table
+        temp_tbl = pxt.create_table(temp_table_name, {"idx": pxt.Int, "img": pxt.Image})
+        
+        # Insert rows
+        temp_tbl.insert([{"idx": i, "img": path} for i, path in enumerate(saved_paths)])
+        
+        # Aggregate to video
+        result = temp_tbl.select(vid=pxt_video.concat_videos_agg(temp_tbl.idx, temp_tbl.img)).collect()
+        if not result or result[0].get("vid") is None:
+            raise HTTPException(status_code=500, detail="Slideshow concatenation failed")
+            
+        video_path = str(result[0]["vid"])
+        
+        file_uuid = str(uuid.uuid4())
+        dest_path = os.path.join(config.UPLOAD_FOLDER, f"{file_uuid}_slideshow.mp4")
+        
+        import shutil
+        shutil.copy2(video_path, dest_path)
+        
+        # Insert into video generation tasks to appear in UI
+        vid_gen_tbl = pxt.get_table("agents.video_generation_tasks")
+        vid_gen_tbl.insert([VideoGenRow(
+            prompt=f"Slideshow from {len(saved_paths)} selected images", 
+            timestamp=current_timestamp, 
+            user_id=user_id
+        )])
+        
+        # Finally, we must manually update the generated_video property so it points to our custom file!
+        # Wait, generated_video is a computed column on agents.video_generation_tasks. We can't insert it.
+        # Instead, we will directly insert into agents.videos collection!
+        videos_table = pxt.get_table("agents.videos")
+        videos_table.insert([VideoRow(
+            video=dest_path,
+            uuid=file_uuid,
+            timestamp=datetime.now(),
+            user_id=user_id,
+        )])
+        
+        return GenerateSlideshowResponse(
+            video_url=f"/api/serve_video?path={dest_path}",
+            video_path=dest_path,
+            uuid=file_uuid
+        )
+
+    except Exception as e:
+        logger.error(f"Error generating slideshow: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        try:
+            pxt.drop_table(temp_table_name, force=True)
+        except:
+            pass
 
 
 # ── Text-to-Speech (OpenAI TTS) ──────────────────────────────────────────────

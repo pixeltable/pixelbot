@@ -7,11 +7,12 @@ APP_NAMESPACE = "agents"
 # --- LLM & Model IDs ---
 # Primary LLM — all generation, reasoning, and structured output
 GEMINI_MODEL_ID = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-# Text embeddings (document chunks, memory, chat history)
-OPENAI_EMBEDDING_MODEL_ID = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
-GEMINI_EMBEDDING_MODEL_ID = os.getenv("GEMINI_EMBEDDING_MODEL", "gemini-embedding-001")  # legacy
-# Visual embeddings for video frames (no Gemini equivalent yet)
+# Multimodal embeddings — Gemini embed_content handles text, images, video, audio
+GEMINI_EMBEDDING_MODEL_ID = os.getenv("GEMINI_EMBEDDING_MODEL", "gemini-embedding-001")
+# Visual embeddings for cross-modal image/video search (text → image)
 CLIP_MODEL_ID = os.getenv("CLIP_MODEL", "openai/clip-vit-base-patch32")
+# FLUX image generation (BFL)
+FLUX_MODEL_ID = os.getenv("FLUX_MODEL", "flux-2-pro")
 # Audio transcription (OpenAI Whisper — Gemini audio handling not yet in pxt)
 WHISPER_MODEL_ID = os.getenv("WHISPER_MODEL", "whisper-1")
 # Kept for Prompt Lab multi-model comparison

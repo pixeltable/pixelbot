@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useCallback } from 'react'
+import { useMountEffect } from '@/hooks/use-mount-effect'
 import {
   Trash2,
   Download,
@@ -33,7 +34,7 @@ import * as api from '@/lib/api'
 import type { GeneratedImage, GeneratedVideo, GenerationConfig } from '@/types'
 import { cn } from '@/lib/utils'
 
-type ActiveTab = 'images' | 'videos'
+type ActiveTab = 'images' | 'flux' | 'videos'
 type ReveMode = 'edit'
 
 export function ImagesPage() {
@@ -51,6 +52,17 @@ export function ImagesPage() {
   const [isLoadingImages, setIsLoadingImages] = useState(true)
   const [selectedImage, setSelectedImage] = useState<GeneratedImage | null>(null)
 
+  // FLUX images
+  const [fluxImages, setFluxImages] = useState<GeneratedImage[]>([])
+  const [fluxSearch, setFluxSearch] = useState('')
+  const [isLoadingFlux, setIsLoadingFlux] = useState(false)
+  const [fluxLoaded, setFluxLoaded] = useState(false)
+
+  // Slideshow
+  const [isSlideshowMode, setIsSlideshowMode] = useState(false)
+  const [selectedSlideshowTimestamps, setSelectedSlideshowTimestamps] = useState<string[]>([])
+  const [isGeneratingSlideshow, setIsGeneratingSlideshow] = useState(false)
+
   // Videos
   const [videos, setVideos] = useState<GeneratedVideo[]>([])
   const [videoSearch, setVideoSearch] = useState('')
@@ -66,10 +78,9 @@ export function ImagesPage() {
   const [reveImage, setReveImage] = useState<GeneratedImage | null>(null)
   const [reveMode, setReveMode] = useState<ReveMode>('edit')
 
-  // Load config + data
-  useEffect(() => {
+  useMountEffect(() => {
     api.getGenerationConfig().then(setGenConfig).catch(() => {})
-  }, [])
+  })
 
   const fetchImages = useCallback(async () => {
     setIsLoadingImages(true)
@@ -80,6 +91,19 @@ export function ImagesPage() {
       addToast('Failed to load images', 'error')
     } finally {
       setIsLoadingImages(false)
+    }
+  }, [addToast])
+
+  const fetchFluxImages = useCallback(async () => {
+    setIsLoadingFlux(true)
+    try {
+      const data = await api.getFluxImageHistory()
+      setFluxImages(data)
+      setFluxLoaded(true)
+    } catch {
+      addToast('Failed to load FLUX images', 'error')
+    } finally {
+      setIsLoadingFlux(false)
     }
   }, [addToast])
 
@@ -96,16 +120,18 @@ export function ImagesPage() {
     }
   }, [addToast])
 
-  useEffect(() => {
+  useMountEffect(() => {
     fetchImages()
-  }, [fetchImages])
+  })
 
-  // Lazy-load videos only when the Videos tab is first selected
-  useEffect(() => {
-    if (activeTab === 'videos' && !videosLoaded) {
+  const handleTabChange = useCallback((tab: ActiveTab) => {
+    setActiveTab(tab)
+    if (tab === 'flux' && !fluxLoaded) {
+      fetchFluxImages()
+    } else if (tab === 'videos' && !videosLoaded) {
       fetchVideos()
     }
-  }, [activeTab, videosLoaded, fetchVideos])
+  }, [fluxLoaded, videosLoaded, fetchFluxImages, fetchVideos])
 
   const handleDeleteImage = useCallback(
     async (timestamp: string) => {
@@ -138,6 +164,35 @@ export function ImagesPage() {
   const handleDownloadImage = useCallback((image: GeneratedImage) => {
     const a = document.createElement('a')
     a.href = image.full_image
+    a.download = `${image.prompt.slice(0, 30).replace(/[^a-z0-9]/gi, '_').toLowerCase()}.png`
+    a.click()
+  }, [])
+
+  const handleGenerateSlideshow = useCallback(async () => {
+    if (selectedSlideshowTimestamps.length < 2) return
+    setIsGeneratingSlideshow(true)
+    try {
+      addToast('Generating slideshow... this may take a moment', 'info')
+      await api.generateSlideshow(selectedSlideshowTimestamps)
+      addToast('Slideshow generated successfully! Check the Videos tab.', 'success')
+      setIsSlideshowMode(false)
+      setSelectedSlideshowTimestamps([])
+      fetchVideos()
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : 'Slideshow generation failed', 'error')
+    } finally {
+      setIsGeneratingSlideshow(true)
+    }
+  }, [selectedSlideshowTimestamps, addToast, fetchVideos])
+
+  const toggleSlideshowSelect = useCallback((img: GeneratedImage) => {
+    setSelectedSlideshowTimestamps((prev) => 
+      prev.includes(img.timestamp)
+        ? prev.filter((t) => t !== img.timestamp)
+        : [...prev, img.timestamp]
+    )
+  }, [])
+    a.href = image.full_image
     a.download = `pixelbot_${image.timestamp}.png`
     a.click()
   }, [])
@@ -154,7 +209,11 @@ export function ImagesPage() {
       if (isSavingToCollection || savedToCollection.has(timestamp)) return
       setIsSavingToCollection(true)
       try {
-        await api.saveGeneratedImageToCollection(timestamp)
+        if (activeTab === 'flux') {
+          await api.saveFluxImage(timestamp)
+        } else {
+          await api.saveGeneratedImageToCollection(timestamp)
+        }
         setSavedToCollection((prev) => new Set(prev).add(timestamp))
         addToast('Image saved to collection — CLIP embedding & RAG indexing started', 'success')
       } catch (err) {
@@ -163,7 +222,7 @@ export function ImagesPage() {
         setIsSavingToCollection(false)
       }
     },
-    [isSavingToCollection, savedToCollection, addToast],
+    [isSavingToCollection, savedToCollection, addToast, activeTab],
   )
 
   const handleSaveVideoToCollection = useCallback(
@@ -199,16 +258,20 @@ export function ImagesPage() {
     (img) => !imageSearch || img.prompt.toLowerCase().includes(imageSearch.toLowerCase()),
   )
 
+  const filteredFluxImages = fluxImages.filter(
+    (img) => !fluxSearch || img.prompt.toLowerCase().includes(fluxSearch.toLowerCase()),
+  )
+
   const filteredVideos = videos.filter(
     (vid) => !videoSearch || vid.prompt.toLowerCase().includes(videoSearch.toLowerCase()),
   )
 
   const providerLabel =
     activeTab === 'images'
-      ? genConfig?.image_provider === 'gemini'
-        ? 'Gemini Imagen'
-        : 'DALL-E'
-      : 'Gemini Veo'
+      ? 'Gemini Imagen'
+      : activeTab === 'flux'
+        ? 'BFL FLUX'
+        : 'Gemini Veo'
 
   return (
     <div className="flex flex-col h-full">
@@ -218,7 +281,7 @@ export function ImagesPage() {
           <h2 className="text-lg font-semibold tracking-tight">Media Library</h2>
           <div className="flex items-center gap-2 mt-0.5">
             <p className="text-xs text-muted-foreground">
-              {images.length} image{images.length !== 1 ? 's' : ''} &middot;{' '}
+              {images.length} imagen &middot; {fluxImages.length} flux &middot;{' '}
               {videos.length} video{videos.length !== 1 ? 's' : ''}
             </p>
             {genConfig && (
@@ -239,10 +302,22 @@ export function ImagesPage() {
                 ? 'bg-k-yellow/10 text-k-yellow ring-1 ring-k-yellow/20'
                 : 'text-muted-foreground hover:bg-accent hover:text-foreground',
             )}
-            onClick={() => setActiveTab('images')}
+            onClick={() => handleTabChange('images')}
           >
             <ImageIcon className="h-3 w-3" />
             Images
+          </button>
+          <button
+            className={cn(
+              'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all',
+              activeTab === 'flux'
+                ? 'bg-orange-500/10 text-orange-400 ring-1 ring-orange-500/20'
+                : 'text-muted-foreground hover:bg-accent hover:text-foreground',
+            )}
+            onClick={() => handleTabChange('flux')}
+          >
+            <Palette className="h-3 w-3" />
+            FLUX
           </button>
           <button
             className={cn(
@@ -251,7 +326,7 @@ export function ImagesPage() {
                 ? 'bg-k-yellow/10 text-k-yellow ring-1 ring-k-yellow/20'
                 : 'text-muted-foreground hover:bg-accent hover:text-foreground',
             )}
-            onClick={() => setActiveTab('videos')}
+            onClick={() => handleTabChange('videos')}
           >
             <Film className="h-3 w-3" />
             Videos
@@ -259,21 +334,51 @@ export function ImagesPage() {
         </div>
       </div>
 
-      {/* Search */}
-      <div className="px-6 py-3">
-        <div className="relative">
+      {/* Search and Action Bar */}
+      <div className="px-6 py-3 flex gap-3">
+        <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
           <Input
             placeholder="Search by prompt..."
-            value={activeTab === 'images' ? imageSearch : videoSearch}
+            value={activeTab === 'images' ? imageSearch : activeTab === 'flux' ? fluxSearch : videoSearch}
             onChange={(e) =>
               activeTab === 'images'
                 ? setImageSearch(e.target.value)
-                : setVideoSearch(e.target.value)
+                : activeTab === 'flux'
+                  ? setFluxSearch(e.target.value)
+                  : setVideoSearch(e.target.value)
             }
             className="pl-9 h-9 rounded-lg text-sm"
           />
         </div>
+        {(activeTab === 'images' || activeTab === 'flux') && (
+          isSlideshowMode ? (
+            <div className="flex items-center gap-2">
+               <button 
+                  className="px-3 py-1.5 text-xs font-medium border border-border text-foreground hover:bg-accent rounded-lg transition-colors"
+                  onClick={() => { setIsSlideshowMode(false); setSelectedSlideshowTimestamps([]) }}
+               >
+                 Cancel
+               </button>
+               <button 
+                  disabled={selectedSlideshowTimestamps.length < 2 || isGeneratingSlideshow} 
+                  className="px-3 py-1.5 text-xs font-medium bg-k-yellow text-background hover:bg-yellow-400 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  onClick={handleGenerateSlideshow}
+               >
+                 {isGeneratingSlideshow ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Film className="h-3.5 w-3.5" />}
+                 Generate Video ({selectedSlideshowTimestamps.length})
+               </button>
+            </div>
+          ) : (
+            <button 
+               className="px-3 py-1.5 text-xs font-medium border border-border text-foreground hover:bg-accent rounded-lg flex items-center gap-2 transition-colors"
+               onClick={() => setIsSlideshowMode(true)}
+            >
+               <Film className="h-3.5 w-3.5" />
+               Slideshow Mode
+            </button>
+          )
+        )}
       </div>
 
       {/* Gallery */}
@@ -282,7 +387,17 @@ export function ImagesPage() {
           <ImageGallery
             images={filteredImages}
             isLoading={isLoadingImages}
-            onSelect={setSelectedImage}
+            onSelect={isSlideshowMode ? toggleSlideshowSelect : setSelectedImage}
+            selectableMode={isSlideshowMode}
+            selectedTimestamps={selectedSlideshowTimestamps}
+          />
+        ) : activeTab === 'flux' ? (
+          <ImageGallery
+            images={filteredFluxImages}
+            isLoading={isLoadingFlux}
+            onSelect={isSlideshowMode ? toggleSlideshowSelect : setSelectedImage}
+            selectableMode={isSlideshowMode}
+            selectedTimestamps={selectedSlideshowTimestamps}
           />
         ) : (
           <VideoGallery
@@ -746,10 +861,14 @@ function ImageGallery({
   images,
   isLoading,
   onSelect,
+  selectableMode = false,
+  selectedTimestamps = [],
 }: {
   images: GeneratedImage[]
   isLoading: boolean
   onSelect: (img: GeneratedImage) => void
+  selectableMode?: boolean
+  selectedTimestamps?: string[]
 }) {
   if (isLoading) {
     return (
@@ -776,29 +895,37 @@ function ImageGallery({
 
   return (
     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 pb-6">
-      {images.map((img, i) => (
-        <div
-          key={img.timestamp}
-          className={cn(
-            'group relative rounded-xl border border-border overflow-hidden cursor-pointer',
-            'hover:border-k-yellow/50 hover:shadow-lg hover:shadow-k-yellow/5 transition-all animate-fade-in',
-          )}
-          style={{ animationDelay: `${i * 40}ms` }}
-          onClick={() => onSelect(img)}
-        >
-          <img
-            src={img.thumbnail_image}
-            alt={img.prompt}
-            className="w-full aspect-square object-cover"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/0 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-            <div className="absolute bottom-0 left-0 right-0 p-3">
-              <p className="text-white text-xs truncate font-medium">{img.prompt}</p>
-              <div className="flex items-center gap-2 mt-1">
-                <Clock className="h-2.5 w-2.5 text-white/50" />
-                <span className="text-[10px] text-white/50">
-                  {new Date(img.timestamp).toLocaleDateString()}
-                </span>
+      {images.map((img, i) => {
+        const isSelected = selectedTimestamps.includes(img.timestamp);
+        return (
+          <div
+            key={img.timestamp}
+            className={cn(
+              'group relative rounded-xl border overflow-hidden cursor-pointer',
+              'transition-all animate-fade-in',
+              selectableMode && isSelected ? 'border-k-yellow ring-2 ring-k-yellow/50 shadow-md transform scale-[0.98]' : 'border-border hover:border-k-yellow/50 hover:shadow-lg hover:shadow-k-yellow/5'
+            )}
+            style={{ animationDelay: `${i * 40}ms` }}
+            onClick={() => onSelect(img)}
+          >
+            <img
+              src={img.thumbnail_image}
+              alt={img.prompt}
+              className="w-full aspect-square object-cover"
+            />
+            {selectableMode && (
+              <div className="absolute top-2 right-2 flex items-center justify-center w-6 h-6 rounded-full border border-white bg-black/40 shadow-sm overflow-hidden z-10 transition-colors">
+                 {isSelected && <div className="w-full h-full bg-k-yellow flex items-center justify-center"><Check className="h-3.5 w-3.5 text-black" /></div>}
+              </div>
+            )}
+            <div className={cn("absolute inset-0 bg-gradient-to-t from-black/70 via-black/0 to-transparent transition-opacity duration-200", selectableMode ? "opacity-100" : "opacity-0 group-hover:opacity-100")}>
+              <div className="absolute bottom-0 left-0 right-0 p-3">
+                <p className="text-white text-xs truncate font-medium">{img.prompt}</p>
+                <div className="flex items-center gap-2 mt-1">
+                  <Clock className="h-2.5 w-2.5 text-white/50" />
+                  <span className="text-[10px] text-white/50">
+                    {new Date(img.timestamp).toLocaleDateString()}
+                  </span>
                 {img.provider && (
                   <Badge variant="secondary" className="text-[8px] px-1 py-0 bg-white/10 text-white/60 border-0">
                     {img.provider}

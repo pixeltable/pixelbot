@@ -188,12 +188,39 @@ export async function deleteImage(timestamp: string) {
   return request<{ message: string }>(`/delete_image/${timestamp}`, { method: 'DELETE' })
 }
 
+// ── FLUX Images ─────────────────────────────────────────────────────────────
+
+export async function generateFluxImage(prompt: string, width = 1024, height = 1024) {
+  return request<{ generated_image_base64: string; timestamp: string; prompt: string; provider: string }>('/generate_flux_image', {
+    method: 'POST',
+    body: JSON.stringify({ prompt, width, height }),
+  })
+}
+
+export async function getFluxImageHistory(): Promise<GeneratedImage[]> {
+  return request<GeneratedImage[]>('/flux_image_history')
+}
+
+export async function saveFluxImage(timestamp: string) {
+  return request<{ message: string; uuid: string }>('/save_flux_image', {
+    method: 'POST',
+    body: JSON.stringify({ timestamp }),
+  })
+}
+
 // ── Videos ───────────────────────────────────────────────────────────────────
 
 export async function generateVideo(prompt: string) {
   return request<{ timestamp: string; prompt: string; provider: string; video_path: string }>('/generate_video', {
     method: 'POST',
     body: JSON.stringify({ prompt }),
+  })
+}
+
+export async function generateSlideshow(timestamps: string[]) {
+  return request<{ video_url: string; video_path: string; uuid: string }>('/generate_slideshow', {
+    method: 'POST',
+    body: JSON.stringify({ timestamps }),
   })
 }
 

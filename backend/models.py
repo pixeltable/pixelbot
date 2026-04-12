@@ -67,6 +67,15 @@ class ImageGenRow(BaseModel):
     user_id: str
 
 
+class FluxGenRow(BaseModel):
+    """Row model for the agents.flux_generation_tasks table."""
+    prompt: str
+    width: int = 1024
+    height: int = 1024
+    timestamp: datetime
+    user_id: str
+
+
 class VideoGenRow(BaseModel):
     """Row model for the agents.video_generation_tasks table."""
     prompt: str
@@ -221,6 +230,16 @@ class GenerateImageResponse(BaseModel):
     timestamp: str
     prompt: str
     provider: str
+
+
+class GenerateSlideshowRequest(BaseModel):
+    timestamps: list[str]
+
+
+class GenerateSlideshowResponse(BaseModel):
+    video_url: str
+    video_path: str
+    uuid: str
 
 
 class SaveToCollectionResponse(BaseModel):

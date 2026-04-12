@@ -1,5 +1,6 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import { useState, useRef, useCallback, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { useMountEffect } from '@/hooks/use-mount-effect'
 import {
   Send,
   ImageIcon,
@@ -12,6 +13,7 @@ import {
   User,
   Copy,
   Sparkles,
+  Hexagon,
   ChevronDown,
   FileText,
   Wrench,
@@ -68,7 +70,7 @@ type WelcomeChip = {
   icon: typeof ImageIcon
   label: string
   prompt: string
-  mode?: 'chat' | 'image' | 'video' | 'voice'
+  mode?: 'chat' | 'image' | 'flux' | 'video' | 'voice'
   activeClass?: string
 }
 
@@ -89,17 +91,22 @@ function getGreeting(): string {
 }
 
 export function ChatPage() {
+  const [searchParams] = useSearchParams()
+  const c = searchParams.get('c') || 'new'
+  return <ChatPageContent key={c} conversationId={c === 'new' ? null : c} />
+}
+
+function ChatPageContent({ conversationId }: { conversationId: string | null }) {
   const { addToast } = useToast()
   const [searchParams, setSearchParams] = useSearchParams()
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  const [mode, setMode] = useState<'chat' | 'image' | 'video' | 'voice'>('chat')
+  const [mode, setMode] = useState<'chat' | 'image' | 'flux' | 'video' | 'voice'>('chat')
   const [personas, setPersonas] = useState<Persona[]>([])
   const [selectedPersona, setSelectedPersona] = useState<string | null>(null)
   const [userName, setUserName] = useState<string | null>(null)
-  const conversationIdRef = useRef<string>(searchParams.get('c') || crypto.randomUUID())
-  const hasLoadedInitialRef = useRef(false)
+  const conversationIdRef = useRef<string>(conversationId || crypto.randomUUID())
   const scrollRef = useRef<HTMLDivElement>(null)
 
   // ── Message Queue ────────────────────────────────────────────────────────
@@ -157,64 +164,53 @@ export function ChatPage() {
   }, [isListening, input])
 
   // Stop dictation when component unmounts
-  useEffect(() => {
+  useMountEffect(() => {
     return () => {
       recognitionRef.current?.stop()
     }
+  })
+
+  const scrollToBottom = useCallback(() => {
+    setTimeout(() => {
+      scrollRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }, 50)
   }, [])
 
-  useEffect(() => {
+  useMountEffect(() => {
     api.getPersonas().then(setPersonas).catch(() => {})
     api.getUserInfo().then((info) => setUserName(info.user_name)).catch(() => {})
-  }, [])
 
-  // Load existing conversation on mount or when URL param changes
-  useEffect(() => {
-    const urlConvoId = searchParams.get('c')
-    const isNewConvo = urlConvoId && urlConvoId !== conversationIdRef.current
-    const isInitialLoad = urlConvoId && !hasLoadedInitialRef.current
-
-    if (isNewConvo || isInitialLoad) {
-      hasLoadedInitialRef.current = true
-      conversationIdRef.current = urlConvoId
-      setMessages([])
+    // Load existing conversation on mount
+    if (conversationId) {
       const loadConvo = (id: string, retries = 2) => {
         api.getConversation(id)
           .then((data) => {
             setMessages(data.messages.map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content })))
+            scrollToBottom()
           })
           .catch(() => {
             if (retries > 0) setTimeout(() => loadConvo(id, retries - 1), 1000)
           })
       }
-      loadConvo(urlConvoId)
-    } else if (!urlConvoId) {
-      hasLoadedInitialRef.current = true
-      conversationIdRef.current = crypto.randomUUID()
-      setMessages([])
+      loadConvo(conversationId)
     }
-  }, [searchParams])
 
-  // "New chat" event from sidebar
-  useEffect(() => {
+    // "New chat" event from sidebar
     const handler = () => {
-      conversationIdRef.current = crypto.randomUUID()
-      setMessages([])
-      setInput('')
       setSearchParams({}, { replace: true })
     }
     window.addEventListener('new-chat', handler)
     return () => window.removeEventListener('new-chat', handler)
-  }, [setSearchParams])
-
-  useEffect(() => {
-    scrollRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+  })
 
   const processMessage = useCallback(async (text: string) => {
     isProcessingRef.current = true
     setIsLoading(true)
-    setMessages((prev) => [...prev, { role: 'user', content: text }])
+    setMessages((prev) => {
+      const newMessages = [...prev, { role: 'user' as const, content: text }]
+      scrollToBottom()
+      return newMessages
+    })
 
     // Pin conversation ID in URL after first message
     if (!searchParams.get('c')) {
@@ -227,31 +223,58 @@ export function ChatPage() {
       try {
         const result = await api.generateImage(text)
         const processing_ms = Math.round(performance.now() - t0)
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: 'assistant',
-            content: `![Generated Image](data:image/png;base64,${result.generated_image_base64})`,
-            processing_ms,
-          },
-        ])
+        setMessages((prev) => {
+          const newMessages = [
+            ...prev,
+            {
+              role: 'assistant' as const,
+              content: `![Generated Image](data:image/png;base64,${result.generated_image_base64})`,
+              processing_ms,
+            },
+          ]
+          scrollToBottom()
+          return newMessages
+        })
       } catch (err) {
         addToast(err instanceof Error ? err.message : 'Image generation failed', 'error')
+      }
+    } else if (mode === 'flux') {
+      try {
+        const result = await api.generateFluxImage(text)
+        const processing_ms = Math.round(performance.now() - t0)
+        setMessages((prev) => {
+          const newMessages = [
+            ...prev,
+            {
+              role: 'assistant' as const,
+              content: `![FLUX Image](data:image/png;base64,${result.generated_image_base64})`,
+              processing_ms,
+            },
+          ]
+          scrollToBottom()
+          return newMessages
+        })
+      } catch (err) {
+        addToast(err instanceof Error ? err.message : 'FLUX generation failed', 'error')
       }
     } else if (mode === 'video') {
       try {
         const result = await api.generateVideo(text)
         const videoUrl = api.getVideoUrl(result.video_path)
         const processing_ms = Math.round(performance.now() - t0)
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: 'assistant',
-            content: `Generated video for: "${text}"`,
-            video_url: videoUrl,
-            processing_ms,
-          },
-        ])
+        setMessages((prev) => {
+          const newMessages = [
+            ...prev,
+            {
+              role: 'assistant' as const,
+              content: `Generated video for: "${text}"`,
+              video_url: videoUrl,
+              processing_ms,
+            },
+          ]
+          scrollToBottom()
+          return newMessages
+        })
       } catch (err) {
         addToast(err instanceof Error ? err.message : 'Video generation failed', 'error')
       }
@@ -259,16 +282,20 @@ export function ChatPage() {
       try {
         const result = await api.generateSpeech(text)
         const processing_ms = Math.round(performance.now() - t0)
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: 'assistant',
-            content: `Generated speech (${result.voice})`,
-            audio_url: result.audio_url,
-            audio_path: result.audio_path,
-            processing_ms,
-          },
-        ])
+        setMessages((prev) => {
+          const newMessages = [
+            ...prev,
+            {
+              role: 'assistant' as const,
+              content: `Generated speech (${result.voice})`,
+              audio_url: result.audio_url,
+              audio_path: result.audio_path,
+              processing_ms,
+            },
+          ]
+          scrollToBottom()
+          return newMessages
+        })
       } catch (err) {
         addToast(err instanceof Error ? err.message : 'Speech generation failed', 'error')
       }
@@ -285,7 +312,11 @@ export function ChatPage() {
           metadata: response.metadata,
           processing_ms,
         }
-        setMessages((prev) => [...prev, assistantMsg])
+        setMessages((prev) => {
+          const newMessages = [...prev, assistantMsg]
+          scrollToBottom()
+          return newMessages
+        })
       } catch (err) {
         addToast(err instanceof Error ? err.message : 'Query failed', 'error')
       }
@@ -294,15 +325,17 @@ export function ChatPage() {
     setIsLoading(false)
     isProcessingRef.current = false
     window.dispatchEvent(new Event('conversations-changed'))
-  }, [mode, selectedPersona, addToast, searchParams, setSearchParams])
 
-  // Drain the queue one at a time — only starts the next after isLoading goes false
-  useEffect(() => {
-    if (isLoading || queue.length === 0 || isProcessingRef.current) return
-    const [next, ...rest] = queue
-    setQueue(rest)
-    processMessage(next)
-  }, [isLoading, queue, processMessage])
+    // Drain the queue inline instead of effect
+    setQueue((currentQueue) => {
+      if (currentQueue.length > 0) {
+        const [next, ...rest] = currentQueue
+        setTimeout(() => processMessage(next), 0)
+        return rest
+      }
+      return currentQueue
+    })
+  }, [mode, selectedPersona, addToast, searchParams, setSearchParams, scrollToBottom])
 
   const handleSend = useCallback(() => {
     const text = input.trim()
@@ -504,7 +537,20 @@ export function ChatPage() {
                   onClick={() => setMode(mode === 'image' ? 'chat' : 'image')}
                 >
                   <ImageIcon className="h-3 w-3" />
-                  {mode === 'image' ? 'Image mode' : 'Image'}
+                  {mode === 'image' ? 'Imagen' : 'Imagen'}
+                </button>
+
+                <button
+                  className={cn(
+                    'flex items-center gap-1.5 rounded-lg px-2.5 h-7 text-[11px] font-medium transition-colors',
+                    mode === 'flux'
+                      ? 'bg-orange-500/10 text-orange-400'
+                      : 'text-muted-foreground hover:bg-accent hover:text-foreground',
+                  )}
+                  onClick={() => setMode(mode === 'flux' ? 'chat' : 'flux')}
+                >
+                  <Hexagon className="h-3 w-3" />
+                  {mode === 'flux' ? 'FLUX mode' : 'FLUX'}
                 </button>
 
                 <button

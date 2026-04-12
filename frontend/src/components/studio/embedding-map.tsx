@@ -1,4 +1,5 @@
-import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
+import { useState, useCallback, useMemo, useRef } from 'react'
+import { useMountEffect } from '@/hooks/use-mount-effect'
 import { Loader2, Layers, Type, Image as ImageIcon, X, Eye, EyeOff } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
@@ -39,7 +40,7 @@ export function EmbeddingMap() {
   const containerRef = useRef<HTMLDivElement>(null)
   const [dimensions, setDimensions] = useState({ width: 600, height: 500 })
 
-  useEffect(() => {
+  useMountEffect(() => {
     const container = containerRef.current
     if (!container) return
     const observer = new ResizeObserver((entries) => {
@@ -53,7 +54,7 @@ export function EmbeddingMap() {
     })
     observer.observe(container)
     return () => observer.disconnect()
-  }, [])
+  })
 
   const loadEmbeddings = useCallback(
     async (selectedSpace: 'text' | 'visual') => {
@@ -76,9 +77,9 @@ export function EmbeddingMap() {
     [addToast],
   )
 
-  useEffect(() => {
+  useMountEffect(() => {
     loadEmbeddings('text')
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  })
 
   const typeCounts = useMemo(() => {
     if (!data) return {}

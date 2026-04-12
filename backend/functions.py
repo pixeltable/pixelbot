@@ -307,8 +307,8 @@ def extract_document_text(doc: pxt.Document) -> Optional[str]:
 @pxt.udf
 def build_tool_selection_messages(
     prompt: str,
-    history_context: Optional[List[Dict[str, Any]]] = None,
-) -> List[Dict[str, Any]]:
+    history_context: Optional[list] = None,
+) -> list:
     """Build the messages array for the tool-selection LLM call (Gemini format).
     Includes recent chat history so the model knows what 'that' or 'it' refers to."""
     msgs: List[Dict[str, Any]] = []
@@ -327,10 +327,10 @@ def build_tool_selection_messages(
 @pxt.udf
 def assemble_multimodal_context(
     question: str,
-    tool_outputs: Optional[List[Dict[str, Any]]],
-    doc_context: Optional[List[Union[Dict[str, Any], str]]],
-    memory_context: Optional[List[Dict[str, Any]]] = None,
-    chat_memory_context: Optional[List[Dict[str, Any]]] = None,
+    tool_outputs: Optional[list],
+    doc_context: Optional[list],
+    memory_context: Optional[list] = None,
+    chat_memory_context: Optional[list] = None,
 ) -> str:
     """Construct a text block summarizing context types relevant to the user's question."""
     doc_context_str = "N/A"
@@ -400,11 +400,11 @@ AVAILABLE CONTEXT:
 
 @pxt.udf
 def assemble_final_messages(
-    history_context: Optional[List[Dict[str, Any]]],
+    history_context: Optional[list],
     multimodal_context_text: str,
-    image_context: Optional[List[Dict[str, Any]]] = None,
-    video_frame_context: Optional[List[Dict[str, Any]]] = None,
-) -> List[Dict[str, Any]]:
+    image_context: Optional[list] = None,
+    video_frame_context: Optional[list] = None,
+) -> list:
     """Construct the final list of messages for Gemini, incorporating all context types.
 
     Gemini format: role is "user"/"model", content is a list of parts

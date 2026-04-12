@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useCallback } from 'react'
+import { useMountEffect } from '@/hooks/use-mount-effect'
 import {
   Plus,
   Trash2,
@@ -974,6 +975,16 @@ export function FunctionBrowserDialog({
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg max-h-[70vh] overflow-y-auto">
+        {open && <FunctionBrowserContent />}
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function FunctionBrowserContent() {
   const { addToast } = useToast()
   const [functions, setFunctions] = useState<FunctionCategory[]>([])
   const [iterators, setIterators] = useState<IteratorInfo[]>([])
@@ -981,9 +992,7 @@ export function FunctionBrowserDialog({
   const [expandedCat, setExpandedCat] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
-  useEffect(() => {
-    if (!open) return
-    setIsLoading(true)
+  useMountEffect(() => {
     api
       .getAvailableFunctions()
       .then((data) => {
@@ -993,7 +1002,7 @@ export function FunctionBrowserDialog({
       })
       .catch((err) => addToast(err instanceof Error ? err.message : 'Failed to load', 'error'))
       .finally(() => setIsLoading(false))
-  }, [open, addToast])
+  })
 
   const copyExample = (text: string) => {
     navigator.clipboard.writeText(text)
@@ -1001,8 +1010,7 @@ export function FunctionBrowserDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[70vh] overflow-y-auto">
+    <>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <BookOpen className="h-4 w-4 text-k-yellow" />
@@ -1124,7 +1132,6 @@ export function FunctionBrowserDialog({
             </div>
           </div>
         )}
-      </DialogContent>
-    </Dialog>
+    </>
   )
 }

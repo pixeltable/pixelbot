@@ -107,18 +107,17 @@ def _build_expression_namespace(tbl) -> dict:
 def _resolve_embedding_function(name: str):
     """Map a shorthand name to a Pixeltable embedding function.
 
-    Supported shorthands: "gemini", "clip".
-    Falls back to eval with the expression namespace for custom expressions.
+    Supported shorthands: "gemini" (multimodal text/image/video/audio), "clip" (visual).
     """
     key = name.lower().strip()
-    if key in ("gemini", "openai", "text"):
-        from pixeltable.functions import openai as openai_fn
-        return openai_fn.embeddings.using(model=config.OPENAI_EMBEDDING_MODEL_ID)
+    if key in ("gemini", "text"):
+        from pixeltable.functions import gemini
+        return gemini.embed_content.using(model=config.GEMINI_EMBEDDING_MODEL_ID)
     if key == "clip":
         from pixeltable.functions.huggingface import clip
         return clip.using(model_id=config.CLIP_MODEL_ID)
     raise ValueError(
-        f"Unknown embedding function '{name}'. Use 'gemini', 'openai', or 'clip'."
+        f"Unknown embedding function '{name}'. Use 'gemini' or 'clip'."
     )
 
 
@@ -1289,7 +1288,7 @@ def list_available_functions():
             "category": "gemini",
             "functions": [
                 {"name": "gemini.generate_content", "description": "Generate text with Gemini", "example": "gemini.generate_content(table.prompt, model='gemini-2.5-flash')"},
-                {"name": "openai.embeddings", "description": "Generate text embedding", "example": "openai.embeddings(table.text, model='text-embedding-3-small')"},
+                {"name": "gemini.embed_content", "description": "Multimodal embeddings (text, image, video, audio)", "example": "gemini.embed_content(table.text, model='gemini-embedding-001')"},
                 {"name": "gemini.generate_images", "description": "Generate images with Imagen", "example": "gemini.generate_images(table.prompt)"},
                 {"name": "gemini.generate_videos", "description": "Generate videos with Veo", "example": "gemini.generate_videos(table.prompt)"},
             ],
@@ -1310,11 +1309,21 @@ def list_available_functions():
             ],
         },
         {
+            "category": "bfl",
+            "functions": [
+                {"name": "bfl.generate", "description": "Generate images with FLUX", "example": "bfl.generate(table.prompt, model='flux-2-pro')"},
+                {"name": "bfl.edit", "description": "Edit images with FLUX", "example": "bfl.edit(table.prompt, table.image, model='flux-2-pro')"},
+            ],
+        },
+        {
             "category": "video",
             "functions": [
                 {"name": "video.extract_audio", "description": "Extract audio track from video", "example": "video.extract_audio(table.video, format='mp3')"},
                 {"name": "video.get_metadata", "description": "Get video metadata", "example": "video.get_metadata(table.video)"},
                 {"name": "video.extract_frame", "description": "Extract a single frame", "example": "video.extract_frame(table.video, timestamp=1.0)"},
+                {"name": "video.crop", "description": "Crop a bounding box region from video", "example": "video.crop(table.video, bbox=[0, 0, 640, 480], bbox_format='xywh')"},
+                {"name": "video.resize", "description": "Resize a video", "example": "video.resize(table.video, size=[640, 480])"},
+                {"name": "video.concat_videos_agg", "description": "Concatenate videos (aggregate)", "example": "video.concat_videos_agg(table.timestamp, table.video)"},
             ],
         },
         {

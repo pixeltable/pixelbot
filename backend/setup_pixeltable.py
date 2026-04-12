@@ -3,10 +3,11 @@
 #
 # LLM strategy:
 #   - Gemini (gemini-2.5-flash)         → all generation, reasoning, structured output
-#   - OpenAI (text-embedding-3-small)   → all text embeddings
-#   - CLIP (openai/clip-vit-base-patch32) → video frame visual embeddings only
+#   - Gemini (gemini-embedding-001)     → multimodal embeddings (text, image, video, audio)
+#   - CLIP (openai/clip-vit-base-patch32) → visual embeddings for image/video search
 #   - OpenAI Whisper                    → audio/video transcription
 #   - OpenAI TTS                        → speech generation
+#   - BFL FLUX (flux-2-pro)             → high-fidelity image generation + editing
 import os
 from dotenv import load_dotenv
 
@@ -25,6 +26,7 @@ from pixeltable.functions.gemini import invoke_tools
 from pixeltable.functions.huggingface import clip
 from pixeltable.functions import openai
 from pixeltable.functions import gemini
+from pixeltable.functions import bfl
 from pixeltable.iterators import (
     DocumentSplitter,
     FrameIterator,
@@ -61,11 +63,11 @@ chunks = pxt.create_view(
     if_exists="ignore",
 )
 
-openai_embed = openai.embeddings.using(model=config.OPENAI_EMBEDDING_MODEL_ID)
+gemini_embed = gemini.embed_content.using(model=config.GEMINI_EMBEDDING_MODEL_ID)
 
 chunks.add_embedding_index(
     "text",
-    string_embed=openai_embed,
+    string_embed=gemini_embed,
     if_exists="ignore",
 )
 
@@ -411,6 +413,36 @@ image_gen_tasks.add_computed_column(
     thumbnail=pxt_image.b64_encode(pxt_image.resize(image_gen_tasks.generated_image, size=THUMB_SIZE_GEN)),
     if_exists="ignore",
 )
+
+# ── FLUX Image Generation (BFL) ──────────────────────────────────────────────
+
+flux_gen_tasks = pxt.create_table(
+    "agents.flux_generation_tasks",
+    {
+        "prompt": pxt.String,
+        "width": pxt.Int,
+        "height": pxt.Int,
+        "timestamp": pxt.Timestamp,
+        "user_id": pxt.String,
+    },
+    if_exists="ignore",
+)
+
+flux_gen_tasks.add_computed_column(
+    generated_image=bfl.generate(
+        prompt=flux_gen_tasks.prompt,
+        model=config.FLUX_MODEL_ID,
+        width=flux_gen_tasks.width,
+        height=flux_gen_tasks.height,
+    ),
+    if_exists="ignore",
+)
+
+flux_gen_tasks.add_computed_column(
+    thumbnail=pxt_image.b64_encode(pxt_image.resize(flux_gen_tasks.generated_image, size=THUMB_SIZE_GEN)),
+    if_exists="ignore",
+)
+print(f"FLUX image generation: BFL ({config.FLUX_MODEL_ID})")
 
 # ── Video Generation (Gemini Veo) ────────────────────────────────────────────
 

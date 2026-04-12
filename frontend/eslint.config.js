@@ -19,5 +19,14 @@ export default defineConfig([
       ecmaVersion: 2020,
       globals: globals.browser,
     },
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: 'CallExpression[callee.name="useEffect"]',
+          message: 'Do not use useEffect directly. Use useMountEffect, derived state, or event handlers.',
+        },
+      ],
+    },
   },
 ])

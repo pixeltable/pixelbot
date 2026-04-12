@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback } from 'react'
+import { useMountEffect } from '@/hooks/use-mount-effect'
 import {
   ReactFlow,
   Background,
@@ -570,56 +571,59 @@ export function PipelineInspector() {
   const [nodes, setNodes, onNodesChange] = useNodesState([])
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
 
-  useEffect(() => {
+  const handleSelect = useCallback((path: string) => {
+    setSelectedPath((prev) => {
+      const newPath = prev === path ? null : path
+      setNodes((nds) => nds.map(n => ({
+        ...n,
+        data: { ...n.data, isSelected: n.id === newPath }
+      })))
+      return newPath
+    })
+  }, [setNodes])
+
+  useMountEffect(() => {
     api
       .getPipeline()
       .then((data) => {
         setPipeline(data)
+
+        const hasIncoming = new Set(data.edges.map((e) => e.target))
+        const hasOutgoing = new Set(data.edges.map((e) => e.source))
+
+        const nodesWithCallbacks = data.nodes.map((n) => ({
+          ...n,
+          isSelected: false,
+          onSelect: handleSelect,
+          hasIncoming: hasIncoming.has(n.path),
+          hasOutgoing: hasOutgoing.has(n.path),
+        }))
+
+        const flowNodes = buildLayout(data.nodes, data.edges).map((n) => ({
+          ...n,
+          data: {
+            ...nodesWithCallbacks.find((pn) => pn.path === n.id)!,
+          },
+        }))
+
+        const flowEdges: Edge[] = data.edges.map((e, i) => ({
+          id: `e-${i}`,
+          source: e.source,
+          target: e.target,
+          type: 'labeled',
+          animated: e.type === 'view',
+          data: { label: e.label, edgeType: e.type },
+        }))
+
+        setNodes(flowNodes)
+        setEdges(flowEdges)
         setIsLoading(false)
       })
       .catch((err) => {
         setError(err instanceof Error ? err.message : 'Failed to load pipeline')
         setIsLoading(false)
       })
-  }, [])
-
-  const handleSelect = useCallback((path: string) => {
-    setSelectedPath((prev) => (prev === path ? null : path))
-  }, [])
-
-  useEffect(() => {
-    if (!pipeline) return
-
-    const hasIncoming = new Set(pipeline.edges.map((e) => e.target))
-    const hasOutgoing = new Set(pipeline.edges.map((e) => e.source))
-
-    const nodesWithCallbacks = pipeline.nodes.map((n) => ({
-      ...n,
-      isSelected: n.path === selectedPath,
-      onSelect: handleSelect,
-      hasIncoming: hasIncoming.has(n.path),
-      hasOutgoing: hasOutgoing.has(n.path),
-    }))
-
-    const flowNodes = buildLayout(pipeline.nodes, pipeline.edges).map((n) => ({
-      ...n,
-      data: {
-        ...nodesWithCallbacks.find((pn) => pn.path === n.id)!,
-      },
-    }))
-
-    const flowEdges: Edge[] = pipeline.edges.map((e, i) => ({
-      id: `e-${i}`,
-      source: e.source,
-      target: e.target,
-      type: 'labeled',
-      animated: e.type === 'view',
-      data: { label: e.label, edgeType: e.type },
-    }))
-
-    setNodes(flowNodes)
-    setEdges(flowEdges)
-  }, [pipeline, selectedPath, handleSelect, setNodes, setEdges])
+  })
 
   const selectedNode = useMemo(
     () => pipeline?.nodes.find((n) => n.path === selectedPath) ?? null,
