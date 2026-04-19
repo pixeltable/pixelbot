@@ -145,6 +145,8 @@ backend/
 ├── config.py               model IDs, system prompts, LLM parameters
 ├── models.py               Pydantic request/response schemas
 ├── functions.py            @pxt.udf and @pxt.query definitions
+├── queries.py              shared query helpers for routers
+├── utils.py                @pxt_retry decorator for transient connection errors
 ├── setup_pixeltable.py     full schema (tables, views, columns, indexes)
 └── routers/
     ├── chat.py             11-step agent workflow
@@ -152,11 +154,12 @@ backend/
     ├── images.py           Imagen/DALL-E/Veo generation, TTS
     ├── experiments.py      parallel multi-model prompt runs
     ├── export.py           JSON/CSV/Parquet for any table
-    ├── database.py         catalog introspection, timeline, joins
+    ├── database.py         catalog introspection, timeline, joins, pipeline management
     ├── files.py            upload, URL import
     ├── history.py          conversation detail, debug export
     ├── memory.py           memory bank CRUD
-    └── personas.py         persona CRUD
+    ├── personas.py         persona CRUD
+    └── integrations.py     Slack/Discord/webhook notification services
 
 frontend/src/
 ├── components/

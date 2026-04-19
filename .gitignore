@@ -25,3 +25,7 @@ data/
 
 # Build output (frontend → backend/static/)
 backend/static/
+
+# uv binaries (installed per-environment, not versioned)
+backend/uv-bin/
+backend/uv-cache/

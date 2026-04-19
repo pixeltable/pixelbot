@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 
 import pixeltable as pxt
 
+import config as app_config
 from routers import chat, files, history, memory, images, personas, studio, database, experiments, export, integrations
 
 load_dotenv(override=True)
@@ -51,8 +52,6 @@ app = FastAPI(
     version="2.0.0",
     lifespan=lifespan,
 )
-
-import config as app_config
 
 app.add_middleware(
     CORSMiddleware,

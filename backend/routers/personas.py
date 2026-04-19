@@ -7,6 +7,7 @@ import pixeltable as pxt
 
 import config
 import queries
+from utils import pxt_retry
 from models import UserPersonaRow, MessageResponse, DeleteResponse
 
 logger = logging.getLogger(__name__)
@@ -29,6 +30,7 @@ class PersonaUpdateRequest(BaseModel):
 # ── List Personas ─────────────────────────────────────────────────────────────
 
 @router.get("/personas")
+@pxt_retry()
 def get_personas():
     """Fetch all personas for the current user.
 
@@ -52,6 +54,7 @@ def get_personas():
 # ── Create Persona ────────────────────────────────────────────────────────────
 
 @router.post("/personas", status_code=201, response_model=MessageResponse)
+@pxt_retry()
 def create_persona(body: PersonaRequest):
     """Create a new persona."""
     user_id = config.DEFAULT_USER_ID
@@ -89,6 +92,7 @@ def create_persona(body: PersonaRequest):
 # ── Update Persona ────────────────────────────────────────────────────────────
 
 @router.put("/personas/{persona_name:path}", response_model=MessageResponse)
+@pxt_retry()
 def update_persona(persona_name: str, body: PersonaUpdateRequest):
     """Update an existing persona."""
     user_id = config.DEFAULT_USER_ID
@@ -123,6 +127,7 @@ def update_persona(persona_name: str, body: PersonaUpdateRequest):
 # ── Delete Persona ────────────────────────────────────────────────────────────
 
 @router.delete("/personas/{persona_name:path}", response_model=DeleteResponse)
+@pxt_retry()
 def delete_persona(persona_name: str):
     """Delete a persona by name."""
     user_id = config.DEFAULT_USER_ID

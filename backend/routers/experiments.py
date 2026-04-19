@@ -14,6 +14,7 @@ import config
 from utils import pxt_retry
 from models import (
     ModelInfo, ExperimentResult, RunExperimentResponse, ExperimentSummary,
+    PromptExperimentRow,
 )
 
 logger = logging.getLogger(__name__)
@@ -318,28 +319,27 @@ def run_experiment(body: RunExperimentRequest):
     # Store results in Pixeltable
     try:
         table = pxt.get_table(_TABLE_PATH)
-        rows_to_insert = []
-        for r in results:
-            rows_to_insert.append(
-                {
-                    "experiment_id": experiment_id,
-                    "task": body.task or "Untitled",
-                    "system_prompt": body.system_prompt,
-                    "user_prompt": body.user_prompt,
-                    "model_id": r.model_id,
-                    "model_name": r.model_name,
-                    "provider": r.provider,
-                    "temperature": body.temperature,
-                    "max_tokens": body.max_tokens,
-                    "response": r.response or "",
-                    "response_time_ms": r.response_time_ms,
-                    "word_count": r.word_count,
-                    "char_count": r.char_count,
-                    "error": r.error or "",
-                    "timestamp": now,
-                    "user_id": user_id,
-                }
+        rows_to_insert = [
+            PromptExperimentRow(
+                experiment_id=experiment_id,
+                task=body.task or "Untitled",
+                system_prompt=body.system_prompt,
+                user_prompt=body.user_prompt,
+                model_id=r.model_id,
+                model_name=r.model_name,
+                provider=r.provider,
+                temperature=body.temperature,
+                max_tokens=body.max_tokens,
+                response=r.response or "",
+                response_time_ms=r.response_time_ms,
+                word_count=r.word_count,
+                char_count=r.char_count,
+                error=r.error or "",
+                timestamp=now,
+                user_id=user_id,
             )
+            for r in results
+        ]
         table.insert(rows_to_insert)
         logger.info(f"Stored {len(rows_to_insert)} experiment results for {experiment_id}")
     except Exception as e:

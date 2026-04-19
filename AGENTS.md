@@ -37,7 +37,7 @@ A full-featured multimodal AI agent built on Pixeltable + FastAPI + React. Ten p
 
 ## Backend Routers
 
-All routers use prefix `/api` (except `database.py` → `/api/db`, `studio.py` → `/api/studio`, `experiments.py` → `/api/experiments`, `export.py` → `/api/export`).
+All routers use prefix `/api` (except `database.py` → `/api/db`, `studio.py` → `/api/studio`, `experiments.py` → `/api/experiments`, `export.py` → `/api/export`, `integrations.py` → `/api/integrations`).
 
 | Router | Key Endpoints |
 |---|---|

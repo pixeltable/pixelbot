@@ -126,6 +126,51 @@ MEDIA_ROW_MODELS = {
 }
 
 
+# ── CSV Registry (agents.csv_registry) ───────────────────────────────────────
+
+class CsvRegistryRow(BaseModel):
+    """Row model for the agents.csv_registry table."""
+    table_name: str
+    display_name: str
+    uuid: str
+    row_count: int
+    col_names: list[str]
+    timestamp: datetime
+    user_id: str
+
+
+# ── Speech Generation (agents.speech_tasks) ──────────────────────────────────
+
+class SpeechTaskRow(BaseModel):
+    """Row model for the agents.speech_tasks table."""
+    input_text: str
+    voice: str
+    timestamp: datetime
+    user_id: str
+
+
+# ── Prompt Experiments (agents.prompt_experiments) ───────────────────────────
+
+class PromptExperimentRow(BaseModel):
+    """Row model for the agents.prompt_experiments table."""
+    experiment_id: str
+    task: str
+    system_prompt: str
+    user_prompt: str
+    model_id: str
+    model_name: str
+    provider: str
+    temperature: float
+    max_tokens: int
+    response: str
+    response_time_ms: float
+    word_count: int
+    char_count: int
+    error: str
+    timestamp: datetime
+    user_id: str
+
+
 # ── LLM Structured Output Schemas ────────────────────────────────────────────
 # These models define the expected output shape from LLM calls.
 # Used with Gemini's response_schema to force validated JSON.

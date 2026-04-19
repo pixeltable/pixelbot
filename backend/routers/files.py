@@ -12,7 +12,7 @@ from PIL import Image
 import pixeltable as pxt
 
 from utils import pxt_retry
-from models import UploadResponse, AddUrlResponse, DeleteFileResponse, DeleteAllResponse
+from models import UploadResponse, AddUrlResponse, DeleteFileResponse, DeleteAllResponse, CsvRegistryRow
 
 import config
 import functions
@@ -133,7 +133,8 @@ def _source_to_filename(source) -> str:
 
 
 @router.post("/upload", response_model=UploadResponse)
-async def upload_file(file: UploadFile = File(...)):
+@pxt_retry()
+def upload_file(file: UploadFile = File(...)):
     """Handle file uploads. CSVs are imported into their own Pixeltable table."""
     user_id = config.DEFAULT_USER_ID
 
@@ -150,7 +151,7 @@ async def upload_file(file: UploadFile = File(...)):
         safe_name = _secure_filename(file.filename)
         file_path = os.path.join(config.UPLOAD_FOLDER, safe_name)
 
-        contents = await file.read()
+        contents = file.file.read()
         with open(file_path, "wb") as f:
             f.write(contents)
     except Exception as e:
@@ -208,15 +209,15 @@ def _import_csv(file_path: str, display_name: str, user_id: str) -> UploadRespon
 
         # Register in csv_registry
         registry = pxt.get_table("agents.csv_registry")
-        registry.insert([{
-            "table_name": table_path,
-            "display_name": display_name,
-            "uuid": file_uuid,
-            "row_count": row_count,
-            "col_names": col_names,
-            "timestamp": datetime.now(),
-            "user_id": user_id,
-        }])
+        registry.insert([CsvRegistryRow(
+            table_name=table_path,
+            display_name=display_name,
+            uuid=file_uuid,
+            row_count=row_count,
+            col_names=col_names,
+            timestamp=datetime.now(),
+            user_id=user_id,
+        )])
 
         return UploadResponse(
             message=f"CSV imported as table with {row_count} rows and {len(col_names)} columns",

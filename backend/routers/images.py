@@ -14,6 +14,7 @@ import pixeltable as pxt
 import config
 from models import (
     AudioRow, ImageGenRow, FluxGenRow, ImageRow, VideoGenRow, VideoRow,
+    SpeechTaskRow,
     GenerateImageResponse, SaveToCollectionResponse, GenerateSpeechResponse,
     DeleteResponse, GenerateSlideshowRequest, GenerateSlideshowResponse
 )
@@ -765,12 +766,12 @@ def generate_speech(body: GenerateSpeechRequest):
 
     try:
         speech_table = pxt.get_table("agents.speech_tasks")
-        speech_table.insert([{
-            "input_text": body.text,
-            "voice": voice,
-            "timestamp": current_timestamp,
-            "user_id": user_id,
-        }])
+        speech_table.insert([SpeechTaskRow(
+            input_text=body.text,
+            voice=voice,
+            timestamp=current_timestamp,
+            user_id=user_id,
+        )])
 
         result = (
             speech_table.where(

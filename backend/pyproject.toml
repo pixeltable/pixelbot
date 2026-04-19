@@ -24,6 +24,5 @@ dependencies = [
     "openpyxl",
     # Tools & Data
     "duckduckgo-search",
-    "serpapi",
     "yfinance",
 ]
