@@ -130,20 +130,22 @@ _ITERATOR_COL_ARGS: dict[str, str] = {
 
 
 def _resolve_iterator(iterator_type: str, iterator_args: dict, base_tbl):
-    """Build an iterator create() call from type name, args, and base table."""
-    from pixeltable.iterators import (
-        DocumentSplitter, FrameIterator, AudioSplitter, StringSplitter,
-    )
+    """Build an iterator call from type name, args, and base table."""
+    from pixeltable.functions.document import document_splitter
+    from pixeltable.functions.video import frame_iterator
+    from pixeltable.functions.audio import audio_splitter
+    from pixeltable.functions.string import string_splitter
 
+    # Legacy class names kept as keys so existing frontend clients continue to work.
     iterators = {
-        "DocumentSplitter": DocumentSplitter,
-        "FrameIterator": FrameIterator,
-        "AudioSplitter": AudioSplitter,
-        "StringSplitter": StringSplitter,
+        "DocumentSplitter": document_splitter,
+        "FrameIterator": frame_iterator,
+        "AudioSplitter": audio_splitter,
+        "StringSplitter": string_splitter,
     }
 
-    cls = iterators.get(iterator_type)
-    if cls is None:
+    fn = iterators.get(iterator_type)
+    if fn is None:
         raise ValueError(
             f"Unknown iterator type '{iterator_type}'. "
             f"Available: {', '.join(sorted(iterators))}"
@@ -157,7 +159,7 @@ def _resolve_iterator(iterator_type: str, iterator_args: dict, base_tbl):
         else:
             kwargs[k] = v
 
-    return cls.create(**kwargs)
+    return fn(**kwargs)
 
 
 def _safe_value(val: object) -> object:

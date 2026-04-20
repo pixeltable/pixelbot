@@ -10,7 +10,7 @@ dependencies = [
     "python-dotenv",
     "python-multipart",
     # AI and ML
-    "pixeltable>=0.5.19",
+    "pixeltable>=0.5.28",
     "anthropic",
     "openai",
     "mistralai",

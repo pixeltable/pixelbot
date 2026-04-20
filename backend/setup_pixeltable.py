@@ -27,12 +27,10 @@ from pixeltable.functions.huggingface import clip
 from pixeltable.functions import openai
 from pixeltable.functions import gemini
 from pixeltable.functions import bfl
-from pixeltable.iterators import (
-    DocumentSplitter,
-    FrameIterator,
-    AudioSplitter,
-    StringSplitter,
-)
+from pixeltable.functions.document import document_splitter
+from pixeltable.functions.video import frame_iterator
+from pixeltable.functions.audio import audio_splitter
+from pixeltable.functions.string import string_splitter
 from pixeltable.functions import string as pxt_str
 
 import functions
@@ -55,8 +53,8 @@ documents = pxt.create_table(
 chunks = pxt.create_view(
     "agents.chunks",
     documents,
-    iterator=DocumentSplitter.create(
-        document=documents.document,
+    iterator=document_splitter(
+        documents.document,
         separators="page, sentence",
         metadata="title, heading, page",
     ),
@@ -99,7 +97,7 @@ print(f"Document auto-summarization: Gemini ({config.GEMINI_MODEL_ID})")
 
 @pxt.query
 def search_documents(query_text: str, user_id: str):
-    sim = chunks.text.similarity(query_text)
+    sim = chunks.text.similarity(string=query_text)
     return (
         chunks.where((chunks.user_id == user_id) & (sim > 0.5) & (pxt_str.len(chunks.text) > 30))
         .order_by(sim, asc=False)
@@ -165,7 +163,7 @@ print(f"Image auto-captioning: Gemini ({config.GEMINI_MODEL_ID}) via table-as-UD
 
 @pxt.query
 def search_images(query_text: str, user_id: str):
-    sim = images.image.similarity(query_text)
+    sim = images.image.similarity(string=query_text)
     return (
         images.where((images.user_id == user_id) & (sim > 0.25))
         .order_by(sim, asc=False)
@@ -189,7 +187,7 @@ videos = pxt.create_table(
 video_frames_view = pxt.create_view(
     "agents.video_frames",
     videos,
-    iterator=FrameIterator.create(video=videos.video, keyframes_only=True),
+    iterator=frame_iterator(videos.video, keyframes_only=True),
     if_exists="ignore",
 )
 
@@ -208,7 +206,7 @@ video_frames_view.add_embedding_index(
 
 @pxt.query
 def search_video_frames(query_text: str, user_id: str):
-    sim = video_frames_view.frame.similarity(query_text)
+    sim = video_frames_view.frame.similarity(string=query_text)
     return (
         video_frames_view.where((video_frames_view.user_id == user_id) & (sim > 0.25))
         .order_by(sim, asc=False)
@@ -223,7 +221,7 @@ videos.add_computed_column(audio=extract_audio(videos.video, format="mp3"), if_e
 video_audio_chunks_view = pxt.create_view(
     "agents.video_audio_chunks",
     videos,
-    iterator=AudioSplitter.create(audio=videos.audio, duration=30.0),
+    iterator=audio_splitter(videos.audio, duration=30.0),
     if_exists="ignore",
 )
 
@@ -235,7 +233,7 @@ video_audio_chunks_view.add_computed_column(
 video_transcript_sentences_view = pxt.create_view(
     "agents.video_transcript_sentences",
     video_audio_chunks_view.where(video_audio_chunks_view.transcription != None),
-    iterator=StringSplitter.create(text=video_audio_chunks_view.transcription.text, separators="sentence"),
+    iterator=string_splitter(video_audio_chunks_view.transcription.text, separators="sentence"),
     if_exists="ignore",
 )
 
@@ -247,7 +245,7 @@ video_transcript_sentences_view.add_embedding_index(
 @pxt.query
 def search_video_transcripts(query_text: str):
     """Search video transcripts by semantic similarity to the query text."""
-    sim = video_transcript_sentences_view.text.similarity(query_text)
+    sim = video_transcript_sentences_view.text.similarity(string=query_text)
     return (
         video_transcript_sentences_view.where((video_transcript_sentences_view.user_id == config.DEFAULT_USER_ID) & (sim > 0.7))
         .order_by(sim, asc=False)
@@ -267,7 +265,7 @@ audios = pxt.create_table(
 audio_chunks_view = pxt.create_view(
     "agents.audio_chunks",
     audios,
-    iterator=AudioSplitter.create(audio=audios.audio, duration=60.0),
+    iterator=audio_splitter(audios.audio, duration=60.0),
     if_exists="ignore",
 )
 
@@ -279,7 +277,7 @@ audio_chunks_view.add_computed_column(
 audio_transcript_sentences_view = pxt.create_view(
     "agents.audio_transcript_sentences",
     audio_chunks_view.where(audio_chunks_view.transcription != None),
-    iterator=StringSplitter.create(text=audio_chunks_view.transcription.text, separators="sentence"),
+    iterator=string_splitter(audio_chunks_view.transcription.text, separators="sentence"),
     if_exists="ignore",
 )
 
@@ -291,7 +289,7 @@ audio_transcript_sentences_view.add_embedding_index(
 @pxt.query
 def search_audio_transcripts(query_text: str):
     """Search audio transcripts by semantic similarity to the query text."""
-    sim = audio_transcript_sentences_view.text.similarity(query_text)
+    sim = audio_transcript_sentences_view.text.similarity(string=query_text)
     return (
         audio_transcript_sentences_view.where((audio_transcript_sentences_view.user_id == config.DEFAULT_USER_ID) & (sim > 0.6))
         .order_by(sim, asc=False)
@@ -329,7 +327,7 @@ def get_all_memory(user_id: str):
 
 @pxt.query
 def search_memory(query_text: str, user_id: str):
-    sim = memory_bank.content.similarity(query_text)
+    sim = memory_bank.content.similarity(string=query_text)
     return (
         memory_bank.where((memory_bank.user_id == user_id) & (sim > 0.8))
         .order_by(sim, asc=False)
@@ -367,7 +365,7 @@ def get_recent_chat_history(user_id: str, limit: int = 4):
 
 @pxt.query
 def search_chat_history(query_text: str, user_id: str):
-    sim = chat_history.content.similarity(query_text)
+    sim = chat_history.content.similarity(string=query_text)
     return (
         chat_history.where((chat_history.user_id == user_id) & (sim > 0.8))
         .order_by(sim, asc=False)
