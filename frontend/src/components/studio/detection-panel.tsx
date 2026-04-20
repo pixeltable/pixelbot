@@ -16,7 +16,6 @@ import type {
   DetectionResponse,
   DetectionItem,
   ClassificationItem,
-  SegmentItem,
 } from '@/types'
 
 // Colors for bounding box labels (cycles through)
@@ -49,8 +48,6 @@ export function DetectionPanel({
   source,
   frameIdx,
   imageSrc,
-  imageWidth,
-  imageHeight,
 }: DetectionPanelProps) {
   const [models, setModels] = useState<DetectionModel[]>([])
   const [selectedModel, setSelectedModel] = useState<string>('detr-resnet-50')

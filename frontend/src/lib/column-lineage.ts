@@ -6,7 +6,7 @@ import type { PipelineColumn } from '@/types'
 
 export type FuncType = 'builtin' | 'custom_udf' | 'query' | 'unknown' | null
 
-export interface ColumnNodeData {
+export interface ColumnNodeData extends Record<string, unknown> {
   name: string
   type: string
   isComputed: boolean

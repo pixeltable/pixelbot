@@ -40,7 +40,6 @@ import {
   X,
   Undo2,
   History,
-  ChevronDown,
   GitCommitVertical,
   Upload,
   Link,

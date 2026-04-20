@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState } from 'react'
 import { useMountEffect } from '@/hooks/use-mount-effect'
 import {
   Plus,
@@ -18,7 +18,6 @@ import {
   Zap,
   BookOpen,
   RotateCcw,
-  X,
 } from 'lucide-react'
 import {
   Dialog,
@@ -51,23 +50,6 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
 
 function FieldHint({ children }: { children: React.ReactNode }) {
   return <p className="text-[10px] text-muted-foreground/60">{children}</p>
-}
-
-function ResultBanner({ result, onClear }: { result: MgmtResponse | null; onClear: () => void }) {
-  if (!result) return null
-  return (
-    <div
-      className={cn(
-        'flex items-center gap-2 rounded-md px-3 py-2 text-[11px] mt-3',
-        result.success ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400',
-      )}
-    >
-      <span className="flex-1">{result.message}</span>
-      <button onClick={onClear} className="opacity-60 hover:opacity-100">
-        <X className="h-3 w-3" />
-      </button>
-    </div>
-  )
 }
 
 // ── Create Table Dialog ──────────────────────────────────────────────────────
@@ -386,7 +368,6 @@ export function CreateViewDialog({
 
 export function TableActionsToolbar({
   table,
-  tables,
   onRefresh,
 }: {
   table: TableInfo

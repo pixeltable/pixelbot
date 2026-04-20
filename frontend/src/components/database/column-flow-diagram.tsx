@@ -13,7 +13,6 @@ import {
   useEdgesState,
   BackgroundVariant,
   type Node,
-  type Edge,
   type EdgeProps,
   type NodeProps,
 } from '@xyflow/react'
@@ -393,8 +392,8 @@ function ColumnFlowContent({ columns }: { columns: PipelineColumn[] }) {
     return { layoutedNodes: positioned, layoutedEdges: edges, sourceCount: sc, computedCount: cc }
   }, [columns])
 
-  const [nodes, setNodes, onNodesChange] = useNodesState(layoutedNodes)
-  const [edges, setEdges, onEdgesChange] = useEdgesState(layoutedEdges)
+  const [nodes, , onNodesChange] = useNodesState(layoutedNodes)
+  const [edges, , onEdgesChange] = useEdgesState(layoutedEdges)
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const nodeClickedRef = useRef(false)
 

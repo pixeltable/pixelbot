@@ -186,15 +186,11 @@ export function ImagesPage() {
   }, [selectedSlideshowTimestamps, addToast, fetchVideos])
 
   const toggleSlideshowSelect = useCallback((img: GeneratedImage) => {
-    setSelectedSlideshowTimestamps((prev) => 
+    setSelectedSlideshowTimestamps((prev) =>
       prev.includes(img.timestamp)
         ? prev.filter((t) => t !== img.timestamp)
         : [...prev, img.timestamp]
     )
-  }, [])
-    a.href = image.full_image
-    a.download = `pixelbot_${image.timestamp}.png`
-    a.click()
   }, [])
 
   const handleDownloadVideo = useCallback((video: GeneratedVideo) => {
@@ -573,7 +569,6 @@ export function ImagesPage() {
 function ReveEditDialog({
   image,
   mode,
-  onModeChange,
   open,
   onOpenChange,
   onSaved,
@@ -935,7 +930,8 @@ function ImageGallery({
             </div>
           </div>
         </div>
-      ))}
+        )
+      })}
     </div>
   )
 }

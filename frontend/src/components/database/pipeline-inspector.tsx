@@ -22,7 +22,6 @@ import {
   Eye,
   AlertTriangle,
   Rows3,
-  Database,
   GitBranch,
   ChevronDown,
   X,
@@ -568,8 +567,8 @@ export function PipelineInspector() {
   const [error, setError] = useState<string | null>(null)
   const [selectedPath, setSelectedPath] = useState<string | null>(null)
   const [columnFlowNode, setColumnFlowNode] = useState<PipelineNode | null>(null)
-  const [nodes, setNodes, onNodesChange] = useNodesState([])
-  const [edges, setEdges, onEdgesChange] = useEdgesState([])
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([])
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
 
   const handleSelect = useCallback((path: string) => {
     setSelectedPath((prev) => {

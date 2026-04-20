@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, useRef } from 'react'
 import { useMountEffect } from '@/hooks/use-mount-effect'
-import { Loader2, Layers, Type, Image as ImageIcon, X, Eye, EyeOff } from 'lucide-react'
+import { Loader2, Layers, Type, Image as ImageIcon, X, EyeOff } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { useToast } from '@/components/ui/toast'

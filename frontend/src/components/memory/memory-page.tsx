@@ -24,6 +24,7 @@ export function MemoryPage() {
   const [newContent, setNewContent] = useState('')
   const [newType, setNewType] = useState<'text' | 'code'>('text')
   const [newLanguage, setNewLanguage] = useState('')
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const fetchMemory = useCallback(async (query: string = '') => {
     setIsLoading(true)
     try {

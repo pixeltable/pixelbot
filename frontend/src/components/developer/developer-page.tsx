@@ -742,6 +742,17 @@ function ExportTab({ copyToClipboard }: { copyToClipboard: (text: string, label?
   const [isLoading, setIsLoading] = useState(false)
   const [preview, setPreview] = useState<{ columns: string[]; rows: Record<string, unknown>[]; count: number } | null>(null)
 
+  const loadPreview = useCallback(async (path: string) => {
+    try {
+      const res = await fetch(`${BASE}/export/preview/${path}?limit=10`)
+      if (!res.ok) throw new Error('Preview failed')
+      const data = await res.json()
+      setPreview({ columns: data.columns ?? [], rows: data.rows ?? [], count: data.count ?? 0 })
+    } catch {
+      setPreview(null)
+    }
+  }, [])
+
   useMountEffect(() => {
     fetch(`${BASE}/export/tables`)
       .then((r) => r.json())
@@ -1040,7 +1051,6 @@ function SnippetCard({
 
 function CodeBlock({
   code,
-  language,
   copiedText,
   onCopy,
 }: {

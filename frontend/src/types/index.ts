@@ -215,7 +215,7 @@ export interface CsvRowsResponse {
 
 export interface OperationParam {
   name: string
-  type: 'number' | 'string'
+  type: 'number' | 'string' | 'time'
   default: number | string
   min?: number
   max?: number
@@ -563,7 +563,7 @@ export interface PipelineVersion {
   errors: number
 }
 
-export interface PipelineNode {
+export interface PipelineNode extends Record<string, unknown> {
   path: string
   name: string
   is_view: boolean

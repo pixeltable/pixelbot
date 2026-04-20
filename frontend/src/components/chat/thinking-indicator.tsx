@@ -2,10 +2,8 @@ import { useState, useRef, useMemo } from 'react'
 import { useMountEffect } from '@/hooks/use-mount-effect'
 import {
   Sparkles,
-  Search,
   FileText,
   ImageIcon,
-  Film,
   Brain,
   MessageSquare,
   Zap,
@@ -110,7 +108,6 @@ export function ThinkingIndicator() {
         {completedStages.length > 0 && (
           <div className="flex flex-wrap gap-x-3 gap-y-1 pt-0.5">
             {completedStages.map((stage) => {
-              const Icon = stage.icon
               return (
                 <span
                   key={stage.id}
