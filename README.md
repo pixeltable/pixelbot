@@ -1,6 +1,6 @@
 <div align="center">
 
-**Open-source sandbox for exploring everything [Pixeltable](https://github.com/pixeltable/pixeltable) can do.**
+**Experimental playground for trying every new [Pixeltable](https://github.com/pixeltable/pixeltable) feature in one all-in-one app.**
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-0530AD.svg)](https://opensource.org/licenses/Apache-2.0) [![Discord](https://img.shields.io/badge/Discord-%235865F2.svg)](https://discord.gg/QPyqFYx2UN)
 
@@ -10,7 +10,10 @@
 
 ---
 
-Pixelbot wires up tables, views, computed columns, embedding indexes, UDFs, tool calling, similarity search, version control, and model orchestration into a single full-stack app — so we can stress-test [Pixeltable](https://github.com/pixeltable/pixeltable) and ship what we learn as [cookbooks](https://docs.pixeltable.com/howto/cookbooks).
+> ⚠️ **Heads up — this is a personal playground, not a product.**
+> Pixelbot is where I experiment with new Pixeltable features, chain them together, and see what breaks when you put everything in one app. Expect rough edges, half-finished flows, and rapid rewrites. Use it to explore what Pixeltable can do — not as a reference architecture.
+
+Pixelbot wires up tables, views, computed columns, embedding indexes, UDFs, tool calling, similarity search, version control, and model orchestration into a single full-stack app — so I can stress-test [Pixeltable](https://github.com/pixeltable/pixeltable) end-to-end and ship the patterns that work as [cookbooks](https://docs.pixeltable.com/howto/cookbooks).
 
 ![Overview](docs/images/overview.png)
 
