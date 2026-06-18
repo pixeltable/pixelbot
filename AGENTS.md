@@ -52,6 +52,7 @@ All routers use prefix `/api` (except `database.py` → `/api/db`, `studio.py` �
 | `experiments.py` | `/api/experiments/` — multi-model prompt comparison, parallel execution via ThreadPoolExecutor |
 | `export.py` | `/api/export/` — JSON/CSV/Parquet export, JSON column serialization, preview |
 | `integrations.py` | `/api/integrations/` — notification service status, test send, activity log |
+| `data_serving.py` | `/api/memory/v2`, `/api/personas/v2` — Pixeltable `FastAPIRouter` declarative serving |
 
 ## Frontend Routes
 
@@ -83,12 +84,12 @@ All FastAPI endpoints use `def`, not `async def`. Pixeltable operations are sync
 
 ### Schema-as-code (`setup_pixeltable.py`)
 
-Run once to initialize or reset the schema. Uses `drop_dir("agents", force=True)` for a clean slate, then creates everything idempotently. The schema defines:
+Schema is defined in `init_schema(*, force_reset=False)`. `main.py` lifespan calls it on startup (idempotent); CLI `python setup_pixeltable.py` passes `force_reset=True` for a clean wipe. Uses `drop_dir("agents", force=True)` when resetting, then creates everything idempotently. Requires **Pixeltable ≥ 0.6.5**. The schema defines:
 
-1. **Document pipeline** — table → `DocumentSplitter` view → Gemini `embed_content` → auto-summarization via Gemini structured output
-2. **Image pipeline** — table → thumbnail → CLIP visual embedding index → Gemini captioner (table-as-UDF)
-3. **Video pipeline** — table → `FrameIterator` view (keyframes + CLIP) → audio extraction → Whisper transcription → `StringSplitter` view → Gemini `embed_content`
-4. **Audio pipeline** — table → `AudioSplitter` → Whisper transcription → `StringSplitter` → Gemini `embed_content`
+1. **Document pipeline** — table → `document_splitter` view → Gemini `embed_content` → auto-summarization via Gemini structured output
+2. **Image pipeline** — table → thumbnail → CLIP embedding index → Gemini captioner (table-as-UDF)
+3. **Video pipeline** — table → `frame_iterator` view (keyframes + CLIP) → audio extraction → Whisper transcription → `string_splitter` view → Gemini `embed_content`
+4. **Audio pipeline** — table → `audio_splitter` → Whisper transcription → `string_splitter` → Gemini `embed_content`
 5. **Chat history** — table with Gemini embedding index for memory retrieval
 6. **Memory bank** — user-managed knowledge base with Gemini embedding search
 7. **Personas** — customizable agent behavior profiles
@@ -129,9 +130,22 @@ No authentication. `DEFAULT_USER_ID = "local_user"` in `config.py`. All queries 
 
 Object detection (DETR), segmentation, and classification (ViT) in `studio.py` use HuggingFace `transformers` directly with lazy model loading and an in-memory `_model_cache`. These are NOT computed columns because they're interactive/on-demand operations.
 
+### Hybrid API serving (0.6+)
+
+Most endpoints remain hand-written `APIRouter` modules (~90 routes). Memory and personas reads use Pixeltable **`FastAPIRouter`** in `routers/data_serving.py` — v2 endpoints return `{rows: [...]}`. Frontend unwraps via `unwrapRows()` in `api.ts`. v1 endpoints remain for writes during transition.
+
+### Insert-read pattern (`return_rows=True`)
+
+Agent and generation routers use `table.insert([row], return_rows=True)` to read computed columns immediately without a separate timestamp-filter query:
+
+```python
+status = table.insert([row], return_rows=True)
+result_data = status.rows[0]
+```
+
 ### SPA fallback
 
-`npm run build` outputs to `backend/static/`. FastAPI's catch-all `/{full_path:path}` serves the built frontend. One process, one port in production. In development, Vite's proxy forwards `/api` to the backend.
+`npm run build` outputs to `backend/static/`. FastAPI's catch-all `/{full_path:path}` serves the built frontend and is registered **last** in lifespan (after `FastAPIRouter` v2 routes) so `/api/*` is never shadowed. One process, one port in production. In development, Vite's proxy forwards `/api` to the backend.
 
 ## Pixeltable Patterns
 
@@ -144,7 +158,9 @@ Operational knowledge for working with Pixeltable in this codebase:
 - **Server-side pagination**: `query.limit(n, offset=)` for proper page skipping (not client-side slicing).
 - **Data sampling**: `query.sample(n=, fraction=, stratify_by=, seed=)` for random or stratified subsets.
 - **Cross-table joins**: `table1.join(table2, on=col1 == col2, how='inner'|'left'|'cross')`.
-- **Views + Iterators**: `DocumentSplitter` (separators `"page, sentence"`), `FrameIterator` (`keyframes_only=True`), `AudioSplitter` (`duration=`) for data transformation.
+- **Views + Iterators**: `document_splitter` (separators `"page, sentence"`), `frame_iterator` (`keyframes_only=True`), `audio_splitter` (`duration=`), `string_splitter` for data transformation. Import from `pixeltable.functions` (function-style, not class iterators).
+- **Similarity search**: Always use keyword form — `col.similarity(string=query)` (required in 0.6+).
+- **Named embedding indexes**: All indexes use explicit `idx_name=`. CLIP indexes use `embedding=` (supports text→image `.similarity(string=...)`).
 - **Video UDFs**: `pixeltable.functions.video` — `get_metadata`, `get_duration`, `extract_frame`, `clip`, `overlay_text`, `crop(video, bbox, bbox_format)`, `concat_videos_agg`, `scene_detect_content`, `segment_video`, `with_audio`.
 - **Column metadata**: `get_metadata()['columns'][name]` may include `comment` (string) and `custom_metadata` (dict).
 - **JSON `dumps()` UDF**: `pixeltable.functions.json.dumps(column)` serializes complex columns to JSON strings.
@@ -154,7 +170,9 @@ Operational knowledge for working with Pixeltable in this codebase:
 - **Gemini multimodal embeddings**: `gemini.embed_content(content, model)` — unified embedding for text, images, video, audio. Replaces separate text/visual embedding functions.
 - **Notification UDFs**: `send_slack_message`, `send_discord_message`, `send_webhook` in `functions.py`. Each wraps a simple `requests.post()` (~10 lines). Registered as agent tools so the chat agent can send notifications autonomously. Activity logged to `agents.notifications` table. Configure via `SLACK_WEBHOOK_URL`, `DISCORD_WEBHOOK_URL`, `WEBHOOK_URL` in `.env`.
 - **Table-as-UDF**: `agents.captioner` encapsulates a Gemini vision pipeline (image → caption text). `pxt.udf(captioner, return_value=captioner.caption)` converts the table into a callable function. Used as a computed column on `agents.images` so every uploaded image gets auto-captioned. Captions are included in `search_images` results.
-- **Event loop**: `main.py` omits `loop=` in `uvicorn.run()` so uvicorn auto-detects uvloop. Pixeltable ≥ 0.5.19 has native uvloop compatibility (#1164).
+- **Event loop**: `main.py` omits `loop=` in `uvicorn.run()` so uvicorn auto-detects uvloop. Pixeltable ≥ 0.6.5 has native uvloop compatibility.
+- **Native export**: `pxt.io.export_csv` / `export_json` available via `/api/export/native/{table_path}`.
+- **Recompute failed columns**: `tbl.recompute_columns(columns=[...], where=col.errortype != None)` exposed at `/api/db/recompute_columns`.
 
 ## Key Patterns to Follow
 

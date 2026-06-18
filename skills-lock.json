@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "pixeltable-skill": {
+      "source": "pixeltable/pixeltable-skill",
+      "sourceType": "github",
+      "skillPath": "skills/pixeltable-skill/SKILL.md",
+      "computedHash": "4705dc25a31751c4d826864167eb4b9cb600926e420e62852893b0c89a7b4d3f"
+    }
+  }
+}

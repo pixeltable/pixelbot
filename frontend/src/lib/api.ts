@@ -20,6 +20,18 @@ import type {
 
 const BASE = '/api'
 
+function unwrapRows<T>(res: { rows: T[] } | T[]): T[] {
+  return Array.isArray(res) ? res : res.rows
+}
+
+function formatTimestamp(ts: unknown): string {
+  if (typeof ts === 'string') return ts
+  if (ts && typeof ts === 'object' && ts !== null && 'isoformat' in ts && typeof (ts as { isoformat: () => string }).isoformat === 'function') {
+    return (ts as { isoformat: () => string }).isoformat()
+  }
+  return ts != null ? String(ts) : ''
+}
+
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${url}`, {
     headers: { 'Content-Type': 'application/json', ...init?.headers },
@@ -127,8 +139,15 @@ export async function debugExport(): Promise<Blob> {
 // ── Memory ───────────────────────────────────────────────────────────────────
 
 export async function getMemory(search?: string): Promise<MemoryItem[]> {
-  const params = search ? `?search=${encodeURIComponent(search)}` : ''
-  return request<MemoryItem[]>(`/memory${params}`)
+  const rows = search
+    ? unwrapRows(await request<{ rows: MemoryItem[] }>(
+        `/memory/v2/search?query_text=${encodeURIComponent(search)}`,
+      ))
+    : unwrapRows(await request<{ rows: MemoryItem[] }>('/memory/v2'))
+  return rows.map((row) => ({
+    ...row,
+    timestamp: formatTimestamp(row.timestamp),
+  }))
 }
 
 export async function saveMemory(data: {
@@ -295,7 +314,7 @@ export async function saveGeneratedVideoToCollection(timestamp: string) {
 // ── Personas ─────────────────────────────────────────────────────────────────
 
 export async function getPersonas(): Promise<Persona[]> {
-  return request<Persona[]>('/personas')
+  return unwrapRows(await request<{ rows: Persona[] }>('/personas/v2'))
 }
 
 export async function createPersona(data: {

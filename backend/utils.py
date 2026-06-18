@@ -7,6 +7,7 @@ import inspect
 import io
 import logging
 import time
+from pathlib import Path
 from typing import TypeVar, Callable, ParamSpec
 
 from PIL import Image
@@ -29,6 +30,14 @@ def _is_transient(exc: Exception) -> bool:
     """Return True if the exception is a transient Pixeltable/psycopg error."""
     if isinstance(exc, AssertionError):
         return True
+    try:
+        from pixeltable.exceptions import Error as PxtError
+        if isinstance(exc, PxtError):
+            err_str = str(exc).lower()
+            if any(k in err_str for k in ("connection", "intrans", "lock", "closed", "not initialized")):
+                return True
+    except ImportError:
+        pass
     err_str = str(exc)
     return any(msg in err_str for msg in _TRANSIENT_MESSAGES)
 
@@ -114,3 +123,38 @@ def create_thumbnail_base64(img: Image.Image, size: tuple[int, int]) -> str | No
         return encode_image_base64(copy)
     except Exception:
         return None
+
+
+def allowed_media_roots() -> list[Path]:
+    """Directories from which serve_video/serve_audio may read files."""
+    import config
+
+    backend = Path(__file__).resolve().parent
+    roots = [
+        (backend / config.UPLOAD_FOLDER).resolve(),
+        Path.home().joinpath(".pixeltable").resolve(),
+    ]
+    return [r for r in roots if r.is_dir()]
+
+
+def resolve_served_media_path(path: str) -> str:
+    """Resolve path and ensure it lies under an allowed media root."""
+    from fastapi import HTTPException
+
+    candidate = Path(path).expanduser()
+    if not candidate.is_absolute():
+        candidate = (Path.cwd() / candidate).resolve()
+    else:
+        candidate = candidate.resolve()
+
+    if not candidate.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+
+    for root in allowed_media_roots():
+        try:
+            candidate.relative_to(root)
+            return str(candidate)
+        except ValueError:
+            continue
+
+    raise HTTPException(status_code=403, detail="Access denied")

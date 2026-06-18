@@ -707,11 +707,11 @@ def search_studio(body: SearchRequest):
     user_id = config.DEFAULT_USER_ID
     results: list[dict] = []
 
-    # ── Documents (sentence-transformer on text chunks) ──
+    # ── Documents (Gemini embed on text chunks) ──
     if "document" in body.types:
         try:
             chunks_view = pxt.get_table("agents.chunks")
-            sim = chunks_view.text.similarity(body.query)
+            sim = chunks_view.text.similarity(string=body.query)
             for row in (
                 chunks_view
                 .where((chunks_view.user_id == user_id) & (sim > body.threshold))
@@ -745,7 +745,7 @@ def search_studio(body: SearchRequest):
     if "image" in body.types:
         try:
             img_table = _get_pxt_table("image")
-            sim = img_table.image.similarity(body.query)
+            sim = img_table.image.similarity(string=body.query)
             for row in (
                 img_table
                 .where((img_table.user_id == user_id) & (sim > body.threshold))
@@ -768,7 +768,7 @@ def search_studio(body: SearchRequest):
     if "video" in body.types:
         try:
             frames_view = pxt.get_table("agents.video_frames")
-            sim = frames_view.frame.similarity(body.query)
+            sim = frames_view.frame.similarity(string=body.query)
             seen_videos: set[str] = set()
             for row in (
                 frames_view
@@ -807,7 +807,7 @@ def search_studio(body: SearchRequest):
         # Also search video transcripts
         try:
             vt_view = pxt.get_table("agents.video_transcript_sentences")
-            sim = vt_view.text.similarity(body.query)
+            sim = vt_view.text.similarity(string=body.query)
             for row in (
                 vt_view
                 .where((vt_view.user_id == user_id) & (sim > body.threshold))
@@ -825,11 +825,11 @@ def search_studio(body: SearchRequest):
         except Exception as e:
             logger.error(f"Studio search: video transcript error: {e}")
 
-    # ── Audio transcripts (sentence-transformer) ──
+    # ── Audio transcripts (Gemini embed) ──
     if "audio" in body.types:
         try:
             at_view = pxt.get_table("agents.audio_transcript_sentences")
-            sim = at_view.text.similarity(body.query)
+            sim = at_view.text.similarity(string=body.query)
             for row in (
                 at_view
                 .where((at_view.user_id == user_id) & (sim > body.threshold))

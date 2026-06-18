@@ -1,7 +1,6 @@
 import io
 import json
 import logging
-import time
 from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Query
@@ -40,40 +39,27 @@ def _insert_memory(body: SaveMemoryRequest) -> dict:
     elif body.type == "code" and not language:
         language = "text"
 
-    max_retries = 3
-    last_error: Exception | None = None
-
-    for attempt in range(max_retries):
-        try:
-            memory_table = pxt.get_table("agents.memory_bank")
-            memory_table.insert([MemoryBankRow(
-                content=body.content,
-                type=body.type,
-                language=language,
-                context_query=body.context_query,
-                timestamp=datetime.now(),
-                user_id=user_id,
-            )])
-            return {"message": "Memory item saved successfully"}
-        except (AssertionError, RuntimeError) as e:
-            last_error = e
-            logger.warning(f"Memory insert attempt {attempt + 1}/{max_retries} hit transaction conflict, retrying...")
-            time.sleep(0.5 * (attempt + 1))
-        except Exception as e:
-            logger.error(f"Error saving memory: {e}", exc_info=True)
-            raise HTTPException(status_code=500, detail=str(e))
-
-    logger.error(f"Error saving memory after {max_retries} retries: {last_error}", exc_info=True)
-    raise HTTPException(status_code=500, detail=str(last_error))
+    memory_table = pxt.get_table("agents.memory_bank")
+    memory_table.insert([MemoryBankRow(
+        content=body.content,
+        type=body.type,
+        language=language,
+        context_query=body.context_query,
+        timestamp=datetime.now(),
+        user_id=user_id,
+    )])
+    return {"message": "Memory item saved successfully"}
 
 
 @router.post("/memory", status_code=201, response_model=MessageResponse)
+@pxt_retry()
 def save_memory(body: SaveMemoryRequest):
     """Save a memory item (code or text)."""
     return _insert_memory(body)
 
 
 @router.post("/memory/manual", status_code=201, response_model=MessageResponse)
+@pxt_retry()
 def add_memory_manual(body: SaveMemoryRequest):
     """Save a manually added memory item (backward-compatible alias)."""
     return _insert_memory(body)
@@ -113,6 +99,7 @@ def get_memory(search: str | None = Query(default=None)):
 # ── Delete Memory ─────────────────────────────────────────────────────────────
 
 @router.delete("/memory/{timestamp_str}", response_model=DeleteMemoryResponse)
+@pxt_retry()
 def delete_memory(timestamp_str: str):
     """Delete a memory item by timestamp."""
     user_id = config.DEFAULT_USER_ID
@@ -143,6 +130,7 @@ def delete_memory(timestamp_str: str):
 # ── Download Memory ───────────────────────────────────────────────────────────
 
 @router.get("/download_memory")
+@pxt_retry()
 def download_memory():
     """Download all memory bank items as JSON."""
     user_id = config.DEFAULT_USER_ID

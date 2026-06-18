@@ -14,7 +14,7 @@ from models import (
     InsertRowsRequest, DeleteRowsRequest, RevertTableRequest,
     AddColumnRequest, AddComputedColumnRequest, DropColumnRequest, RenameColumnRequest,
     CreateViewRequest,
-    AddEmbeddingIndexRequest, DropEmbeddingIndexRequest,
+    AddEmbeddingIndexRequest, DropEmbeddingIndexRequest, RecomputeColumnsRequest,
     CreateDirRequest, DropDirRequest,
     MgmtResponse,
 )
@@ -123,9 +123,13 @@ def _resolve_embedding_function(name: str):
 
 _ITERATOR_COL_ARGS: dict[str, str] = {
     "DocumentSplitter": "document",
+    "document_splitter": "document",
     "FrameIterator": "video",
+    "frame_iterator": "video",
     "AudioSplitter": "audio",
+    "audio_splitter": "audio",
     "StringSplitter": "text",
+    "string_splitter": "text",
 }
 
 
@@ -136,12 +140,16 @@ def _resolve_iterator(iterator_type: str, iterator_args: dict, base_tbl):
     from pixeltable.functions.audio import audio_splitter
     from pixeltable.functions.string import string_splitter
 
-    # Legacy class names kept as keys so existing frontend clients continue to work.
+    # Legacy class names and 0.6+ function-style iterator names.
     iterators = {
         "DocumentSplitter": document_splitter,
+        "document_splitter": document_splitter,
         "FrameIterator": frame_iterator,
+        "frame_iterator": frame_iterator,
         "AudioSplitter": audio_splitter,
+        "audio_splitter": audio_splitter,
         "StringSplitter": string_splitter,
+        "string_splitter": string_splitter,
     }
 
     fn = iterators.get(iterator_type)
@@ -1181,9 +1189,12 @@ def add_embedding_index(body: AddEmbeddingIndexRequest):
         # Gemini embeds text (string_embed), CLIP embeds images (image_embed)
         key = body.embedding_function.lower().strip()
         if key == "clip":
-            idx_kwargs["image_embed"] = embed_fn
+            idx_kwargs["embedding"] = embed_fn
         else:
             idx_kwargs["string_embed"] = embed_fn
+
+        if body.idx_name:
+            idx_kwargs["idx_name"] = body.idx_name
 
         tbl.add_embedding_index(**idx_kwargs)
 
@@ -1195,6 +1206,7 @@ def add_embedding_index(body: AddEmbeddingIndexRequest):
                 "column": body.column,
                 "embedding": body.embedding_function,
                 "metric": body.metric,
+                "idx_name": body.idx_name,
             },
         )
     except Exception as e:
@@ -1221,6 +1233,39 @@ def drop_embedding_index(body: DropEmbeddingIndexRequest):
         )
     except Exception as e:
         logger.error(f"drop_embedding_index error: {e}", exc_info=True)
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/recompute_columns", response_model=MgmtResponse)
+@pxt_retry()
+def recompute_columns_endpoint(body: RecomputeColumnsRequest):
+    """Re-run computed columns, optionally only on rows where errortype is set."""
+    try:
+        tbl = pxt.get_table(body.path)
+    except Exception:
+        raise HTTPException(status_code=404, detail=f"Table '{body.path}' not found")
+
+    try:
+        for col in body.columns:
+            if col not in tbl.columns():
+                raise HTTPException(status_code=400, detail=f"Column '{col}' not in {body.path}")
+
+        where = None
+        if body.failed_only and len(body.columns) == 1:
+            col_ref = getattr(tbl, body.columns[0])
+            where = col_ref.errortype != None
+
+        tbl.recompute_columns(columns=body.columns, where=where)
+        return MgmtResponse(
+            success=True,
+            message=f"Recomputed columns {body.columns} on '{body.path}'",
+            path=body.path,
+            detail={"columns": body.columns, "failed_only": body.failed_only},
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"recompute_columns error: {e}", exc_info=True)
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -1345,26 +1390,50 @@ def list_available_functions():
 
     iterators = [
         {
-            "name": "DocumentSplitter",
-            "description": "Split documents into pages/sentences",
+            "name": "document_splitter",
+            "description": "Split documents into pages/sentences (0.6+ function)",
             "column_arg": "document",
             "example_args": {"document": "document", "separators": "page, sentence", "metadata": "title, heading, page"},
         },
         {
-            "name": "FrameIterator",
-            "description": "Extract video frames",
+            "name": "DocumentSplitter",
+            "description": "Split documents into pages/sentences (legacy alias)",
+            "column_arg": "document",
+            "example_args": {"document": "document", "separators": "page, sentence", "metadata": "title, heading, page"},
+        },
+        {
+            "name": "frame_iterator",
+            "description": "Extract video frames (0.6+ function)",
             "column_arg": "video",
             "example_args": {"video": "video", "keyframes_only": True},
         },
         {
-            "name": "AudioSplitter",
-            "description": "Split audio into chunks",
+            "name": "FrameIterator",
+            "description": "Extract video frames (legacy alias)",
+            "column_arg": "video",
+            "example_args": {"video": "video", "keyframes_only": True},
+        },
+        {
+            "name": "audio_splitter",
+            "description": "Split audio into chunks (0.6+ function)",
             "column_arg": "audio",
             "example_args": {"audio": "audio", "duration": 30},
         },
         {
+            "name": "AudioSplitter",
+            "description": "Split audio into chunks (legacy alias)",
+            "column_arg": "audio",
+            "example_args": {"audio": "audio", "duration": 30},
+        },
+        {
+            "name": "string_splitter",
+            "description": "Split text into segments (0.6+ function)",
+            "column_arg": "text",
+            "example_args": {"text": "transcript", "separators": "sentence"},
+        },
+        {
             "name": "StringSplitter",
-            "description": "Split text into segments",
+            "description": "Split text into segments (legacy alias)",
             "column_arg": "text",
             "example_args": {"text": "transcript", "separators": "sentence"},
         },

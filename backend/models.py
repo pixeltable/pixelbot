@@ -462,6 +462,12 @@ class AddEmbeddingIndexRequest(BaseModel):
     column: str
     embedding_function: str
     metric: str = "cosine"
+    idx_name: str | None = None
+
+class RecomputeColumnsRequest(BaseModel):
+    path: str
+    columns: list[str]
+    failed_only: bool = True
 
 class DropEmbeddingIndexRequest(BaseModel):
     path: str

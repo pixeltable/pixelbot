@@ -18,7 +18,7 @@ from models import (
     GenerateImageResponse, SaveToCollectionResponse, GenerateSpeechResponse,
     DeleteResponse, GenerateSlideshowRequest, GenerateSlideshowResponse
 )
-from utils import encode_image_base64, create_thumbnail_base64, pxt_retry
+from utils import encode_image_base64, create_thumbnail_base64, pxt_retry, resolve_served_media_path
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["images"])
@@ -62,20 +62,15 @@ def generate_image(body: GenerateImageRequest):
 
     try:
         image_gen_table = pxt.get_table("agents.image_generation_tasks")
-        image_gen_table.insert([ImageGenRow(prompt=body.prompt, timestamp=current_timestamp, user_id=user_id)])
-
-        result = (
-            image_gen_table.where(
-                (image_gen_table.timestamp == current_timestamp) & (image_gen_table.user_id == user_id)
-            )
-            .select(generated_image=image_gen_table.generated_image)
-            .collect()
+        status = image_gen_table.insert(
+            [ImageGenRow(prompt=body.prompt, timestamp=current_timestamp, user_id=user_id)],
+            return_rows=True,
         )
 
-        if len(result) == 0 or result[0].get("generated_image") is None:
+        if not status.rows or status.rows[0].get("generated_image") is None:
             raise HTTPException(status_code=500, detail="Image generation failed")
 
-        img = result[0]["generated_image"]
+        img = status.rows[0]["generated_image"]
         if not isinstance(img, Image.Image):
             raise HTTPException(status_code=500, detail=f"Expected PIL Image, got {type(img)}")
 
@@ -221,26 +216,21 @@ def generate_flux_image(body: GenerateFluxImageRequest):
 
     try:
         flux_table = pxt.get_table("agents.flux_generation_tasks")
-        flux_table.insert([FluxGenRow(
-            prompt=body.prompt,
-            width=w,
-            height=h,
-            timestamp=current_timestamp,
-            user_id=user_id,
-        )])
-
-        result = (
-            flux_table.where(
-                (flux_table.timestamp == current_timestamp) & (flux_table.user_id == user_id)
-            )
-            .select(generated_image=flux_table.generated_image)
-            .collect()
+        status = flux_table.insert(
+            [FluxGenRow(
+                prompt=body.prompt,
+                width=w,
+                height=h,
+                timestamp=current_timestamp,
+                user_id=user_id,
+            )],
+            return_rows=True,
         )
 
-        if len(result) == 0 or result[0].get("generated_image") is None:
+        if not status.rows or status.rows[0].get("generated_image") is None:
             raise HTTPException(status_code=500, detail="FLUX image generation failed")
 
-        img = result[0]["generated_image"]
+        img = status.rows[0]["generated_image"]
         if not isinstance(img, Image.Image):
             raise HTTPException(status_code=500, detail=f"Expected PIL Image, got {type(img)}")
 
@@ -400,20 +390,15 @@ def generate_video(body: GenerateVideoRequest):
 
     try:
         video_gen_table = pxt.get_table("agents.video_generation_tasks")
-        video_gen_table.insert([VideoGenRow(prompt=body.prompt, timestamp=current_timestamp, user_id=user_id)])
-
-        result = (
-            video_gen_table.where(
-                (video_gen_table.timestamp == current_timestamp) & (video_gen_table.user_id == user_id)
-            )
-            .select(generated_video=video_gen_table.generated_video)
-            .collect()
+        status = video_gen_table.insert(
+            [VideoGenRow(prompt=body.prompt, timestamp=current_timestamp, user_id=user_id)],
+            return_rows=True,
         )
 
-        if len(result) == 0 or result[0].get("generated_video") is None:
+        if not status.rows or status.rows[0].get("generated_video") is None:
             raise HTTPException(status_code=500, detail="Video generation failed")
 
-        video = result[0]["generated_video"]
+        video = status.rows[0]["generated_video"]
 
         # Pixeltable Video columns resolve to a file path string
         video_path = str(video) if not isinstance(video, str) else video
@@ -486,9 +471,8 @@ def get_video_history():
 @router.get("/serve_video")
 def serve_generated_video(path: str):
     """Serve a generated video file by its path."""
-    if not os.path.exists(path):
-        raise HTTPException(status_code=404, detail="Video file not found")
-    return FileResponse(path, media_type="video/mp4", filename=os.path.basename(path))
+    safe_path = resolve_served_media_path(path)
+    return FileResponse(safe_path, media_type="video/mp4", filename=os.path.basename(safe_path))
 
 
 # ── Delete Generated Video ───────────────────────────────────────────────────
@@ -766,25 +750,20 @@ def generate_speech(body: GenerateSpeechRequest):
 
     try:
         speech_table = pxt.get_table("agents.speech_tasks")
-        speech_table.insert([SpeechTaskRow(
-            input_text=body.text,
-            voice=voice,
-            timestamp=current_timestamp,
-            user_id=user_id,
-        )])
-
-        result = (
-            speech_table.where(
-                (speech_table.timestamp == current_timestamp) & (speech_table.user_id == user_id)
-            )
-            .select(audio=speech_table.audio)
-            .collect()
+        status = speech_table.insert(
+            [SpeechTaskRow(
+                input_text=body.text,
+                voice=voice,
+                timestamp=current_timestamp,
+                user_id=user_id,
+            )],
+            return_rows=True,
         )
 
-        if len(result) == 0 or result[0].get("audio") is None:
+        if not status.rows or status.rows[0].get("audio") is None:
             raise HTTPException(status_code=500, detail="Speech generation failed")
 
-        audio_path = str(result[0]["audio"])
+        audio_path = str(status.rows[0]["audio"])
         if not os.path.exists(audio_path):
             raise HTTPException(status_code=500, detail="Audio file not found on disk")
 
@@ -840,9 +819,8 @@ def save_generated_speech_to_collection(body: SaveSpeechRequest):
 @router.get("/serve_audio")
 def serve_audio(path: str):
     """Serve a generated audio file by path."""
-    if not os.path.exists(path):
-        raise HTTPException(status_code=404, detail="Audio file not found")
-    return FileResponse(path, media_type="audio/wav", filename=os.path.basename(path))
+    safe_path = resolve_served_media_path(path)
+    return FileResponse(safe_path, media_type="audio/wav", filename=os.path.basename(safe_path))
 
 
 @router.get("/tts_voices")

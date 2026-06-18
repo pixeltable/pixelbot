@@ -3,7 +3,9 @@ import csv
 import io
 import json
 import logging
+import tempfile
 from datetime import datetime
+from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -232,3 +234,42 @@ def preview_table(
     col_list = [c.strip() for c in columns.split(",")] if columns else None
     col_names, rows = _collect_rows(table_path, limit, col_list)
     return {"columns": col_names, "rows": rows, "count": len(rows)}
+
+
+# ── Native Pixeltable 0.6+ export (pxt.io.export_csv / export_json) ───────────
+
+@router.get("/native/{table_path:path}")
+@pxt_retry()
+def export_native(
+    table_path: str,
+    format: str = Query(default="csv", pattern="^(csv|json)$"),
+    limit: int = Query(default=1000, le=10000),
+):
+    """Export using Pixeltable 0.6+ native export APIs (demo endpoint)."""
+    try:
+        tbl = pxt.get_table(table_path)
+    except Exception:
+        raise HTTPException(status_code=404, detail=f"Table not found: {table_path}")
+
+    query = tbl.limit(limit)
+    suffix = ".csv" if format == "csv" else ".json"
+    filename = table_path.replace(".", "_") + suffix
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        out_path = str(Path(tmpdir) / filename)
+        if format == "csv":
+            from pixeltable.io import export_csv
+            export_csv(query, out_path)
+            media_type = "text/csv"
+        else:
+            from pixeltable.io import export_json
+            export_json(query, out_path)
+            media_type = "application/json"
+
+        content = Path(out_path).read_bytes()
+
+    return StreamingResponse(
+        io.BytesIO(content),
+        media_type=media_type,
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )

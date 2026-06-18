@@ -30,7 +30,7 @@ def get_all_memory(user_id: str) -> list[dict]:
 def search_memory(query_text: str, user_id: str, threshold: float = 0.7, limit: int = 10) -> list[dict]:
     """Semantic search over memory items."""
     t = pxt.get_table("agents.memory_bank")
-    sim = t.content.similarity(query_text)
+    sim = t.content.similarity(string=query_text)
     return list(
         t.where((t.user_id == user_id) & (sim > threshold))
         .select(

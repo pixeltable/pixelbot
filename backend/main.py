@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 import pixeltable as pxt
 
 import config as app_config
-from routers import chat, files, history, memory, images, personas, studio, database, experiments, export, integrations
+from routers import chat, files, history, memory, images, personas, studio, database, experiments, export, integrations, data_serving
 
 load_dotenv(override=True)
 
@@ -31,18 +31,27 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Validate Pixeltable connection on startup."""
+    """Initialize Pixeltable schema and validate connection on startup."""
+    import setup_pixeltable
+    from routers import data_serving
     try:
+        setup_pixeltable.init_schema(force_reset=False)
+        data_serving.register_data_serving_routes()
+        if not getattr(data_serving, "_router_included", False):
+            app.include_router(data_serving.router)
+            data_serving._router_included = True
         tool_agent = pxt.get_table("agents.tools")
         if tool_agent is None:
             raise RuntimeError("agents.tools table not found")
         logger.info("Connected to Pixeltable agents.tools table")
-    except Exception:
+    except Exception as exc:
         logger.warning(
-            "⚠️  Pixeltable schema not initialized. "
-            "Run 'python setup_pixeltable.py' from the backend/ directory first. "
-            "The server will start but API calls will fail until the schema is created."
+            "⚠️  Pixeltable schema not initialized (%s). "
+            "Run 'python setup_pixeltable.py' from the backend/ directory to reset. "
+            "The server will start but API calls will fail until the schema is created.",
+            exc,
         )
+    _register_spa_fallback()
     yield
 
 
@@ -73,6 +82,7 @@ app.include_router(database.router)
 app.include_router(experiments.router)
 app.include_router(export.router)
 app.include_router(integrations.router)
+# data_serving.router is included in lifespan AFTER register_data_serving_routes()
 
 
 @app.get("/api/health")
@@ -85,21 +95,26 @@ def user_info():
     return {"user_name": app_config.DEFAULT_USER_NAME}
 
 
-# Serve frontend static build (production)
+# Serve frontend static build (production) — registered in lifespan after API routers
 STATIC_DIR = Path(__file__).resolve().parent / "static"
-if STATIC_DIR.is_dir():
+_spa_registered = False
+
+
+def _register_spa_fallback() -> None:
+    """Register SPA catch-all last so /api/* routes take precedence."""
+    global _spa_registered
+    if _spa_registered or not STATIC_DIR.is_dir():
+        return
     from fastapi.responses import FileResponse
 
-    # SPA catch-all: serve index.html for all non-API, non-asset paths
     @app.get("/{full_path:path}")
     async def spa_fallback(full_path: str):
-        # If the requested path matches a real static file, serve it
         file_path = STATIC_DIR / full_path
         if file_path.is_file():
             return FileResponse(file_path)
-        # Otherwise serve index.html for client-side routing
         return FileResponse(STATIC_DIR / "index.html")
 
+    _spa_registered = True
     logger.info(f"Serving frontend from {STATIC_DIR}")
 
 

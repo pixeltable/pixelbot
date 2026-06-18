@@ -73,30 +73,13 @@ def query(body: QueryRequest):
             max_tokens=selected_max_tokens,
             temperature=selected_temperature,
         )
-        # insert() is synchronous — blocks until all computed columns finish
-        tool_agent.insert([row])
+        # insert() blocks until all computed columns finish; return_rows avoids follow-up query
+        status = tool_agent.insert([row], return_rows=True)
 
-        # Retrieve computed results
-        result = (
-            tool_agent.where((tool_agent.timestamp == current_timestamp) & (tool_agent.user_id == user_id))
-            .select(
-                tool_agent.answer,
-                tool_agent.doc_context,
-                tool_agent.image_context,
-                tool_agent.video_frame_context,
-                tool_agent.tool_output,
-                tool_agent.history_context,
-                tool_agent.memory_context,
-                tool_agent.chat_memory_context,
-                follow_up_text=tool_agent.follow_up_text,
-            )
-            .collect()
-        )
-
-        if not result or len(result) == 0:
+        if not status.rows:
             raise HTTPException(status_code=500, detail="No results found after processing query")
 
-        result_data = result[0]
+        result_data = status.rows[0]
 
         # Process image context
         processed_image_context: list[dict] = []

@@ -70,7 +70,7 @@ const SCHEMA_NODES: SchemaNode[] = [
   { id: 'csv_registry', label: 'CSV Registry', type: 'table', icon: Table2, description: 'agents.csv_registry — metadata for dynamic CSV tables', color: '#34d399', details: ['table_name', 'display_name', 'col_names (Json)', 'row_count'], group: 'input' },
 
   // ── Document Processing ──────────────────────────
-  { id: 'chunks', label: 'chunks', type: 'view', icon: Layers, description: 'agents.chunks — DocumentSplitter(page, sentence) with metadata', color: '#7DA8EF', details: ['text', 'title', 'heading', 'page'], group: 'processing' },
+  { id: 'chunks', label: 'chunks', type: 'view', icon: Layers, description: 'agents.chunks — document_splitter(page, sentence) with metadata', color: '#7DA8EF', details: ['text', 'title', 'heading', 'page'], group: 'processing' },
   { id: 'extract_text', label: 'extract_document_text', type: 'udf', icon: Cpu, description: 'UDF: pdfplumber / docx / pptx / openpyxl → full text (max 15k chars)', color: '#7DA8EF', details: ['document → document_text'], group: 'processing' },
   { id: 'gemini_summary', label: 'Gemini Summary', type: 'model', icon: Sparkles, description: 'gemini-2.5-flash → structured JSON {title, summary, key_topics}', color: '#7DA8EF', details: ['response_mime_type: application/json'], group: 'processing' },
 
@@ -78,7 +78,7 @@ const SCHEMA_NODES: SchemaNode[] = [
   { id: 'img_thumb', label: 'Thumbnail', type: 'udf', icon: Cpu, description: 'resize(96×96) → b64_encode → thumbnail computed column', color: '#F1AE03', group: 'processing' },
 
   // ── Video Processing ─────────────────────────────
-  { id: 'video_frames', label: 'video_frames', type: 'view', icon: Film, description: 'agents.video_frames — FrameIterator(keyframes_only=True)', color: '#DC2404', details: ['frame', 'frame_idx', 'frame_thumbnail (192×192)'], group: 'processing' },
+  { id: 'video_frames', label: 'video_frames', type: 'view', icon: Film, description: 'agents.video_frames — frame_iterator(keyframes_only=True)', color: '#DC2404', details: ['frame', 'frame_idx', 'frame_thumbnail (192×192)'], group: 'processing' },
   { id: 'video_audio_chunks', label: 'video_audio_chunks', type: 'view', icon: Layers, description: 'agents.video_audio_chunks — AudioSplitter(30s chunks)', color: '#DC2404', details: ['audio chunks from video'], group: 'processing' },
   { id: 'whisper_video', label: 'Whisper', type: 'model', icon: Mic, description: 'openai.transcriptions(model=whisper-1) on video audio', color: '#DC2404', details: ['transcription.text'], group: 'processing' },
   { id: 'video_sentences', label: 'video_transcript_sentences', type: 'view', icon: Layers, description: 'StringSplitter(sentence) on Whisper output', color: '#DC2404', group: 'processing' },
@@ -130,7 +130,7 @@ const SCHEMA_NODES: SchemaNode[] = [
 
 const SCHEMA_EDGES: SchemaEdge[] = [
   // ── Document pipeline ─────────────────────────────
-  { source: 'documents', target: 'chunks', label: 'DocumentSplitter' },
+  { source: 'documents', target: 'chunks', label: 'document_splitter' },
   { source: 'documents', target: 'extract_text', label: 'extract' },
   { source: 'extract_text', target: 'gemini_summary', label: 'summarize' },
   { source: 'chunks', target: 'doc_embed', label: 'e5-large' },
@@ -140,7 +140,7 @@ const SCHEMA_EDGES: SchemaEdge[] = [
   { source: 'images', target: 'img_embed', label: 'CLIP' },
 
   // ── Video pipeline (visual) ───────────────────────
-  { source: 'videos', target: 'video_frames', label: 'FrameIterator' },
+  { source: 'videos', target: 'video_frames', label: 'frame_iterator' },
   { source: 'video_frames', target: 'vid_frame_embed', label: 'CLIP' },
 
   // ── Video pipeline (audio transcription) ──────────

@@ -13,7 +13,7 @@ GEMINI_EMBEDDING_MODEL_ID = os.getenv("GEMINI_EMBEDDING_MODEL", "gemini-embeddin
 CLIP_MODEL_ID = os.getenv("CLIP_MODEL", "openai/clip-vit-base-patch32")
 # FLUX image generation (BFL)
 FLUX_MODEL_ID = os.getenv("FLUX_MODEL", "flux-2-pro")
-# Audio transcription (OpenAI Whisper — Gemini audio handling not yet in pxt)
+# OpenAI Whisper for audio/video transcription (Gemini transcription also available in Pixeltable 0.6+)
 WHISPER_MODEL_ID = os.getenv("WHISPER_MODEL", "whisper-1")
 # Kept for Prompt Lab multi-model comparison
 CLAUDE_MODEL_ID = os.getenv("CLAUDE_MODEL", "claude-sonnet-4-20250514")

@@ -168,6 +168,7 @@ def get_workflow_detail(timestamp_str: str):
 # ── Delete History Entry ──────────────────────────────────────────────────────
 
 @router.delete("/delete_history/{timestamp_str:path}", response_model=DeleteResponse)
+@pxt_retry()
 def delete_history_entry(timestamp_str: str):
     """Delete a specific history entry by timestamp."""
     user_id = config.DEFAULT_USER_ID

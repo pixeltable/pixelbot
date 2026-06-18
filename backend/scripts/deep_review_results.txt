@@ -1,0 +1,77 @@
+# Deep Review Scan — Read-Only A-to-Z Results
+# Date: 2026-06-17
+
+## Automated Tests
+
+smoke_test.py:     PASS (0 failures, 2 skips — no chunk/image rows for similarity)
+endpoint_matrix.py: PASS (36 pass, 9 skip, 0 failures)
+static SPA test:   PASS — /api/memory/v2 returns application/json after npm run build
+
+## Fixes Applied During Review
+
+P0 — serve_video/serve_audio path traversal
+  - Added resolve_served_media_path() in utils.py
+  - Restricts reads to backend/data/ and ~/.pixeltable/
+  - /etc/passwd now returns 403
+
+P1 — @pxt_retry on delete/download handlers
+  - memory.py: delete_memory, download_memory
+  - history.py: delete_history_entry
+
+## UI Browser Walkthrough (10 pages, production static on :8000)
+
+| Route | Status | Notes |
+|-------|--------|-------|
+| / | PASS | Greeting, persona dropdown, action chips, mode buttons |
+| /history | PASS | Conversations tab, 0 conversations, API 200 |
+| /memory | PASS | v2 list loads, 0 items, search box |
+| /images | PASS | Imagen/FLUX/Videos tabs switch |
+| /studio | PASS | File upload zone, Add from URL |
+| /experiments | PASS | 8 models listed, Run disabled until prompt |
+| /database | PASS | 22 catalog objects, Pipeline tab works |
+| /developer | PASS | Export tab, table list from /api/export/tables |
+| /integrations | PASS | Status cards, activity log empty |
+| /settings | PASS | Personas v2 read, "No personas" |
+| /architecture | PASS | React Flow diagram, zoom controls |
+
+Console errors: NONE (only CursorBrowser dialog override warnings)
+
+## Endpoint Coverage (read-only GET matrix)
+
+PASS (36): all safe GET endpoints listed in endpoint_matrix.py
+SKIP (9):
+  - /api/memory/v2/search — embed API 400 (leaked/invalid GEMINI key in env)
+  - studio conditional reads — empty catalog (no uploads)
+  - @pxt_retry gaps (8 studio CSV handlers + data_serving register fn)
+  - memory threshold drift agent=0.8 vs v1/v2=0.7
+
+## Prioritized Findings
+
+### P0 — Fixed
+- Path traversal on GET /api/serve_video and /api/serve_audio
+
+### P1 — Partially Fixed / Remaining
+- FIXED: @pxt_retry on memory delete/download, history delete
+- REMAINING: studio CSV CRUD (8 handlers), data_serving register_data_serving_routes
+
+### P2 — Consistency (document, no fix required for read-only)
+- Memory search threshold: agent pipeline 0.8 vs queries.py / v2 0.7
+- save_video_result re-calls transform_video() (double work)
+- max_tokens column on agents.tools not passed to Gemini config
+- Dead api.ts helpers: deleteFile, deleteAll, getContextInfo, getWorkflowDetail,
+  deleteHistory, getTtsVoices, getAudioUrl, reveRemix, getTableSchema,
+  dropEmbeddingIndex, healthCheck
+
+### P3 — Deferred
+- B-tree indexes on user_id (API unavailable in Pixeltable 0.6.5)
+- personas v2 write routes (reads use v2, writes use v1)
+- reveRemix UI (API exists, no frontend)
+- Live pipeline verification (requires valid API keys + uploads)
+
+## Optional Live Verification (when keys available)
+
+1. Upload PDF → agents.chunks rows → semantic search
+2. Upload image → CLIP index + caption
+3. Upload video → Whisper transcription → sentence view
+4. POST /api/query → 11-step agent pipeline
+5. Reve edit/remix, video overlay_text

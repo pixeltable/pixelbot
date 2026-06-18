@@ -93,8 +93,8 @@ Every row maps to a Pixeltable feature exercised in this app:
 |---|---|---|
 | Tables + multimodal types | `Document`, `Image`, `Video`, `Audio`, `Json` | [Tables](https://docs.pixeltable.com/tutorials/tables-and-data-operations) |
 | Computed columns | 11-step agent pipeline, thumbnails, summarization | [Computed Columns](https://docs.pixeltable.com/tutorials/computed-columns) |
-| Views + iterators | `DocumentSplitter`, `FrameIterator`, `AudioSplitter` | [Iterators](https://docs.pixeltable.com/platform/iterators) |
-| Embedding indexes | E5-large-instruct, CLIP ViT-B/32 → `.similarity()` | [Embedding Indexes](https://docs.pixeltable.com/platform/embedding-indexes) |
+| Views + iterators | `document_splitter`, `frame_iterator`, `audio_splitter`, `string_splitter` | [Iterators](https://docs.pixeltable.com/platform/iterators) |
+| Embedding indexes | Gemini `embed_content`, CLIP ViT-B/32 → `.similarity(string=...)` | [Embedding Indexes](https://docs.pixeltable.com/platform/embedding-indexes) |
 | `@pxt.udf` | News API, financial data, context assembly | [UDFs](https://docs.pixeltable.com/platform/udfs-in-pixeltable) |
 | `@pxt.query` | `search_documents`, `search_images`, `search_video_frames` | [RAG](https://docs.pixeltable.com/howto/cookbooks/agents/pattern-rag-pipeline) |
 | `pxt.tools()` + `invoke_tools()` | Agent tool selection + execution | [Tool Calling](https://docs.pixeltable.com/howto/cookbooks/agents/llm-tool-calling) |

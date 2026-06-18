@@ -175,7 +175,9 @@ def upload_file(file: UploadFile = File(...)):
         table = get_pxt_table(table_key)
         RowModel = MEDIA_ROW_MODELS[table_key]
         row = RowModel(**{data_col: file_path, "uuid": file_uuid, "timestamp": current_timestamp, "user_id": user_id})
-        table.insert([row])
+        status = table.insert([row], return_rows=True)
+        if status.errors:
+            raise RuntimeError(f"Insert failed: {status.errors}")
 
         return UploadResponse(
             message=f"File successfully uploaded to {table_key} table",
@@ -270,7 +272,9 @@ def add_url(body: AddUrlRequest):
         table = get_pxt_table(table_key)
         RowModel = MEDIA_ROW_MODELS[table_key]
         row = RowModel(**{data_col: body.url, "uuid": file_uuid, "timestamp": current_timestamp, "user_id": user_id})
-        table.insert([row])
+        status = table.insert([row], return_rows=True)
+        if status.errors:
+            raise RuntimeError(f"Insert failed: {status.errors}")
 
         return AddUrlResponse(
             message=f"URL successfully added to {table_key} table",

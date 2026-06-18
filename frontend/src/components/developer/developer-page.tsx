@@ -180,8 +180,18 @@ const API_GROUPS: ApiGroup[] = [
     label: 'Memory',
     endpoints: [
       {
+        method: 'GET', path: '/api/memory/v2',
+        description: 'List memories (FastAPIRouter v2 — returns {rows: [...]})',
+        curl: 'curl http://localhost:8000/api/memory/v2',
+      },
+      {
+        method: 'GET', path: '/api/memory/v2/search',
+        description: 'Semantic memory search (v2)',
+        curl: 'curl "http://localhost:8000/api/memory/v2/search?query_text=python"',
+      },
+      {
         method: 'GET', path: '/api/memory',
-        description: 'List all memories (with optional semantic search)',
+        description: 'List all memories (v1 legacy)',
         curl: 'curl "http://localhost:8000/api/memory?search=python"',
       },
       {
@@ -242,8 +252,8 @@ for row in recent:
 
 chunks = pxt.get_table("agents.chunks")
 
-# Semantic search — uses the E5-large-instruct embedding index
-sim = chunks.text.similarity("machine learning best practices")
+# Semantic search — Gemini embed_content index (0.6.5+)
+sim = chunks.text.similarity(string="machine learning best practices")
 results = (
     chunks.where(sim > 0.5)
           .order_by(sim, asc=False)
@@ -283,8 +293,8 @@ print(df.describe())`,
 
 images = pxt.get_table("agents.images")
 
-# CLIP-based text-to-image search
-sim = images.image.similarity("a cat sitting on a desk")
+# CLIP-based text-to-image search (use string= keyword in 0.6+)
+sim = images.image.similarity(string="a cat sitting on a desk")
 results = (
     images.where(sim > 0.25)
           .order_by(sim, asc=False)
@@ -398,6 +408,51 @@ result = (
     .collect()
 )
 # result[0]["cropped"] is a path to the cropped video file`,
+  },
+  {
+    label: 'Insert with return_rows (0.6+)',
+    description: 'Read computed columns immediately after insert',
+    language: 'python',
+    code: `import pixeltable as pxt
+from datetime import datetime
+
+tools = pxt.get_table("agents.tools")
+status = tools.insert([{
+    "prompt": "What documents do I have?",
+    "user_id": "local_user",
+    "timestamp": datetime.now(),
+}], return_rows=True)
+# Computed pipeline columns available in status.rows[0]
+print(status.rows[0]["answer"])`,
+  },
+  {
+    label: 'FastAPIRouter v2 API',
+    description: 'Declarative table-backed routes (memory, personas)',
+    language: 'python',
+    code: `# Pixelbot registers FastAPIRouter routes at startup.
+# v2 endpoints return {rows: [...]} envelopes:
+
+# GET /api/memory/v2
+# GET /api/memory/v2/search?query_text=...
+# POST /api/memory/v2/delete  {"timestamp": "..."}
+# GET /api/personas/v2
+
+import requests
+rows = requests.get("http://localhost:8000/api/memory/v2").json()["rows"]`,
+  },
+  {
+    label: 'Native Export (0.6+)',
+    description: 'Export tables with pxt.io.export_csv / export_json',
+    language: 'python',
+    code: `import pixeltable as pxt
+from pixeltable.io import export_csv, export_json
+
+t = pxt.get_table("agents.chat_history")
+export_csv(t, "/tmp/chat_history.csv")
+export_json(t, "/tmp/chat_history.json")
+
+# Or via API:
+# GET /api/export/native/agents.chat_history?format=csv`,
   },
   {
     label: 'Pagination with offset',
@@ -573,7 +628,7 @@ export function DeveloperPage() {
                 </div>
                 <div className="p-5 space-y-3">
                   <CodeBlock
-                    code={`pip install pixeltable
+                    code={`pip install "pixeltable>=0.6.5"
 
 # Then in Python:
 import pixeltable as pxt
