@@ -65,10 +65,11 @@ export function MemoryPage() {
   const handleAdd = useCallback(async () => {
     if (!newContent.trim()) return
     try {
-      await api.addMemoryManual({
+      await api.saveMemory({
         content: newContent,
         type: newType,
         language: newType === 'code' ? newLanguage || 'text' : null,
+        context_query: 'Manual Entry',
       })
       addToast('Memory item added', 'success')
       setNewContent('')

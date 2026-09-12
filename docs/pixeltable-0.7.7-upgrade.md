@@ -23,7 +23,7 @@ Retrieved 2026-09-11.
 
 ## Implemented contract
 
-The backend is one installable `pixelbot` package. `pixelbot/app.py` and `pixelbot/schema.py` define an import-safe app, typed schema, queries, routes, and custom API. The local target is `pixelbot_v3`; scratch CSVs use `pixelbot_scratch`. Startup no longer creates schema or falls back to an unusable service.
+The backend is one installable `pixelbot` package. `pixelbot/app.py` and `pixelbot/schema.py` define an import-safe app, typed schema, queries, routes, and custom API. Endpoint-facing reads use `@pxt.query` with `FastAPIRouter`; custom FastAPI handlers remain for validation-heavy writes and HTTP-specific behavior. The local target is `pixelbot_v3`; scratch CSVs use `pixelbot_scratch`. Startup no longer creates schema or falls back to an unusable service.
 
 The database UI/API is read-only. Reve and its three routes are removed. Pipeline metadata exposes `indexes`. Uploads, remote URLs, catalog paths, exports, media paths, and webhook destinations have explicit boundaries. The frontend loads routes lazily and packages its build under `pixelbot/static`.
 
@@ -54,5 +54,7 @@ Verified locally on 2026-09-11:
 - Frontend tests and lint passed. The production build had no 500 kB chunk warning: the initial chunk was 271.64 kB and the largest route chunk was 146.57 kB.
 
 A fresh local schema apply completed with 19 models. A second diff reported all 19 models up to date, and the managed service started on port 8000 with working health, SPA, and read-only catalog routes. Pixeltable currently reorders JSON objects through PostgreSQL JSONB during catalog persistence, so response schemas and tool declarations are declared in the same deterministic key order to keep subsequent schema diffs clean. Video and audio transcript text and embedding indexes live directly on their iterator views; this avoids a 0.7.7 schema-apply stall observed when creating redundant filtered sentence views.
+
+On September 12, 2026, the read API was simplified against the canonical Pixeltable app guidance. The duplicated `pixelbot/queries.py` execution layer and versioned memory/persona reads were removed. `pixelbot/app.py` now declares the endpoint queries and exposes them through `FastAPIRouter`; custom FastAPI handlers retain the validation-heavy writes. A catalog created from the merged 3.0 schema remained fully in agreement (19 of 19 models, zero schema operations), and a real managed service returned 200 from the canonical memory and persona reads while the removed versioned routes returned 404.
 
 Provider calls are mocked and establish wiring only. Paid provider calls, hosted deployment, Cloud behavior, and the 48 agent trials were not run. Validation used a separate temporary `PIXELTABLE_HOME`; the old `agents` catalog was not changed.

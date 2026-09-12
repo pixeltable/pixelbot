@@ -28,48 +28,6 @@ export interface QueryResponse {
   follow_up_text: string | null
 }
 
-export interface ToolInfo {
-  name: string
-  description: string
-}
-
-export interface FileItem {
-  name: string
-  uuid: string
-  thumbnail?: string | null
-}
-
-export interface ContextInfo {
-  tools: ToolInfo[]
-  documents: FileItem[]
-  images: FileItem[]
-  videos: FileItem[]
-  audios: FileItem[]
-  initial_prompt: string
-  final_prompt: string
-  workflow_data: WorkflowEntry[]
-  parameters: LLMParameters
-}
-
-export interface WorkflowEntry {
-  timestamp: string
-  prompt: string
-  answer: string
-}
-
-export interface WorkflowDetail {
-  prompt: string
-  timestamp: string
-  initial_system_prompt: string
-  final_system_prompt: string
-  initial_response: unknown
-  tool_output: unknown
-  final_response: unknown
-  answer: string
-  max_tokens: number
-  temperature: number
-}
-
 export interface LLMParameters {
   max_tokens: number | null
   temperature: number | null
@@ -621,4 +579,3 @@ export interface NotificationLogResponse {
   notifications: NotificationLogEntry[]
   total: number
 }
-

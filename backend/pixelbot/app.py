@@ -27,20 +27,71 @@ from pixelbot.routers import (
 )
 from pixelbot.schema import (
     MemoryBank,
-    get_all_memory,
-    get_all_personas,
-    search_memory,
+    UserPersonas,
 )
 from pixelbot.schema import TableModel as TableModel  # noqa: F401
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s [%(name)s] %(message)s")
 logger = logging.getLogger(__name__)
 
-dataServingRouter = FastAPIRouter(name="data_serving", prefix="/api", tags=["data-serving"])
-dataServingRouter.add_query_route(path="/memory/v2", query=get_all_memory, method="get")
-dataServingRouter.add_query_route(path="/memory/v2/search", query=search_memory, method="get")
-dataServingRouter.add_delete_route(MemoryBank, path="/memory/v2/delete", match_columns=["timestamp"])
-dataServingRouter.add_query_route(path="/personas/v2", query=get_all_personas, method="get")
+
+@pxt.query
+def list_memory_rows():
+    """List memory for the configured local user."""
+    return (
+        MemoryBank.where(MemoryBank.user_id == config.DEFAULT_USER_ID)
+        .select(
+            content=MemoryBank.content,
+            type=MemoryBank.type,
+            language=MemoryBank.language,
+            context_query=MemoryBank.context_query,
+            timestamp=MemoryBank.timestamp,
+        )
+        .order_by(MemoryBank.timestamp, asc=False)
+        .limit(100)
+    )
+
+
+@pxt.query
+def search_memory_rows(query_text: str):
+    """Search memory for the configured local user."""
+    similarity = MemoryBank.content.similarity(string=query_text)  # type: ignore[attr-defined]
+    return (
+        MemoryBank.where((MemoryBank.user_id == config.DEFAULT_USER_ID) & (similarity > 0.7))
+        .order_by(similarity, asc=False)
+        .select(
+            content=MemoryBank.content,
+            type=MemoryBank.type,
+            language=MemoryBank.language,
+            context_query=MemoryBank.context_query,
+            timestamp=MemoryBank.timestamp,
+            sim=similarity,
+        )
+        .limit(10)
+    )
+
+
+@pxt.query
+def list_persona_rows():
+    """List personas for the configured local user."""
+    return (
+        UserPersonas.where(UserPersonas.user_id == config.DEFAULT_USER_ID)
+        .select(
+            persona_name=UserPersonas.persona_name,
+            initial_prompt=UserPersonas.initial_prompt,
+            final_prompt=UserPersonas.final_prompt,
+            llm_params=UserPersonas.llm_params,
+            timestamp=UserPersonas.timestamp,
+        )
+        .order_by(UserPersonas.persona_name, asc=True)
+        .limit(100)
+    )
+
+
+pixeltableRouter = FastAPIRouter(name="pixeltable", prefix="/api", tags=["pixeltable"])
+pixeltableRouter.add_query_route(path="/memory", query=list_memory_rows, method="get")
+pixeltableRouter.add_query_route(path="/memory/search", query=search_memory_rows, method="get")
+pixeltableRouter.add_query_route(path="/personas", query=list_persona_rows, method="get")
 
 app = FastAPI(
     title="Pixelbot",
@@ -74,7 +125,7 @@ for apiRouter in (
     experiments.router,
     export.router,
     integrations.router,
-    dataServingRouter,
+    pixeltableRouter,
 ):
     app.include_router(apiRouter)
 

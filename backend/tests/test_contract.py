@@ -32,8 +32,25 @@ def test_removed_routes_are_not_registered() -> None:
         "/api/db/drop_table",
         "/api/db/add_computed_column",
         "/api/db/recompute_columns",
+        "/api/memory/v2",
+        "/api/memory/v2/search",
+        "/api/memory/v2/delete",
+        "/api/memory/manual",
+        "/api/download_memory",
     }
     assert not any(path in removed for _, path in routes)
+
+
+def test_pixeltable_query_routes_are_canonical() -> None:
+    routes = {(method, route.path) for route in app.routes for method in getattr(route, "methods", set())}
+    assert {
+        ("GET", "/api/memory"),
+        ("GET", "/api/memory/search"),
+        ("GET", "/api/personas"),
+        ("POST", "/api/memory"),
+        ("POST", "/api/personas"),
+    } <= routes
+    assert not (Path(__file__).parents[1] / "pixelbot" / "queries.py").exists()
 
 
 def test_removed_api_routes_return_not_found() -> None:

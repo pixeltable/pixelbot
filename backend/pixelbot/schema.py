@@ -244,21 +244,6 @@ class MemoryBank(TableModel, name="memory_bank", has_default_idxs=False):
 
 
 @pxt.query
-def get_all_memory(user_id: str):
-    return (
-        MemoryBank.where(MemoryBank.user_id == user_id)
-        .select(
-            content=MemoryBank.content,
-            type=MemoryBank.type,
-            language=MemoryBank.language,
-            context_query=MemoryBank.context_query,
-            timestamp=MemoryBank.timestamp,
-        )
-        .order_by(MemoryBank.timestamp, asc=False)
-    )
-
-
-@pxt.query
 def search_memory(query_text: str, user_id: str):
     sim = MemoryBank.content.similarity(string=query_text)  # type: ignore[attr-defined]
     return (
@@ -318,21 +303,6 @@ class UserPersonas(TableModel, name="user_personas", has_default_idxs=False):
     llm_params: pxt.Json
     timestamp: pxt.Timestamp
     __indexes__ = [pxt.BtreeIndex(timestamp)]
-
-
-@pxt.query
-def get_all_personas(user_id: str):
-    return (
-        UserPersonas.where(UserPersonas.user_id == user_id)
-        .select(
-            persona_name=UserPersonas.persona_name,
-            initial_prompt=UserPersonas.initial_prompt,
-            final_prompt=UserPersonas.final_prompt,
-            llm_params=UserPersonas.llm_params,
-            timestamp=UserPersonas.timestamp,
-        )
-        .order_by(UserPersonas.persona_name, asc=True)
-    )
 
 
 class ImageGenerationTasks(TableModel, name="image_generation_tasks", has_default_idxs=False):

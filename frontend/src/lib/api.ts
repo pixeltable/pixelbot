@@ -1,8 +1,6 @@
 // Typed API client for the FastAPI backend
 import type {
   QueryResponse,
-  ContextInfo,
-  WorkflowDetail,
   MemoryItem,
   Persona,
   GeneratedImage,
@@ -97,33 +95,6 @@ export async function addUrl(url: string) {
   })
 }
 
-export async function deleteFile(uuid: string, fileType: string) {
-  return request<{ message: string }>(`/delete_file/${uuid}/${fileType}`, { method: 'DELETE' })
-}
-
-export async function deleteAll(type: string) {
-  return request<{ message: string }>('/delete_all', {
-    method: 'POST',
-    body: JSON.stringify({ type }),
-  })
-}
-
-// ── Context ──────────────────────────────────────────────────────────────────
-
-export async function getContextInfo(): Promise<ContextInfo> {
-  return request<ContextInfo>('/context_info')
-}
-
-// ── History ──────────────────────────────────────────────────────────────────
-
-export async function getWorkflowDetail(timestamp: string): Promise<WorkflowDetail> {
-  return request<WorkflowDetail>(`/workflow_detail/${timestamp}`)
-}
-
-export async function deleteHistory(timestamp: string) {
-  return request<{ message: string }>(`/delete_history/${timestamp}`, { method: 'DELETE' })
-}
-
 export async function downloadHistory(): Promise<Blob> {
   const res = await fetch(`${BASE}/download_history`)
   if (!res.ok) throw new Error('Failed to download')
@@ -141,9 +112,9 @@ export async function debugExport(): Promise<Blob> {
 export async function getMemory(search?: string): Promise<MemoryItem[]> {
   const rows = search
     ? unwrapRows(await request<{ rows: MemoryItem[] }>(
-        `/memory/v2/search?query_text=${encodeURIComponent(search)}`,
+        `/memory/search?query_text=${encodeURIComponent(search)}`,
       ))
-    : unwrapRows(await request<{ rows: MemoryItem[] }>('/memory/v2'))
+    : unwrapRows(await request<{ rows: MemoryItem[] }>('/memory'))
   return rows.map((row) => ({
     ...row,
     timestamp: formatTimestamp(row.timestamp),
@@ -162,26 +133,13 @@ export async function saveMemory(data: {
   })
 }
 
-export async function addMemoryManual(data: {
-  content: string
-  type: string
-  language?: string | null
-  context_query?: string
-}) {
-  return request<{ message: string }>('/memory/manual', {
-    method: 'POST',
-    body: JSON.stringify(data),
-  })
-}
-
 export async function deleteMemory(timestamp: string) {
   return request<{ message: string }>(`/memory/${timestamp}`, { method: 'DELETE' })
 }
 
 export async function downloadMemory(): Promise<Blob> {
-  const res = await fetch(`${BASE}/download_memory`)
-  if (!res.ok) throw new Error('Failed to download')
-  return res.blob()
+  const rows = await getMemory()
+  return new Blob([JSON.stringify(rows, null, 2)], { type: 'application/json' })
 }
 
 // ── Generation Config ────────────────────────────────────────────────────────
@@ -264,14 +222,6 @@ export async function generateSpeech(text: string, voice: string = 'alloy') {
   })
 }
 
-export async function getTtsVoices() {
-  return request<import('@/types').TtsVoice[]>('/tts_voices')
-}
-
-export function getAudioUrl(path: string): string {
-  return `${BASE}/serve_audio?path=${encodeURIComponent(path)}`
-}
-
 export async function saveGeneratedSpeechToCollection(audioPath: string) {
   return request<{ message: string; uuid: string }>('/save_generated_speech', {
     method: 'POST',
@@ -314,7 +264,7 @@ export async function saveGeneratedVideoToCollection(timestamp: string) {
 // ── Personas ─────────────────────────────────────────────────────────────────
 
 export async function getPersonas(): Promise<Persona[]> {
-  return unwrapRows(await request<{ rows: Persona[] }>('/personas/v2'))
+  return unwrapRows(await request<{ rows: Persona[] }>('/personas'))
 }
 
 export async function createPersona(data: {
@@ -572,12 +522,6 @@ export async function getTableRows(
   )
 }
 
-export async function getTableSchema(
-  path: string,
-): Promise<import('@/types').TableInfo> {
-  return request<import('@/types').TableInfo>(`/db/table/${path}/schema`)
-}
-
 export async function getTimeline(
   limit = 100,
 ): Promise<import('@/types').TimelineResponse> {
@@ -649,19 +593,4 @@ export async function testNotification(service: string, message: string): Promis
 
 export async function getNotificationLog(limit = 50): Promise<import('@/types').NotificationLogResponse> {
   return request<import('@/types').NotificationLogResponse>(`/integrations/log?limit=${limit}`)
-}
-
-// ── Database inspection ──────────────────────────────────────────────────────
-
-export async function getTableVersions(
-  path: string,
-  limit = 20,
-): Promise<import('@/types').VersionsResponse> {
-  return request<import('@/types').VersionsResponse>(`/db/table/${path}/versions?limit=${limit}`)
-}
-
-// ── Health ───────────────────────────────────────────────────────────────────
-
-export async function healthCheck(): Promise<{ status: string }> {
-  return request<{ status: string }>('/health')
 }

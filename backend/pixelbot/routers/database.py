@@ -449,7 +449,6 @@ _QUERY_TABLE_MAP: dict[str, str] = {
     "search_memory": "pixelbot_v3/memory_bank",
     "search_chat_history": "pixelbot_v3/chat_history",
     "get_recent_chat_history": "pixelbot_v3/chat_history",
-    "get_all_memory": "pixelbot_v3/memory_bank",
 }
 
 
