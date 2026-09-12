@@ -7,7 +7,7 @@ Retrieved 2026-09-11.
 | Pixelbot baseline | commit `ef73dc01e0461574d94ca34867924019a142bf7a` |
 | Pixeltable release | tag `v0.7.7`, commit `8d14e6c88d3dcd749d71ef5799447454470f68f9`, released 2026-09-10 |
 | Published wheel | `pixeltable-0.7.7-py3-none-any.whl`, SHA-256 `0642d78d3f90766cc6cec60c587b9e19682df1241dde8000d8e1856a2838610f` |
-| Project guidance | Pixeltable skill `2.10.1`, commit `cd5705537bd2cbc95269706e9092d623e754b05d`, refreshed 2026-09-11 |
+| Guidance reviewed | Canonical Pixeltable skill `2.10.1`, commit `cd5705537bd2cbc95269706e9092d623e754b05d`, reviewed 2026-09-11 |
 | Python support | Pixeltable 0.7.7 requires Python 3.11+ |
 | Skill baseline | bundled Pixeltable skill 2.10.0 |
 
