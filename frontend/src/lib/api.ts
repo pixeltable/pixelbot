@@ -1,8 +1,6 @@
 // Typed API client for the FastAPI backend
 import type {
   QueryResponse,
-  ContextInfo,
-  WorkflowDetail,
   MemoryItem,
   Persona,
   GeneratedImage,
@@ -95,33 +93,6 @@ export async function addUrl(url: string) {
     method: 'POST',
     body: JSON.stringify({ url }),
   })
-}
-
-export async function deleteFile(uuid: string, fileType: string) {
-  return request<{ message: string }>(`/delete_file/${uuid}/${fileType}`, { method: 'DELETE' })
-}
-
-export async function deleteAll(type: string) {
-  return request<{ message: string }>('/delete_all', {
-    method: 'POST',
-    body: JSON.stringify({ type }),
-  })
-}
-
-// ── Context ──────────────────────────────────────────────────────────────────
-
-export async function getContextInfo(): Promise<ContextInfo> {
-  return request<ContextInfo>('/context_info')
-}
-
-// ── History ──────────────────────────────────────────────────────────────────
-
-export async function getWorkflowDetail(timestamp: string): Promise<WorkflowDetail> {
-  return request<WorkflowDetail>(`/workflow_detail/${timestamp}`)
-}
-
-export async function deleteHistory(timestamp: string) {
-  return request<{ message: string }>(`/delete_history/${timestamp}`, { method: 'DELETE' })
 }
 
 export async function downloadHistory(): Promise<Blob> {
@@ -249,14 +220,6 @@ export async function generateSpeech(text: string, voice: string = 'alloy') {
     method: 'POST',
     body: JSON.stringify({ text, voice }),
   })
-}
-
-export async function getTtsVoices() {
-  return request<import('@/types').TtsVoice[]>('/tts_voices')
-}
-
-export function getAudioUrl(path: string): string {
-  return `${BASE}/serve_audio?path=${encodeURIComponent(path)}`
 }
 
 export async function saveGeneratedSpeechToCollection(audioPath: string) {
@@ -559,12 +522,6 @@ export async function getTableRows(
   )
 }
 
-export async function getTableSchema(
-  path: string,
-): Promise<import('@/types').TableInfo> {
-  return request<import('@/types').TableInfo>(`/db/table/${path}/schema`)
-}
-
 export async function getTimeline(
   limit = 100,
 ): Promise<import('@/types').TimelineResponse> {
@@ -636,19 +593,4 @@ export async function testNotification(service: string, message: string): Promis
 
 export async function getNotificationLog(limit = 50): Promise<import('@/types').NotificationLogResponse> {
   return request<import('@/types').NotificationLogResponse>(`/integrations/log?limit=${limit}`)
-}
-
-// ── Database inspection ──────────────────────────────────────────────────────
-
-export async function getTableVersions(
-  path: string,
-  limit = 20,
-): Promise<import('@/types').VersionsResponse> {
-  return request<import('@/types').VersionsResponse>(`/db/table/${path}/versions?limit=${limit}`)
-}
-
-// ── Health ───────────────────────────────────────────────────────────────────
-
-export async function healthCheck(): Promise<{ status: string }> {
-  return request<{ status: string }>('/health')
 }

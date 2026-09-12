@@ -5,7 +5,7 @@ from datetime import datetime
 
 import pixeltable as pxt
 import requests as http_requests
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 
 from pixelbot import config
 from pixelbot.models import (
@@ -74,7 +74,6 @@ def test_notification(req: TestNotificationRequest):
     )
 
 
-_NOTIFICATION_TOOLS = ("send_slack_message", "send_discord_message", "send_webhook")
 _TOOL_SERVICE_MAP = {
     "send_slack_message": "slack",
     "send_discord_message": "discord",
@@ -84,14 +83,15 @@ _TOOL_SERVICE_MAP = {
 
 @router.get("/log", response_model=NotificationLogResponse)
 @pxt_retry()
-def get_notification_log(limit: int = 50):
+def get_notification_log(limit: int = Query(default=50, ge=1, le=100)):
     """Get recent notification activity from both manual tests and agent tool calls."""
     entries: list[NotificationLogEntry] = []
 
     # Source 1: explicit notification table (manual test sends)
     notifications = pxt.get_table("pixelbot_v3.notifications")
     manual_rows = (
-        notifications.select(
+        notifications.where(notifications.user_id == config.DEFAULT_USER_ID)
+        .select(
             notifications.service,
             notifications.message,
             notifications.status,
@@ -101,16 +101,16 @@ def get_notification_log(limit: int = 50):
         .order_by(notifications.timestamp, asc=False)
         .limit(limit)
         .collect()
-        .to_pandas()
     )
-    for _, r in manual_rows.iterrows():
+    for row in manual_rows:
+        timestamp = row["timestamp"]
         entries.append(
             NotificationLogEntry(
-                service=r["service"],
-                message=r["message"],
-                status=r["status"],
-                response_code=int(r["response_code"]) if r["response_code"] is not None else 0,
-                timestamp=r["timestamp"].isoformat() if hasattr(r["timestamp"], "isoformat") else str(r["timestamp"]),
+                service=row["service"],
+                message=row["message"],
+                status=row["status"],
+                response_code=int(row["response_code"]) if row["response_code"] is not None else 0,
+                timestamp=timestamp.isoformat() if hasattr(timestamp, "isoformat") else str(timestamp),
                 source="manual",
             )
         )
@@ -119,7 +119,8 @@ def get_notification_log(limit: int = 50):
     try:
         tools_table = pxt.get_table("pixelbot_v3.tools")
         agent_rows = (
-            tools_table.select(tools_table.prompt, tools_table.tool_output, tools_table.timestamp)
+            tools_table.where(tools_table.user_id == config.DEFAULT_USER_ID)
+            .select(tools_table.prompt, tools_table.tool_output, tools_table.timestamp)
             .order_by(tools_table.timestamp, asc=False)
             .limit(limit)
             .collect()
@@ -128,7 +129,7 @@ def get_notification_log(limit: int = 50):
             tool_output = r.get("tool_output")
             if not isinstance(tool_output, dict):
                 continue
-            for tool_name in _NOTIFICATION_TOOLS:
+            for tool_name, service in _TOOL_SERVICE_MAP.items():
                 result = tool_output.get(tool_name)
                 if not result:
                     continue
@@ -136,7 +137,7 @@ def get_notification_log(limit: int = 50):
                 is_success = "successfully" in result_str.lower() or "delivered" in result_str.lower()
                 entries.append(
                     NotificationLogEntry(
-                        service=_TOOL_SERVICE_MAP[tool_name],
+                        service=service,
                         message=r.get("prompt", "")[:200],
                         status="success" if is_success else "error",
                         response_code=200 if is_success else 0,
