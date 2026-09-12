@@ -87,7 +87,8 @@ jobs:
           uv run pxt service update pixelbot/app.py pixelbot_v3 app --port 8000 -f
           curl --fail --retry 10 --retry-delay 1 http://127.0.0.1:8000/api/health
           uv run pxt service list --json
-          uv run pxt service logs pixelbot_v3/app --tail 20
+          test -f "$PIXELTABLE_HOME/logs/services/pixelbot_v3/app.log"
+          tail -20 "$PIXELTABLE_HOME/logs/services/pixelbot_v3/app.log"
           uv run pxt service stop pixelbot_v3/app
           trap - EXIT
         working-directory: backend
