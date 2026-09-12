@@ -5,7 +5,7 @@ import pixeltable as pxt
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from pixelbot import config, queries
+from pixelbot import config
 from pixelbot.models import DeleteResponse, MessageResponse, UserPersonaRow
 from pixelbot.utils import pxt_retry
 
@@ -24,31 +24,6 @@ class PersonaUpdateRequest(BaseModel):
     initial_prompt: str
     final_prompt: str
     llm_params: dict
-
-
-# ── List Personas ─────────────────────────────────────────────────────────────
-
-
-@router.get("/personas")
-@pxt_retry()
-def get_personas():
-    """Fetch all personas for the current user.
-
-    Uses shared query function from queries.py and direct ResultSet iteration.
-    """
-    user_id = config.DEFAULT_USER_ID
-
-    try:
-        rows = queries.get_all_personas(user_id)
-        for row in rows:
-            ts = row.get("timestamp")
-            if ts:
-                row["timestamp"] = ts.strftime("%Y-%m-%d %H:%M:%S.%f")
-        return rows
-
-    except Exception as e:
-        logger.error(f"Error fetching personas: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ── Create Persona ────────────────────────────────────────────────────────────

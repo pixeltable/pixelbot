@@ -1,14 +1,11 @@
-import io
-import json
 import logging
 from datetime import datetime
 
 import pixeltable as pxt
-from fastapi import APIRouter, HTTPException, Query
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from pixelbot import config, queries
+from pixelbot import config
 from pixelbot.models import DeleteMemoryResponse, MemoryBankRow, MessageResponse
 from pixelbot.utils import pxt_retry
 
@@ -62,45 +59,6 @@ def save_memory(body: SaveMemoryRequest):
     return _insert_memory(body)
 
 
-@router.post("/memory/manual", status_code=201, response_model=MessageResponse)
-@pxt_retry()
-def add_memory_manual(body: SaveMemoryRequest):
-    """Save a manually added memory item (backward-compatible alias)."""
-    return _insert_memory(body)
-
-
-# ── Get Memory ────────────────────────────────────────────────────────────────
-
-
-@router.get("/memory")
-@pxt_retry()
-def get_memory(search: str | None = Query(default=None)):
-    """Retrieve memory items, optionally filtering by semantic search.
-
-    Uses shared query functions from queries.py (mirrors the @pxt.query
-    definitions in pixelbot/schema.py) and direct ResultSet iteration.
-    """
-    user_id = config.DEFAULT_USER_ID
-
-    try:
-        if search:
-            rows = queries.search_memory(search, user_id)
-        else:
-            rows = queries.get_all_memory(user_id)
-
-        # Format timestamps for JSON serialization
-        for row in rows:
-            ts = row.get("timestamp")
-            if ts:
-                row["timestamp"] = ts.strftime("%Y-%m-%d %H:%M:%S.%f")
-
-        return rows
-
-    except Exception as e:
-        logger.error(f"Error fetching memory: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
-
-
 # ── Delete Memory ─────────────────────────────────────────────────────────────
 
 
@@ -130,33 +88,4 @@ def delete_memory(timestamp_str: str):
         raise
     except Exception as e:
         logger.error(f"Error deleting memory: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-# ── Download Memory ───────────────────────────────────────────────────────────
-
-
-@router.get("/download_memory")
-@pxt_retry()
-def download_memory():
-    """Download all memory bank items as JSON."""
-    user_id = config.DEFAULT_USER_ID
-
-    try:
-        rows = queries.get_all_memory(user_id)
-        for row in rows:
-            ts = row.get("timestamp")
-            if ts:
-                row["timestamp"] = ts.strftime("%Y-%m-%d %H:%M:%S.%f")
-
-        json_bytes = json.dumps(rows, indent=2).encode("utf-8")
-
-        return StreamingResponse(
-            io.BytesIO(json_bytes),
-            media_type="application/json",
-            headers={"Content-Disposition": "attachment; filename=memory_bank.json"},
-        )
-
-    except Exception as e:
-        logger.error(f"Error downloading memory: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))

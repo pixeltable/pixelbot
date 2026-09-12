@@ -38,3 +38,14 @@ test('pipeline UI matches the deployed Gemini schema', async () => {
   assert.match(architecture, /gemini\.generate_content/)
   assert.doesNotMatch(database, /transcript_sentences/)
 })
+
+test('memory and persona reads use canonical Pixeltable query routes', async () => {
+  const [api, developerPage] = await Promise.all([
+    read('../src/lib/api.ts'),
+    read('../src/components/developer/developer-page.tsx'),
+  ])
+  assert.match(api, /request<\{ rows: MemoryItem\[\] \}>\('\/memory'\)/)
+  assert.match(api, /\/memory\/search\?query_text=/)
+  assert.match(api, /request<\{ rows: Persona\[\] \}>\('\/personas'\)/)
+  assert.doesNotMatch(`${api}\n${developerPage}`, /memory\/v2|personas\/v2|memory\/manual|download_memory/)
+})

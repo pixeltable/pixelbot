@@ -178,24 +178,19 @@ const API_GROUPS: ApiGroup[] = [
     label: 'Memory',
     endpoints: [
       {
-        method: 'GET', path: '/api/memory/v2',
-        description: 'List memories (FastAPIRouter v2 — returns {rows: [...]})',
-        curl: 'curl http://localhost:8000/api/memory/v2',
-      },
-      {
-        method: 'GET', path: '/api/memory/v2/search',
-        description: 'Semantic memory search (v2)',
-        curl: 'curl "http://localhost:8000/api/memory/v2/search?query_text=python"',
-      },
-      {
         method: 'GET', path: '/api/memory',
-        description: 'List all memories (v1 legacy)',
-        curl: 'curl "http://localhost:8000/api/memory?search=python"',
+        description: 'List memories with a declarative Pixeltable query route',
+        curl: 'curl http://localhost:8000/api/memory',
       },
       {
-        method: 'POST', path: '/api/memory/manual',
+        method: 'GET', path: '/api/memory/search',
+        description: 'Semantic memory search through a Pixeltable embedding index',
+        curl: 'curl "http://localhost:8000/api/memory/search?query_text=python"',
+      },
+      {
+        method: 'POST', path: '/api/memory',
         description: 'Save a new memory entry',
-        curl: `curl -X POST http://localhost:8000/api/memory/manual \\
+        curl: `curl -X POST http://localhost:8000/api/memory \\
   -H "Content-Type: application/json" \\
   -d '{"content": "User prefers Python", "type": "text", "context_query": "preferences"}'`,
       },
@@ -424,19 +419,19 @@ status = tools.insert([{
 print(status.rows[0]["answer"])`,
   },
   {
-    label: 'FastAPIRouter v2 API',
-    description: 'Declarative table-backed routes (memory, personas)',
+    label: 'Pixeltable query routes',
+    description: 'Declarative table-backed reads alongside custom FastAPI writes',
     language: 'python',
     code: `# Pixelbot registers FastAPIRouter routes at startup.
-# v2 endpoints return {rows: [...]} envelopes:
+# Query endpoints return {rows: [...]} envelopes:
 
-# GET /api/memory/v2
-# GET /api/memory/v2/search?query_text=...
-# POST /api/memory/v2/delete  {"timestamp": "..."}
-# GET /api/personas/v2
+# GET /api/memory
+# GET /api/memory/search?query_text=...
+# GET /api/personas
+# POST /api/memory uses a custom FastAPI handler for validation and defaults
 
 import requests
-rows = requests.get("http://localhost:8000/api/memory/v2").json()["rows"]`,
+rows = requests.get("http://localhost:8000/api/memory").json()["rows"]`,
   },
   {
     label: 'Native Export (0.6+)',

@@ -141,9 +141,9 @@ export async function debugExport(): Promise<Blob> {
 export async function getMemory(search?: string): Promise<MemoryItem[]> {
   const rows = search
     ? unwrapRows(await request<{ rows: MemoryItem[] }>(
-        `/memory/v2/search?query_text=${encodeURIComponent(search)}`,
+        `/memory/search?query_text=${encodeURIComponent(search)}`,
       ))
-    : unwrapRows(await request<{ rows: MemoryItem[] }>('/memory/v2'))
+    : unwrapRows(await request<{ rows: MemoryItem[] }>('/memory'))
   return rows.map((row) => ({
     ...row,
     timestamp: formatTimestamp(row.timestamp),
@@ -162,26 +162,13 @@ export async function saveMemory(data: {
   })
 }
 
-export async function addMemoryManual(data: {
-  content: string
-  type: string
-  language?: string | null
-  context_query?: string
-}) {
-  return request<{ message: string }>('/memory/manual', {
-    method: 'POST',
-    body: JSON.stringify(data),
-  })
-}
-
 export async function deleteMemory(timestamp: string) {
   return request<{ message: string }>(`/memory/${timestamp}`, { method: 'DELETE' })
 }
 
 export async function downloadMemory(): Promise<Blob> {
-  const res = await fetch(`${BASE}/download_memory`)
-  if (!res.ok) throw new Error('Failed to download')
-  return res.blob()
+  const rows = await getMemory()
+  return new Blob([JSON.stringify(rows, null, 2)], { type: 'application/json' })
 }
 
 // ── Generation Config ────────────────────────────────────────────────────────
@@ -314,7 +301,7 @@ export async function saveGeneratedVideoToCollection(timestamp: string) {
 // ── Personas ─────────────────────────────────────────────────────────────────
 
 export async function getPersonas(): Promise<Persona[]> {
-  return unwrapRows(await request<{ rows: Persona[] }>('/personas/v2'))
+  return unwrapRows(await request<{ rows: Persona[] }>('/personas'))
 }
 
 export async function createPersona(data: {
