@@ -28,3 +28,13 @@ test('CSV mutations use registry UUIDs', async () => {
   assert.match(api, /csv_uuid: csvUuid/)
   assert.doesNotMatch(api, /table_name: tableName/)
 })
+
+test('pipeline UI matches the deployed Gemini schema', async () => {
+  const [architecture, database] = await Promise.all([
+    read('../src/components/architecture/architecture-page.tsx'),
+    read('../src/components/database/database-page.tsx'),
+  ])
+  assert.doesNotMatch(architecture, /transcript_sentences|Claude →|e5-large/)
+  assert.match(architecture, /gemini\.generate_content/)
+  assert.doesNotMatch(database, /transcript_sentences/)
+})

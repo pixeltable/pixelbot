@@ -89,6 +89,15 @@ def user_info() -> dict[str, str]:
     return {"user_name": config.DEFAULT_USER_NAME}
 
 
+@app.api_route(
+    "/api/{unmatched_path:path}",
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+    include_in_schema=False,
+)
+async def unmatched_api_route(unmatched_path: str) -> JSONResponse:
+    return JSONResponse(status_code=404, content={"detail": "Not Found"})
+
+
 staticDir = Path(__file__).resolve().parent / "static"
 
 if staticDir.is_dir():

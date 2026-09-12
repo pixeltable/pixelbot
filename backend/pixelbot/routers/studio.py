@@ -1008,7 +1008,7 @@ def search_studio(body: SearchRequest):
 
         # Also search video transcripts
         try:
-            vt_view = pxt.get_table("pixelbot_v3.video_transcript_sentences")
+            vt_view = pxt.get_table("pixelbot_v3.video_audio_chunks")
             sim = vt_view.text.similarity(string=body.query)
             for row in (
                 vt_view.where((vt_view.user_id == user_id) & (sim > body.threshold))
@@ -1031,7 +1031,7 @@ def search_studio(body: SearchRequest):
     # ── Audio transcripts (Gemini embed) ──
     if "audio" in body.types:
         try:
-            at_view = pxt.get_table("pixelbot_v3.audio_transcript_sentences")
+            at_view = pxt.get_table("pixelbot_v3.audio_chunks")
             sim = at_view.text.similarity(string=body.query)
             for row in (
                 at_view.where((at_view.user_id == user_id) & (sim > body.threshold))
@@ -1190,9 +1190,9 @@ def _collect_text_embeddings(
     except Exception as e:
         logger.error(f"Embedding viz: document error: {e}")
 
-    # Video transcript sentences
+    # Video transcript chunks
     try:
-        vt_view = pxt.get_table("pixelbot_v3.video_transcript_sentences")
+        vt_view = pxt.get_table("pixelbot_v3.video_audio_chunks")
         for row in (
             vt_view.where(vt_view.user_id == user_id)
             .select(
@@ -1216,9 +1216,9 @@ def _collect_text_embeddings(
     except Exception as e:
         logger.error(f"Embedding viz: video transcript error: {e}")
 
-    # Audio transcript sentences
+    # Audio transcript chunks
     try:
-        at_view = pxt.get_table("pixelbot_v3.audio_transcript_sentences")
+        at_view = pxt.get_table("pixelbot_v3.audio_chunks")
         for row in (
             at_view.where(at_view.user_id == user_id)
             .select(
@@ -2280,9 +2280,9 @@ def get_transcription(uuid: str, media_type: str):
 
     try:
         if media_type == "audio":
-            view_name = "pixelbot_v3.audio_transcript_sentences"
+            view_name = "pixelbot_v3.audio_chunks"
         else:
-            view_name = "pixelbot_v3.video_transcript_sentences"
+            view_name = "pixelbot_v3.video_audio_chunks"
 
         view = pxt.get_table(view_name)
         sentences = []
