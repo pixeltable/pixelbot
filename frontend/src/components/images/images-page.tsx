@@ -13,11 +13,6 @@ import {
   FolderPlus,
   Check,
   Pencil,
-  Sparkles,
-  ArrowRight,
-  Save,
-  RotateCcw,
-  X,
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -35,7 +30,6 @@ import type { GeneratedImage, GeneratedVideo, GenerationConfig } from '@/types'
 import { cn } from '@/lib/utils'
 
 type ActiveTab = 'images' | 'flux' | 'videos'
-type ReveMode = 'edit'
 
 export function ImagesPage() {
   const { addToast } = useToast()
@@ -73,10 +67,6 @@ export function ImagesPage() {
   // Save to collection tracking
   const [isSavingToCollection, setIsSavingToCollection] = useState(false)
   const [savedToCollection, setSavedToCollection] = useState<Set<string>>(new Set())
-
-  // Reve edit state
-  const [reveImage, setReveImage] = useState<GeneratedImage | null>(null)
-  const [reveMode, setReveMode] = useState<ReveMode>('edit')
 
   useMountEffect(() => {
     api.getGenerationConfig().then(setGenConfig).catch(() => {})
@@ -237,12 +227,6 @@ export function ImagesPage() {
     },
     [isSavingToCollection, savedToCollection, addToast],
   )
-
-  const handleEditImage = useCallback((image: GeneratedImage) => {
-    setSelectedImage(null)
-    setReveImage(image)
-    setReveMode('edit')
-  }, [])
 
 
 
@@ -452,12 +436,6 @@ export function ImagesPage() {
                   </button>
                 )}
                 <button
-                  className="flex items-center gap-1.5 rounded-lg border border-violet-500/30 px-3 py-1.5 text-xs font-medium text-violet-400 hover:bg-violet-500/10 transition-colors"
-                  onClick={() => handleEditImage(selectedImage)}
-                >
-                  <Pencil className="h-3 w-3" /> Edit
-                </button>
-                <button
                   className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
                   onClick={() => handleDownloadImage(selectedImage)}
                 >
@@ -546,307 +524,7 @@ export function ImagesPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Reve Edit Dialog */}
-      <ReveEditDialog
-        image={reveImage}
-        mode={reveMode}
-        onModeChange={setReveMode}
-        open={!!reveImage}
-        onOpenChange={(open) => {
-          if (!open) setReveImage(null)
-        }}
-        onSaved={() => {
-          addToast('Result saved to collection', 'success')
-          fetchImages()
-        }}
-      />
     </div>
-  )
-}
-
-// ── Reve Edit Dialog ────────────────────────────────────────────────────────
-
-function ReveEditDialog({
-  image,
-  mode,
-  open,
-  onOpenChange,
-  onSaved,
-}: {
-  image: GeneratedImage | null
-  mode: ReveMode
-  onModeChange: (mode: ReveMode) => void
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  onSaved: () => void
-}) {
-  const { addToast } = useToast()
-  const [instruction, setInstruction] = useState('')
-  const [isProcessing, setIsProcessing] = useState(false)
-  const [resultPreview, setResultPreview] = useState<string | null>(null)
-  const [resultTempPath, setResultTempPath] = useState<string | null>(null)
-  const [resultDimensions, setResultDimensions] = useState<{ width: number; height: number } | null>(null)
-  const [isSaving, setIsSaving] = useState(false)
-
-  const resetState = useCallback(() => {
-    setInstruction('')
-    setIsProcessing(false)
-    setResultPreview(null)
-    setResultTempPath(null)
-    setResultDimensions(null)
-    setIsSaving(false)
-  }, [])
-
-  const handleClose = useCallback(() => {
-    resetState()
-    onOpenChange(false)
-  }, [resetState, onOpenChange])
-
-  const handleGenerate = useCallback(async () => {
-    if (!image || !instruction.trim()) return
-    setIsProcessing(true)
-    setResultPreview(null)
-    setResultTempPath(null)
-
-    try {
-      const result = await api.reveEdit({
-        timestamp: image.timestamp,
-        instruction: instruction.trim(),
-      })
-      setResultPreview(result.preview)
-      setResultTempPath(result.temp_path)
-      setResultDimensions({ width: result.width, height: result.height })
-    } catch (err) {
-      addToast(
-        err instanceof Error ? err.message : `Reve ${mode} failed`,
-        'error',
-      )
-    } finally {
-      setIsProcessing(false)
-    }
-  }, [image, instruction, mode, addToast])
-
-  const handleSave = useCallback(async () => {
-    if (!resultTempPath) return
-    setIsSaving(true)
-    try {
-      await api.reveSave(resultTempPath)
-      onSaved()
-      handleClose()
-    } catch (err) {
-      addToast(err instanceof Error ? err.message : 'Save failed', 'error')
-    } finally {
-      setIsSaving(false)
-    }
-  }, [resultTempPath, onSaved, handleClose, addToast])
-
-  const handleDownloadResult = useCallback(() => {
-    if (!resultPreview) return
-    const a = document.createElement('a')
-    a.href = resultPreview
-    a.download = `pixelbot_reve_${mode}_${Date.now()}.png`
-    a.click()
-  }, [resultPreview, mode])
-
-  const handleRetry = useCallback(() => {
-    setResultPreview(null)
-    setResultTempPath(null)
-    setResultDimensions(null)
-  }, [])
-
-  if (!image) return null
-
-  const hasResult = !!resultPreview
-
-  return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose() }}>
-      <DialogContent className="max-w-4xl overflow-y-auto max-h-[90vh]">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Pencil className="h-4 w-4 text-violet-400" />
-            Edit with Reve AI
-            <Badge variant="secondary" className="text-[9px] ml-1">
-              <Sparkles className="h-2.5 w-2.5 mr-0.5" />
-              Reve
-            </Badge>
-          </DialogTitle>
-          <DialogDescription className="text-sm">
-            Describe how you want to modify this image using natural language.
-          </DialogDescription>
-        </DialogHeader>
-
-        {/* Image comparison */}
-        <div className="grid grid-cols-2 gap-4">
-          {/* Original */}
-          <div className="space-y-2">
-            <div className="flex items-center gap-1.5">
-              <div className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50" />
-              <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
-                Original
-              </span>
-            </div>
-            <div className="rounded-xl border border-border overflow-hidden bg-muted/30">
-              <img
-                src={image.full_image}
-                alt={image.prompt}
-                className="w-full object-contain max-h-[360px]"
-              />
-            </div>
-            <p className="text-[10px] text-muted-foreground/60 truncate">{image.prompt}</p>
-          </div>
-
-          {/* Result */}
-          <div className="space-y-2">
-            <div className="flex items-center gap-1.5">
-              <div className={cn(
-                'h-1.5 w-1.5 rounded-full',
-                hasResult ? 'bg-violet-400' : 'bg-muted-foreground/30',
-              )} />
-              <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
-                Result
-              </span>
-              {resultDimensions && (
-                <span className="text-[9px] text-muted-foreground/50">
-                  {resultDimensions.width}&times;{resultDimensions.height}
-                </span>
-              )}
-            </div>
-            <div className={cn(
-              'rounded-xl border overflow-hidden min-h-[200px] flex items-center justify-center',
-                hasResult
-                  ? 'border-violet-500/20 bg-violet-500/5'
-                  : 'border-dashed border-border bg-muted/20',
-            )}>
-              {isProcessing ? (
-                <div className="flex flex-col items-center gap-3 py-12">
-                  <div className="relative">
-                    <Loader2 className={cn(
-                      'h-8 w-8 animate-spin text-violet-400',
-                    )} />
-                    <Sparkles className={cn(
-                      'absolute -top-1 -right-1 h-3.5 w-3.5 animate-pulse text-violet-300',
-                    )} />
-                  </div>
-                  <div className="text-center">
-                    <p className="text-xs font-medium text-muted-foreground">
-                      Applying edit...
-                    </p>
-                    <p className="text-[10px] text-muted-foreground/50 mt-0.5">
-                      Reve AI is processing your image
-                    </p>
-                  </div>
-                </div>
-              ) : hasResult ? (
-                <img
-                  src={resultPreview!}
-                  alt="Reve result"
-                  className="w-full object-contain max-h-[360px]"
-                />
-              ) : (
-                <div className="flex flex-col items-center gap-2 py-12 text-center px-4">
-                  <ArrowRight className="h-5 w-5 text-muted-foreground/30" />
-                  <p className="text-xs text-muted-foreground/50">
-                    Enter an edit instruction and click Apply
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Instruction input */}
-        <div className="space-y-2">
-          <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
-            Edit instruction
-          </label>
-          <div className="relative">
-            <textarea
-              value={instruction}
-              onChange={(e) => setInstruction(e.target.value)}
-              placeholder='e.g. "Make the sky more dramatic", "Add a warm sunset glow", "Remove the background"'
-              className="w-full rounded-xl border border-violet-500/20 bg-background px-4 py-3 text-sm resize-none placeholder:text-muted-foreground/40 focus:outline-none focus:ring-2 focus:ring-violet-500/30"
-              rows={2}
-              disabled={isProcessing}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault()
-                  handleGenerate()
-                }
-              }}
-            />
-          </div>
-        </div>
-
-        {/* Actions */}
-        <div className="flex items-center justify-between pt-1">
-          <button
-            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-            onClick={handleClose}
-            disabled={isProcessing}
-          >
-            <X className="h-3 w-3" />
-            Cancel
-          </button>
-
-          <div className="flex items-center gap-2">
-            {hasResult && (
-              <>
-                <button
-                  className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-                  onClick={handleRetry}
-                  disabled={isProcessing}
-                >
-                  <RotateCcw className="h-3 w-3" />
-                  Try again
-                </button>
-                <button
-                  className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-                  onClick={handleDownloadResult}
-                >
-                  <Download className="h-3 w-3" />
-                  Download
-                </button>
-                <button
-                  className={cn(
-                    'flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-xs font-semibold transition-colors',
-                    'bg-violet-500 text-white hover:bg-violet-600',
-                    isSaving && 'opacity-50 pointer-events-none',
-                  )}
-                  onClick={handleSave}
-                  disabled={isSaving}
-                >
-                  {isSaving ? (
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                  ) : (
-                    <Save className="h-3 w-3" />
-                  )}
-                  {isSaving ? 'Saving...' : 'Save to Library'}
-                </button>
-              </>
-            )}
-
-            {!hasResult && (
-              <button
-                className={cn(
-                  'flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-xs font-semibold transition-colors',
-                  'bg-violet-500 text-white hover:bg-violet-600',
-                  (!instruction.trim() || isProcessing) && 'opacity-50 pointer-events-none',
-                )}
-                onClick={handleGenerate}
-                disabled={!instruction.trim() || isProcessing}
-              >
-                {isProcessing ? (
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                ) : (
-                  <Sparkles className="h-3 w-3" />
-                )}
-                {isProcessing ? 'Editing...' : 'Apply Edit'}
-              </button>
-            )}
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
   )
 }
 

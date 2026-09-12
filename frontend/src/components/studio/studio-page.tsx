@@ -314,10 +314,10 @@ export function StudioPage() {
           .catch(() => {})
       }
 
-      if (file.type === 'csv' && file.table_name) {
+      if (file.type === 'csv' && file.uuid) {
         setIsLoadingCsv(true)
         try {
-          const data = await api.getCsvRows(file.table_name, 0, 100)
+          const data = await api.getCsvRows(file.uuid, 0, 100)
           setCsvData(data)
         } catch {
           addToast('Failed to load CSV data', 'error')
@@ -554,10 +554,10 @@ export function StudioPage() {
   // CSV pagination
   const handleCsvPage = useCallback(
     async (offset: number) => {
-      if (!selectedFile?.table_name) return
+      if (!selectedFile?.uuid) return
       setIsLoadingCsv(true)
       try {
-        const data = await api.getCsvRows(selectedFile.table_name, offset, 100)
+        const data = await api.getCsvRows(selectedFile.uuid, offset, 100)
         setCsvData(data)
       } catch {
         addToast('Failed to load page', 'error')
@@ -1191,16 +1191,16 @@ export function StudioPage() {
                     {/* CSV table viewer */}
                     {selectedFile.type === 'csv' && (
                       <CsvWorkspace
-                        key={selectedFile.table_name || selectedFile.uuid}
+                        key={selectedFile.uuid}
                         csvData={csvData}
                         isLoading={isLoadingCsv}
-                        tableName={selectedFile.table_name ?? ''}
+                        csvUuid={selectedFile.uuid}
                         onPageChange={handleCsvPage}
                         onDataChanged={async () => {
-                          if (!selectedFile.table_name) return
+                          if (!selectedFile.uuid) return
                           setIsLoadingCsv(true)
                           try {
-                            const data = await api.getCsvRows(selectedFile.table_name, csvData?.offset ?? 0, 100)
+                            const data = await api.getCsvRows(selectedFile.uuid, csvData?.offset ?? 0, 100)
                             setCsvData(data)
                             const filesData = await api.getStudioFiles()
                             setFiles(filesData)
@@ -1853,13 +1853,13 @@ function TranscriptionView({ transcription }: { transcription: Transcription | n
 function CsvWorkspace({
   csvData,
   isLoading,
-  tableName,
+  csvUuid,
   onPageChange,
   onDataChanged,
 }: {
   csvData: CsvRowsResponse | null
   isLoading: boolean
-  tableName: string
+  csvUuid: string
   onPageChange: (offset: number) => void
   onDataChanged: () => Promise<void>
 }) {
@@ -1892,10 +1892,10 @@ function CsvWorkspace({
   const [isLoadingVersions, setIsLoadingVersions] = useState(false)
 
   const loadVersions = useCallback(async () => {
-    if (!tableName) return
+    if (!csvUuid) return
     setIsLoadingVersions(true)
     try {
-      const data = await api.getCsvVersions(tableName)
+      const data = await api.getCsvVersions(csvUuid)
       setVersions(data.versions)
       setCurrentVersion(data.current_version)
       setCanUndo(data.can_undo)
@@ -1904,7 +1904,7 @@ function CsvWorkspace({
     } finally {
       setIsLoadingVersions(false)
     }
-  }, [tableName])
+  }, [csvUuid])
 
   useMountEffect(() => {
     loadVersions()
@@ -1921,7 +1921,7 @@ function CsvWorkspace({
   }, [])
 
   const handleSaveEdit = useCallback(async () => {
-    if (!editingCell || !csvData || !tableName) return
+    if (!editingCell || !csvData || !csvUuid) return
     const row = csvData.rows[editingCell.rowIdx]
     if (!row) return
 
@@ -1933,7 +1933,7 @@ function CsvWorkspace({
 
     setIsSaving(true)
     try {
-      await api.updateCsvRow(tableName, row, { [editingCell.col]: editValue })
+      await api.updateCsvRow(csvUuid, row, { [editingCell.col]: editValue })
       addToast('Cell updated', 'success')
       handleCancelEdit()
       await onDataChanged()
@@ -1943,13 +1943,13 @@ function CsvWorkspace({
     } finally {
       setIsSaving(false)
     }
-  }, [editingCell, csvData, tableName, editValue, handleCancelEdit, addToast, onDataChanged])
+  }, [editingCell, csvData, csvUuid, editValue, handleCancelEdit, addToast, onDataChanged, loadVersions])
 
   const handleAddRow = useCallback(async () => {
-    if (!csvData || !tableName) return
+    if (!csvData || !csvUuid) return
     setIsSaving(true)
     try {
-      await api.addCsvRows(tableName, [newRowValues])
+      await api.addCsvRows(csvUuid, [newRowValues])
       addToast('Row added', 'success')
       setIsAddingRow(false)
       setNewRowValues({})
@@ -1960,16 +1960,16 @@ function CsvWorkspace({
     } finally {
       setIsSaving(false)
     }
-  }, [csvData, tableName, newRowValues, addToast, onDataChanged])
+  }, [csvData, csvUuid, newRowValues, addToast, onDataChanged, loadVersions])
 
   const handleDeleteRow = useCallback(async (rowIdx: number) => {
-    if (!csvData || !tableName) return
+    if (!csvData || !csvUuid) return
     const row = csvData.rows[rowIdx]
     if (!row) return
 
     setDeletingRowIdx(rowIdx)
     try {
-      await api.deleteCsvRows(tableName, row)
+      await api.deleteCsvRows(csvUuid, row)
       addToast('Row deleted', 'success')
       await onDataChanged()
       await loadVersions()
@@ -1978,13 +1978,13 @@ function CsvWorkspace({
     } finally {
       setDeletingRowIdx(null)
     }
-  }, [csvData, tableName, addToast, onDataChanged])
+  }, [csvData, csvUuid, addToast, onDataChanged, loadVersions])
 
   const handleRevert = useCallback(async () => {
-    if (!tableName || isReverting || !canUndo) return
+    if (!csvUuid || isReverting || !canUndo) return
     setIsReverting(true)
     try {
-      const result = await api.revertCsvTable(tableName)
+      const result = await api.revertCsvTable(csvUuid)
       addToast(`Reverted to v${result.current_version}`, 'success')
       setCanUndo(result.can_undo)
       setCurrentVersion(result.current_version)
@@ -1995,7 +1995,7 @@ function CsvWorkspace({
     } finally {
       setIsReverting(false)
     }
-  }, [tableName, isReverting, canUndo, addToast, onDataChanged, loadVersions])
+  }, [csvUuid, isReverting, canUndo, addToast, onDataChanged, loadVersions])
 
   if (isLoading && !csvData) {
     return (

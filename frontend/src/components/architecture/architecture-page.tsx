@@ -40,7 +40,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-// ── Schema definition (mirrors setup_pixeltable.py) ──────────────────────────
+// ── Schema definition (mirrors pixelbot/schema.py) ──────────────────────────
 
 interface SchemaNode {
   id: string
@@ -63,14 +63,14 @@ interface SchemaEdge {
 
 const SCHEMA_NODES: SchemaNode[] = [
   // ── Input Tables ─────────────────────────────────
-  { id: 'documents', label: 'Documents', type: 'table', icon: FileText, description: 'agents.collection — PDF, HTML, MD, Office, TXT uploads', color: '#7DA8EF', details: ['document (pxt.Document)', 'uuid', 'timestamp', 'user_id'], group: 'input' },
-  { id: 'images', label: 'Images', type: 'table', icon: ImageIcon, description: 'agents.images — JPG, PNG, WebP, GIF, HEIC', color: '#F1AE03', details: ['image (pxt.Image)', 'thumbnail (computed)', 'uuid'], group: 'input' },
-  { id: 'videos', label: 'Videos', type: 'table', icon: Film, description: 'agents.videos — MP4, MOV, AVI + extracted audio', color: '#DC2404', details: ['video (pxt.Video)', 'audio (computed, extract_audio → MP3)'], group: 'input' },
-  { id: 'audios', label: 'Audios', type: 'table', icon: Music, description: 'agents.audios — MP3, WAV, M4A files', color: '#22c55e', details: ['audio (pxt.Audio)', 'uuid', 'timestamp'], group: 'input' },
-  { id: 'csv_registry', label: 'CSV Registry', type: 'table', icon: Table2, description: 'agents.csv_registry — metadata for dynamic CSV tables', color: '#34d399', details: ['table_name', 'display_name', 'col_names (Json)', 'row_count'], group: 'input' },
+  { id: 'documents', label: 'Documents', type: 'table', icon: FileText, description: 'pixelbot_v3.collection — PDF, HTML, MD, Office, TXT uploads', color: '#7DA8EF', details: ['document (pxt.Document)', 'uuid', 'timestamp', 'user_id'], group: 'input' },
+  { id: 'images', label: 'Images', type: 'table', icon: ImageIcon, description: 'pixelbot_v3.images — JPG, PNG, WebP, GIF, HEIC', color: '#F1AE03', details: ['image (pxt.Image)', 'thumbnail (computed)', 'uuid'], group: 'input' },
+  { id: 'videos', label: 'Videos', type: 'table', icon: Film, description: 'pixelbot_v3.videos — MP4, MOV, AVI + extracted audio', color: '#DC2404', details: ['video (pxt.Video)', 'audio (computed, extract_audio → MP3)'], group: 'input' },
+  { id: 'audios', label: 'Audios', type: 'table', icon: Music, description: 'pixelbot_v3.audios — MP3, WAV, M4A files', color: '#22c55e', details: ['audio (pxt.Audio)', 'uuid', 'timestamp'], group: 'input' },
+  { id: 'csv_registry', label: 'CSV Registry', type: 'table', icon: Table2, description: 'pixelbot_v3.csv_registry — metadata for dynamic CSV tables', color: '#34d399', details: ['table_name', 'display_name', 'col_names (Json)', 'row_count'], group: 'input' },
 
   // ── Document Processing ──────────────────────────
-  { id: 'chunks', label: 'chunks', type: 'view', icon: Layers, description: 'agents.chunks — document_splitter(page, sentence) with metadata', color: '#7DA8EF', details: ['text', 'title', 'heading', 'page'], group: 'processing' },
+  { id: 'chunks', label: 'chunks', type: 'view', icon: Layers, description: 'pixelbot_v3.chunks — document_splitter(page, sentence) with metadata', color: '#7DA8EF', details: ['text', 'title', 'heading', 'page'], group: 'processing' },
   { id: 'extract_text', label: 'extract_document_text', type: 'udf', icon: Cpu, description: 'UDF: pdfplumber / docx / pptx / openpyxl → full text (max 15k chars)', color: '#7DA8EF', details: ['document → document_text'], group: 'processing' },
   { id: 'gemini_summary', label: 'Gemini Summary', type: 'model', icon: Sparkles, description: 'gemini-2.5-flash → structured JSON {title, summary, key_topics}', color: '#7DA8EF', details: ['response_mime_type: application/json'], group: 'processing' },
 
@@ -78,13 +78,13 @@ const SCHEMA_NODES: SchemaNode[] = [
   { id: 'img_thumb', label: 'Thumbnail', type: 'udf', icon: Cpu, description: 'resize(96×96) → b64_encode → thumbnail computed column', color: '#F1AE03', group: 'processing' },
 
   // ── Video Processing ─────────────────────────────
-  { id: 'video_frames', label: 'video_frames', type: 'view', icon: Film, description: 'agents.video_frames — frame_iterator(keyframes_only=True)', color: '#DC2404', details: ['frame', 'frame_idx', 'frame_thumbnail (192×192)'], group: 'processing' },
-  { id: 'video_audio_chunks', label: 'video_audio_chunks', type: 'view', icon: Layers, description: 'agents.video_audio_chunks — AudioSplitter(30s chunks)', color: '#DC2404', details: ['audio chunks from video'], group: 'processing' },
+  { id: 'video_frames', label: 'video_frames', type: 'view', icon: Film, description: 'pixelbot_v3.video_frames — frame_iterator(keyframes_only=True)', color: '#DC2404', details: ['frame', 'frame_idx', 'frame_thumbnail (192×192)'], group: 'processing' },
+  { id: 'video_audio_chunks', label: 'video_audio_chunks', type: 'view', icon: Layers, description: 'pixelbot_v3.video_audio_chunks — AudioSplitter(30s chunks)', color: '#DC2404', details: ['audio chunks from video'], group: 'processing' },
   { id: 'whisper_video', label: 'Whisper', type: 'model', icon: Mic, description: 'openai.transcriptions(model=whisper-1) on video audio', color: '#DC2404', details: ['transcription.text'], group: 'processing' },
   { id: 'video_sentences', label: 'video_transcript_sentences', type: 'view', icon: Layers, description: 'StringSplitter(sentence) on Whisper output', color: '#DC2404', group: 'processing' },
 
   // ── Audio Processing ─────────────────────────────
-  { id: 'audio_chunks', label: 'audio_chunks', type: 'view', icon: Layers, description: 'agents.audio_chunks — AudioSplitter(60s chunks)', color: '#22c55e', group: 'processing' },
+  { id: 'audio_chunks', label: 'audio_chunks', type: 'view', icon: Layers, description: 'pixelbot_v3.audio_chunks — AudioSplitter(60s chunks)', color: '#22c55e', group: 'processing' },
   { id: 'whisper_audio', label: 'Whisper', type: 'model', icon: Mic, description: 'openai.transcriptions(model=whisper-1) on audio', color: '#22c55e', details: ['transcription.text'], group: 'processing' },
   { id: 'audio_sentences', label: 'audio_transcript_sentences', type: 'view', icon: Layers, description: 'StringSplitter(sentence) on Whisper output', color: '#22c55e', group: 'processing' },
 
@@ -96,19 +96,19 @@ const SCHEMA_NODES: SchemaNode[] = [
   { id: 'audio_text_embed', label: 'Audio Text Index', type: 'index', icon: Search, description: 'e5-large on audio_transcript_sentences.text', color: '#22c55e', group: 'index' },
 
   // ── Memory & Chat ────────────────────────────────
-  { id: 'memory', label: 'Memory Bank', type: 'table', icon: Brain, description: 'agents.memory_bank — user-saved knowledge snippets', color: '#a78bfa', details: ['content', 'type', 'language', 'context_query'], group: 'memory' },
+  { id: 'memory', label: 'Memory Bank', type: 'table', icon: Brain, description: 'pixelbot_v3.memory_bank — user-saved knowledge snippets', color: '#a78bfa', details: ['content', 'type', 'language', 'context_query'], group: 'memory' },
   { id: 'memory_embed', label: 'Memory Index', type: 'index', icon: Search, description: 'e5-large on memory_bank.content', color: '#a78bfa', group: 'index' },
-  { id: 'chat_history', label: 'Chat History', type: 'table', icon: MessageSquare, description: 'agents.chat_history — full Q&A pairs (role + content)', color: '#a78bfa', details: ['role', 'content', 'timestamp', 'user_id'], group: 'memory' },
+  { id: 'chat_history', label: 'Chat History', type: 'table', icon: MessageSquare, description: 'pixelbot_v3.chat_history — full Q&A pairs (role + content)', color: '#a78bfa', details: ['role', 'content', 'timestamp', 'user_id'], group: 'memory' },
   { id: 'chat_embed', label: 'Chat Index', type: 'index', icon: Search, description: 'e5-large on chat_history.content', color: '#a78bfa', group: 'index' },
 
   // ── Personas ─────────────────────────────────────
-  { id: 'personas', label: 'User Personas', type: 'table', icon: UserCog, description: 'agents.user_personas — configurable system prompts + LLM params', color: '#94a3b8', details: ['persona_name', 'initial_prompt', 'final_prompt', 'llm_params (Json)'], group: 'config' },
+  { id: 'personas', label: 'User Personas', type: 'table', icon: UserCog, description: 'pixelbot_v3.user_personas — configurable system prompts + LLM params', color: '#94a3b8', details: ['persona_name', 'initial_prompt', 'final_prompt', 'llm_params (Json)'], group: 'config' },
 
   // ── External APIs (tools) ────────────────────────
   { id: 'ext_apis', label: 'External APIs', type: 'external', icon: Globe, description: 'NewsAPI, DuckDuckGo News, Yahoo Finance (yfinance)', color: '#38bdf8', details: ['get_latest_news', 'search_news (DDG)', 'fetch_financial_data'], group: 'external' },
 
-  // ── Agent Pipeline (agents.tools) ────────────────
-  { id: 'agent', label: 'Agent Table', type: 'table', icon: Bot, description: 'agents.tools — 11 computed columns, prompt → answer', color: '#fb923c', details: ['prompt', 'initial_system_prompt', 'final_system_prompt', 'max_tokens', 'temperature'], group: 'agent' },
+  // ── Agent Pipeline (pixelbot_v3.tools) ────────────────
+  { id: 'agent', label: 'Agent Table', type: 'table', icon: Bot, description: 'pixelbot_v3.tools — 11 computed columns, prompt → answer', color: '#fb923c', details: ['prompt', 'initial_system_prompt', 'final_system_prompt', 'max_tokens', 'temperature'], group: 'agent' },
   { id: 'claude_tools', label: 'Claude → Tools', type: 'model', icon: Bot, description: 'Step 1-2: claude-sonnet-4 selects tools → invoke_tools() executes', color: '#fb923c', details: ['anthropic.messages(tools=...)', 'invoke_tools(tools, response)'], group: 'agent' },
   { id: 'assemble_context', label: 'assemble_context', type: 'udf', icon: GitBranch, description: 'Step 5: Merge tool_output + doc_context + memory + chat_memory into text', color: '#fb923c', details: ['assemble_multimodal_context()'], group: 'agent' },
   { id: 'assemble_messages', label: 'assemble_messages', type: 'udf', icon: GitBranch, description: 'Step 6: Build multimodal messages with history + images + video frames', color: '#fb923c', details: ['assemble_final_messages()', 'base64 images for Claude vision'], group: 'agent' },
@@ -117,15 +117,15 @@ const SCHEMA_NODES: SchemaNode[] = [
   { id: 'answer', label: 'Answer + Follow-ups', type: 'output', icon: ArrowRight, description: 'Final answer text + 3 follow-up suggestions. Q&A pair written back to Chat History.', color: '#fb923c', group: 'agent' },
 
   // ── Generation ───────────────────────────────────
-  { id: 'img_gen', label: 'Image Gen', type: 'table', icon: Wand2, description: 'agents.image_generation_tasks — prompt table (Studio UI)', color: '#f472b6', details: ['prompt', 'timestamp', 'user_id'], group: 'generation' },
-  { id: 'imagen', label: 'Imagen / DALL-E', type: 'model', icon: Sparkles, description: 'Gemini Imagen 4.0 or OpenAI DALL-E 3. Can be saved to Images collection for CLIP + RAG.', color: '#f472b6', details: ['generated_image (computed)', 'thumbnail 128×128', 'Save to Collection → agents.images'], group: 'generation' },
-  { id: 'vid_gen', label: 'Video Gen', type: 'table', icon: Wand2, description: 'agents.video_generation_tasks — prompt table (Studio UI)', color: '#f472b6', details: ['prompt', 'timestamp', 'user_id'], group: 'generation' },
-  { id: 'veo', label: 'Veo 3.0', type: 'model', icon: Sparkles, description: 'Gemini Veo 3.0 video generation. Can be saved to Videos collection for keyframes + transcription + RAG.', color: '#f472b6', details: ['generated_video (computed)', 'Save to Collection → agents.videos'], group: 'generation' },
-  { id: 'speech_tasks', label: 'Speech Tasks', type: 'table', icon: Mic, description: 'agents.speech_tasks — TTS input text + voice selection', color: '#f472b6', details: ['input_text', 'voice', 'timestamp', 'user_id'], group: 'generation' },
+  { id: 'img_gen', label: 'Image Gen', type: 'table', icon: Wand2, description: 'pixelbot_v3.image_generation_tasks — prompt table (Studio UI)', color: '#f472b6', details: ['prompt', 'timestamp', 'user_id'], group: 'generation' },
+  { id: 'imagen', label: 'Imagen / DALL-E', type: 'model', icon: Sparkles, description: 'Gemini Imagen 4.0 or OpenAI DALL-E 3. Can be saved to Images collection for CLIP + RAG.', color: '#f472b6', details: ['generated_image (computed)', 'thumbnail 128×128', 'Save to Collection → pixelbot_v3.images'], group: 'generation' },
+  { id: 'vid_gen', label: 'Video Gen', type: 'table', icon: Wand2, description: 'pixelbot_v3.video_generation_tasks — prompt table (Studio UI)', color: '#f472b6', details: ['prompt', 'timestamp', 'user_id'], group: 'generation' },
+  { id: 'veo', label: 'Veo 3.0', type: 'model', icon: Sparkles, description: 'Gemini Veo 3.0 video generation. Can be saved to Videos collection for keyframes + transcription + RAG.', color: '#f472b6', details: ['generated_video (computed)', 'Save to Collection → pixelbot_v3.videos'], group: 'generation' },
+  { id: 'speech_tasks', label: 'Speech Tasks', type: 'table', icon: Mic, description: 'pixelbot_v3.speech_tasks — TTS input text + voice selection', color: '#f472b6', details: ['input_text', 'voice', 'timestamp', 'user_id'], group: 'generation' },
   { id: 'tts_model', label: 'OpenAI TTS', type: 'model', icon: Mic, description: 'openai.speech(tts-1) — 6 voices: alloy, echo, fable, onyx, nova, shimmer', color: '#f472b6', details: ['audio (computed)', 'model=tts-1'], group: 'generation' },
 
   // ── Prompt Lab ──────────────────────────────────
-  { id: 'prompt_experiments', label: 'Prompt Experiments', type: 'table', icon: FlaskConical, description: 'agents.prompt_experiments — multi-model prompt comparison results', color: '#e879f9', details: ['experiment_id', 'model_id', 'response', 'response_time_ms', 'word_count'], group: 'experiments' },
+  { id: 'prompt_experiments', label: 'Prompt Experiments', type: 'table', icon: FlaskConical, description: 'pixelbot_v3.prompt_experiments — multi-model prompt comparison results', color: '#e879f9', details: ['experiment_id', 'model_id', 'response', 'response_time_ms', 'word_count'], group: 'experiments' },
 ]
 
 const SCHEMA_EDGES: SchemaEdge[] = [

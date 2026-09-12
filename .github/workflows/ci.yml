@@ -1,0 +1,92 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: uv sync --locked --group dev
+        working-directory: backend
+      - run: uv run python -c "import pixelbot, pixeltable; assert pixelbot.__version__ == '3.0.0'; assert pixeltable.__version__ == '0.7.7'"
+        working-directory: backend
+      - if: matrix.python-version == '3.11'
+        run: |
+          uv run ruff check pixelbot tests
+          uv run ruff format --check pixelbot tests
+          uv run mypy pixelbot
+          uv run pytest -q
+        working-directory: backend
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.12"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+        working-directory: frontend
+      - run: npm test
+        working-directory: frontend
+      - run: npm run lint
+        working-directory: frontend
+      - run: npm run build
+        working-directory: frontend
+
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.11"
+      - run: uv sync --locked --group dev
+        working-directory: backend
+      - run: uv build
+        working-directory: backend
+      - run: |
+          uv venv wheel-test
+          uv pip install --python wheel-test/bin/python dist/pixelbot-3.0.0-py3-none-any.whl --no-deps
+          wheel-test/bin/python -c "import importlib.resources as r, pixelbot; assert (r.files('pixelbot') / 'static' / 'index.html').is_file()"
+        working-directory: backend
+
+  pixeltable-schema:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.11"
+      - run: uv sync --locked --group dev
+        working-directory: backend
+      - run: |
+          export PIXELTABLE_HOME="$RUNNER_TEMP/pixelbot-catalog"
+          uv run pxt schema check pixelbot/app.py
+          set +e
+          uv run pxt schema update pixelbot/app.py pixelbot_v3 --dry-run --json
+          result=$?
+          set -e
+          test "$result" -eq 2
+          uv run pxt schema update pixelbot/app.py pixelbot_v3 -f
+          uv run pxt schema diff pixelbot/app.py pixelbot_v3 --json
+          trap 'uv run pxt service stop pixelbot_v3/app || true' EXIT
+          uv run pxt service update pixelbot/app.py pixelbot_v3 app --port 8000 -f
+          curl --fail --retry 10 --retry-delay 1 http://127.0.0.1:8000/api/health
+          uv run pxt service list --json
+          uv run pxt service logs pixelbot_v3/app --tail 20
+          uv run pxt service stop pixelbot_v3/app
+          trap - EXIT
+        working-directory: backend

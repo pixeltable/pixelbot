@@ -16,8 +16,6 @@ import {
   Braces,
   Plug,
   BookOpen,
-  CloudUpload,
-  Share2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
@@ -142,17 +140,17 @@ const API_GROUPS: ApiGroup[] = [
       {
         method: 'GET', path: '/api/export/json/{table}',
         description: 'Export a table as JSON',
-        curl: 'curl -o export.json http://localhost:8000/api/export/json/agents.chat_history?limit=100',
+        curl: 'curl -o export.json http://localhost:8000/api/export/json/pixelbot_v3.chat_history?limit=100',
       },
       {
         method: 'GET', path: '/api/export/csv/{table}',
         description: 'Export a table as CSV',
-        curl: 'curl -o export.csv http://localhost:8000/api/export/csv/agents.chat_history?limit=100',
+        curl: 'curl -o export.csv http://localhost:8000/api/export/csv/pixelbot_v3.chat_history?limit=100',
       },
       {
         method: 'GET', path: '/api/export/parquet/{table}',
         description: 'Export a table as Parquet',
-        curl: 'curl -o export.parquet http://localhost:8000/api/export/parquet/agents.chat_history?limit=100',
+        curl: 'curl -o export.parquet http://localhost:8000/api/export/parquet/pixelbot_v3.chat_history?limit=100',
       },
     ],
   },
@@ -167,7 +165,7 @@ const API_GROUPS: ApiGroup[] = [
       {
         method: 'GET', path: '/api/db/table/{path}/rows',
         description: 'Fetch paginated rows from any table',
-        curl: 'curl "http://localhost:8000/api/db/table/agents.chat_history/rows?limit=10&offset=0"',
+        curl: 'curl "http://localhost:8000/api/db/table/pixelbot_v3.chat_history/rows?limit=10&offset=0"',
       },
       {
         method: 'GET', path: '/api/db/timeline',
@@ -232,7 +230,7 @@ for tbl in pxt.list_tables("agents", recursive=True):
     language: 'python',
     code: `import pixeltable as pxt
 
-t = pxt.get_table("agents.chat_history")
+t = pxt.get_table("pixelbot_v3.chat_history")
 
 # Get recent messages
 recent = (
@@ -250,7 +248,7 @@ for row in recent:
     language: 'python',
     code: `import pixeltable as pxt
 
-chunks = pxt.get_table("agents.chunks")
+chunks = pxt.get_table("pixelbot_v3.chunks")
 
 # Semantic search — Gemini embed_content index (0.6.5+)
 sim = chunks.text.similarity(string="machine learning best practices")
@@ -270,7 +268,7 @@ for r in results:
     language: 'python',
     code: `import pixeltable as pxt
 
-t = pxt.get_table("agents.prompt_experiments")
+t = pxt.get_table("pixelbot_v3.prompt_experiments")
 
 # Collect as pandas DataFrame
 df = (
@@ -291,7 +289,7 @@ print(df.describe())`,
     language: 'python',
     code: `import pixeltable as pxt
 
-images = pxt.get_table("agents.images")
+images = pxt.get_table("pixelbot_v3.images")
 
 # CLIP-based text-to-image search (use string= keyword in 0.6+)
 sim = images.image.similarity(string="a cat sitting on a desk")
@@ -316,7 +314,7 @@ from datetime import datetime
 # Insert an image — Pixeltable auto-generates:
 # - CLIP embedding (for similarity search)
 # - Thumbnail (96x96 PIL resize + base64)
-images = pxt.get_table("agents.images")
+images = pxt.get_table("pixelbot_v3.images")
 images.insert([{
     "image": "/path/to/photo.jpg",  # or URL
     "uuid": "my-custom-id",
@@ -331,16 +329,16 @@ images.insert([{
     language: 'python',
     code: `import pixeltable as pxt
 
-t = pxt.get_table("agents.chat_history")
+t = pxt.get_table("pixelbot_v3.chat_history")
 
 # See version history
 for v in t.get_versions():
     print(f"v{v.version}: {v.change_type} | "
           f"+{v.inserts} -{v.deletes} ~{v.updates}")
 
-# Undo the last operation
-t.revert()
-print(f"Reverted to version {t.get_versions()[0].version}")`,
+# Operational recovery is explicit in the CLI:
+# pxt errors pixelbot_v3/chat_history
+# pxt recompute pixelbot_v3/chat_history COLUMN --errors-only -f`,
   },
   {
     label: 'Data Sampling',
@@ -348,7 +346,7 @@ print(f"Reverted to version {t.get_versions()[0].version}")`,
     language: 'python',
     code: `import pixeltable as pxt
 
-t = pxt.get_table("agents.chat_history")
+t = pxt.get_table("pixelbot_v3.chat_history")
 
 # Random 10% sample (reproducible with seed)
 sample = t.sample(fraction=0.1, seed=42).collect()
@@ -375,7 +373,7 @@ recent_sample = (
     code: `import pixeltable as pxt
 from pixeltable.functions import json as pxt_json
 
-t = pxt.get_table("agents.tools")
+t = pxt.get_table("pixelbot_v3.tools")
 
 # Serialize a complex dict/list column to JSON strings
 rows = (
@@ -397,7 +395,7 @@ for r in rows:
     code: `import pixeltable as pxt
 from pixeltable.functions.video import crop
 
-videos = pxt.get_table("agents.videos")
+videos = pxt.get_table("pixelbot_v3.videos")
 
 # Crop a 640x480 region starting at top=50, left=100
 result = (
@@ -416,7 +414,7 @@ result = (
     code: `import pixeltable as pxt
 from datetime import datetime
 
-tools = pxt.get_table("agents.tools")
+tools = pxt.get_table("pixelbot_v3.tools")
 status = tools.insert([{
     "prompt": "What documents do I have?",
     "user_id": "local_user",
@@ -447,12 +445,12 @@ rows = requests.get("http://localhost:8000/api/memory/v2").json()["rows"]`,
     code: `import pixeltable as pxt
 from pixeltable.io import export_csv, export_json
 
-t = pxt.get_table("agents.chat_history")
+t = pxt.get_table("pixelbot_v3.chat_history")
 export_csv(t, "/tmp/chat_history.csv")
 export_json(t, "/tmp/chat_history.json")
 
 # Or via API:
-# GET /api/export/native/agents.chat_history?format=csv`,
+# GET /api/export/native/pixelbot_v3.chat_history?format=csv`,
   },
   {
     label: 'Pagination with offset',
@@ -460,7 +458,7 @@ export_json(t, "/tmp/chat_history.json")
     language: 'python',
     code: `import pixeltable as pxt
 
-t = pxt.get_table("agents.chat_history")
+t = pxt.get_table("pixelbot_v3.chat_history")
 
 # Page through results 50 at a time
 page_size = 50
@@ -628,11 +626,11 @@ export function DeveloperPage() {
                 </div>
                 <div className="p-5 space-y-3">
                   <CodeBlock
-                    code={`pip install "pixeltable>=0.6.5"
+                    code={`pip install "pixeltable[serve]==0.7.7"
 
 # Then in Python:
 import pixeltable as pxt
-t = pxt.get_table("agents.chat_history")
+t = pxt.get_table("pixelbot_v3.chat_history")
 print(t.count(), "rows")
 print(t.select(t.role, t.content).limit(5).collect())`}
                     language="bash"
@@ -672,86 +670,12 @@ curl -X POST http://localhost:8000/api/query \\
   -d '{"query": "Summarize my documents"}'
 
 # Export data
-curl -o history.json http://localhost:8000/api/export/json/agents.chat_history
-curl -o data.csv http://localhost:8000/api/export/csv/agents.prompt_experiments`}
+curl -o history.json http://localhost:8000/api/export/json/pixelbot_v3.chat_history
+curl -o data.csv http://localhost:8000/api/export/csv/pixelbot_v3.prompt_experiments`}
                     language="bash"
                     copiedText={copiedText}
                     onCopy={copyToClipboard}
                   />
-                </div>
-              </div>
-
-              {/* Data Sharing (Publish / Replicate) */}
-              <div className="rounded-xl border border-border/60 bg-card/40 overflow-hidden">
-                <div className="px-5 py-4 border-b border-border/40 flex items-center gap-3">
-                  <div className="h-8 w-8 rounded-lg bg-emerald-500/15 flex items-center justify-center">
-                    <Share2 className="h-4 w-4 text-emerald-400" />
-                  </div>
-                  <div>
-                    <h3 className="text-[13px] font-semibold text-foreground">Data Sharing &mdash; Publish &amp; Replicate</h3>
-                    <p className="text-[11px] text-muted-foreground/60">Share datasets via Pixeltable Cloud or replicate public datasets locally</p>
-                  </div>
-                  <a
-                    href="https://docs.pixeltable.com/platform/data-sharing"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="ml-auto text-[10px] text-muted-foreground hover:text-foreground flex items-center gap-1"
-                  >
-                    Docs <ExternalLink className="h-2.5 w-2.5" />
-                  </a>
-                </div>
-                <div className="p-5 space-y-4">
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <CloudUpload className="h-3.5 w-3.5 text-emerald-400" />
-                      <span className="text-[12px] font-medium text-foreground">Publish a table to the cloud</span>
-                    </div>
-                    <CodeBlock
-                      code={`import pixeltable as pxt
-
-# Publish any local table to Pixeltable Cloud
-pxt.publish(
-    source='agents.chat_history',
-    destination_uri='pxt://your-org/chat-history',
-    access='public'   # or 'private' (default)
-)
-
-# Push local updates to the published table
-t = pxt.get_table('agents.chat_history')
-t.push()`}
-                      language="python"
-                      copiedText={copiedText}
-                      onCopy={copyToClipboard}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <Download className="h-3.5 w-3.5 text-emerald-400" />
-                      <span className="text-[12px] font-medium text-foreground">Replicate a dataset locally</span>
-                    </div>
-                    <CodeBlock
-                      code={`import pixeltable as pxt
-
-# Replicate any public dataset — no API key required
-coco = pxt.replicate(
-    remote_uri='pxt://pixeltable:fiftyone/coco_mini_2017',
-    local_path='my-data.coco'
-)
-
-# Query it like any local table
-coco.select(coco.image, coco.caption).limit(5).collect()
-
-# Pull upstream updates
-coco.pull()`}
-                      language="python"
-                      copiedText={copiedText}
-                      onCopy={copyToClipboard}
-                    />
-                  </div>
-                  <p className="text-[11px] text-muted-foreground/50">
-                    Community Edition includes 1 TB cloud storage. Browse public datasets at{' '}
-                    <a href="https://pixeltable.com/data-products" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">pixeltable.com/data-products</a>.
-                  </p>
                 </div>
               </div>
 
@@ -761,8 +685,6 @@ coco.pull()`}
                   { label: 'Pixeltable Docs', url: 'https://docs.pixeltable.com/', icon: BookOpen },
                   { label: 'GitHub', url: 'https://github.com/pixeltable/pixeltable', icon: Code2 },
                   { label: 'MCP Server', url: 'https://github.com/pixeltable/mcp-server-pixeltable-developer', icon: Plug },
-                  { label: 'Data Sharing', url: 'https://docs.pixeltable.com/platform/data-sharing', icon: Share2 },
-                  { label: 'Public Datasets', url: 'https://pixeltable.com/data-products', icon: CloudUpload },
                   { label: 'LLMs.txt', url: 'https://docs.pixeltable.com/llms.txt', icon: FileJson },
                 ].map(({ label, url, icon: Icon }) => (
                   <a
@@ -841,7 +763,7 @@ function ExportTab({ copyToClipboard }: { copyToClipboard: (text: string, label?
       a.click()
       URL.revokeObjectURL(a.href)
       addToast(`Exported ${selectedTable} as ${selectedFormat.toUpperCase()}`, 'success')
-    } catch (err) {
+    } catch {
       addToast('Export failed', 'error')
     } finally {
       setIsLoading(false)

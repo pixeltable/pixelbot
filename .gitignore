@@ -25,6 +25,7 @@ data/
 
 # Build output (frontend → backend/static/)
 backend/static/
+backend/.pixeltable-v3/
 
 # uv binaries (installed per-environment, not versioned)
 backend/uv-bin/

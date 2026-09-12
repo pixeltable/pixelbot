@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import { useMountEffect } from '@/hooks/use-mount-effect'
 import {
   Sparkles,
@@ -34,12 +34,12 @@ const PIPELINE_STAGES: PipelineStage[] = [
 
 export function ThinkingIndicator() {
   const [elapsedMs, setElapsedMs] = useState(0)
-  const startTime = useRef(Date.now())
+  const [startTime] = useState(() => Date.now())
 
   // Elapsed time ticker (every 100ms for smooth display)
   useMountEffect(() => {
     const interval = setInterval(() => {
-      setElapsedMs(Date.now() - startTime.current)
+      setElapsedMs(Date.now() - startTime)
     }, 100)
     return () => clearInterval(interval)
   })

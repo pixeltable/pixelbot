@@ -155,7 +155,7 @@ export function ExperimentsPage() {
       setMaxTokens(data.max_tokens)
       setSelectedModels(data.results.map((r) => r.model_id))
       setRightTab('results')
-    } catch (err) {
+    } catch {
       addToast('Failed to load experiment', 'error')
     }
   }, [addToast])
