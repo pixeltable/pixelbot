@@ -137,9 +137,9 @@ function TableNode({ data }: { data: PipelineNode & { isSelected: boolean; onSel
         <div className="flex items-center gap-2 mt-1 flex-wrap">
           <span className="text-[9px] text-muted-foreground/50 tabular-nums">{data.row_count.toLocaleString()} rows</span>
           <span className="text-[9px] text-muted-foreground/40">v{data.version}</span>
-          {data.indices.length > 0 && (
+          {data.indexes.length > 0 && (
             <span className="text-[9px] text-muted-foreground/50 flex items-center gap-0.5">
-              <SearchIcon className="h-2 w-2" />{data.indices.length}
+              <SearchIcon className="h-2 w-2" />{data.indexes.length}
             </span>
           )}
           {hasErrors && (
@@ -302,11 +302,11 @@ function DetailPanel({
       )}
 
       {/* Indices */}
-      {node.indices.length > 0 && (
+      {node.indexes.length > 0 && (
         <div className="px-5 py-3 border-b border-border">
           <SectionLabel>Embedding Indices</SectionLabel>
           <div className="space-y-2">
-            {node.indices.map((idx) => (
+            {node.indexes.map((idx) => (
               <div key={idx.name} className="flex items-start gap-2">
                 <SearchIcon className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
                 <div className="min-w-0">
@@ -636,7 +636,7 @@ export function PipelineInspector() {
     const totalRows = pipeline.nodes.reduce((s, n) => s + n.row_count, 0)
     const totalComputed = pipeline.nodes.reduce((s, n) => s + n.computed_count, 0)
     const totalErrors = pipeline.nodes.reduce((s, n) => s + n.total_errors, 0)
-    const totalIndices = pipeline.nodes.reduce((s, n) => s + n.indices.length, 0)
+    const totalIndices = pipeline.nodes.reduce((s, n) => s + n.indexes.length, 0)
     return { tables, views, totalRows, totalComputed, totalErrors, totalIndices }
   }, [pipeline])
 

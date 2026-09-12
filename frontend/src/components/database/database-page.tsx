@@ -27,10 +27,7 @@ import {
   Merge,
   GitBranch,
   Shuffle,
-  Plus,
-  FolderPlus,
-  BookOpen,
-  Wrench,
+  Terminal,
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -42,17 +39,8 @@ import type {
   TableRowsResponse,
   JoinResult,
   SampleResponse,
-  ColumnTypeInfo,
-  IteratorInfo,
 } from '@/types'
 import { PipelineInspector } from '@/components/database/pipeline-inspector'
-import {
-  CreateTableDialog,
-  CreateViewDialog,
-  DirectoryDialog,
-  FunctionBrowserDialog,
-  TableActionsToolbar,
-} from '@/components/database/table-management'
 
 // ── Grouping logic ──────────────────────────────────────────────────────────
 
@@ -181,33 +169,6 @@ export function DatabasePage() {
   const [sampleData, setSampleData] = useState<SampleResponse | null>(null)
   const [isSampling, setIsSampling] = useState(false)
 
-  // Management dialogs
-  const [showCreateTable, setShowCreateTable] = useState(false)
-  const [showCreateView, setShowCreateView] = useState(false)
-  const [showDirDialog, setShowDirDialog] = useState(false)
-  const [showFunctions, setShowFunctions] = useState(false)
-  const [showManageToolbar, setShowManageToolbar] = useState(false)
-  const [availableTypes, setAvailableTypes] = useState<ColumnTypeInfo[]>([])
-  const [iterators, setIterators] = useState<IteratorInfo[]>([])
-
-  const refreshTables = useCallback(async () => {
-    try {
-      const result = await api.listTables()
-      setTables(result.tables)
-      if (selectedTable) {
-        const updated = result.tables.find((t) => t.path === selectedTable.path)
-        if (updated) {
-          setSelectedTable(updated)
-        } else {
-          setSelectedTable(null)
-          setRowData(null)
-        }
-      }
-    } catch (err) {
-      addToast(err instanceof Error ? err.message : 'Failed to refresh', 'error')
-    }
-  }, [selectedTable, addToast])
-
   const filteredTables = useMemo(() => {
     if (!tableSearch.trim()) return tables
     const q = tableSearch.toLowerCase()
@@ -271,14 +232,8 @@ export function DatabasePage() {
   useMountEffect(() => {
     async function load() {
       try {
-        const [tablesResult, typesResult, funcsResult] = await Promise.all([
-          api.listTables(),
-          api.getAvailableTypes().catch(() => ({ types: [] })),
-          api.getAvailableFunctions().catch(() => ({ functions: [], iterators: [], embedding_functions: [] })),
-        ])
+        const tablesResult = await api.listTables()
         setTables(tablesResult.tables)
-        setAvailableTypes(typesResult.types)
-        setIterators(funcsResult.iterators)
       } catch (err) {
         addToast(err instanceof Error ? err.message : 'Failed to load tables', 'error')
       } finally {
@@ -363,7 +318,7 @@ export function DatabasePage() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* View switcher + management toolbar */}
+      {/* View switcher */}
       <div className="flex items-center gap-1 px-4 pt-3 pb-2 shrink-0">
         <h2 className="text-sm font-semibold text-foreground flex items-center gap-2 mr-4">
           <Database className="h-4 w-4 text-k-yellow" />
@@ -384,80 +339,16 @@ export function DatabasePage() {
             {view === 'tables' ? 'Tables' : 'Pipeline'}
           </button>
         ))}
-
-        <div className="ml-auto flex items-center gap-1">
-          <button
-            onClick={() => setShowManageToolbar(!showManageToolbar)}
-            className={cn(
-              'flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors',
-              showManageToolbar
-                ? 'bg-k-yellow/10 text-k-yellow'
-                : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground',
-            )}
-          >
-            <Wrench className="h-3 w-3" />
-            Manage
-          </button>
-          <button
-            onClick={() => setShowFunctions(true)}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
-          >
-            <BookOpen className="h-3 w-3" />
-            Functions
-          </button>
-        </div>
       </div>
 
-      {/* Management quick-actions bar */}
-      {showManageToolbar && dbView === 'tables' && (
-        <div className="flex items-center gap-1.5 px-4 pb-2 shrink-0">
-          <button
-            onClick={() => setShowCreateTable(true)}
-            className="flex items-center gap-1 rounded-md px-2.5 py-1 text-[10px] font-medium bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-colors"
-          >
-            <Plus className="h-3 w-3" />
-            New Table
-          </button>
-          <button
-            onClick={() => setShowCreateView(true)}
-            className="flex items-center gap-1 rounded-md px-2.5 py-1 text-[10px] font-medium bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 transition-colors"
-          >
-            <Eye className="h-3 w-3" />
-            New View
-          </button>
-          <button
-            onClick={() => setShowDirDialog(true)}
-            className="flex items-center gap-1 rounded-md px-2.5 py-1 text-[10px] font-medium bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 transition-colors"
-          >
-            <FolderPlus className="h-3 w-3" />
-            Directory
-          </button>
+      {dbView === 'tables' && (
+        <div className="mx-4 mb-2 flex items-start gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2 text-[10px] text-muted-foreground">
+          <Terminal className="mt-0.5 h-3 w-3 shrink-0 text-k-yellow" />
+          <div>
+            Schema changes live in <code>pixelbot/app.py</code>. Use <code>pxt schema diff pixelbot/app.py pixelbot_v3</code>, <code>pxt errors pixelbot_v3/TABLE</code>, and <code>pxt recompute pixelbot_v3/TABLE COLUMN --errors-only -f</code>.
+          </div>
         </div>
       )}
-
-      {/* Management dialogs */}
-      <CreateTableDialog
-        open={showCreateTable}
-        onOpenChange={setShowCreateTable}
-        onSuccess={refreshTables}
-        availableTypes={availableTypes}
-      />
-      <CreateViewDialog
-        open={showCreateView}
-        onOpenChange={setShowCreateView}
-        onSuccess={refreshTables}
-        tables={tables}
-        iterators={iterators}
-      />
-      <DirectoryDialog
-        open={showDirDialog}
-        onOpenChange={setShowDirDialog}
-        onSuccess={refreshTables}
-      />
-      <FunctionBrowserDialog
-        open={showFunctions}
-        onOpenChange={setShowFunctions}
-      />
 
       {dbView === 'pipeline' ? (
         <PipelineInspector />
@@ -716,23 +607,6 @@ export function DatabasePage() {
                 </div>
               )}
             </div>
-
-            {/* Table management toolbar */}
-            {showManageToolbar && (
-              <TableActionsToolbar
-                table={selectedTable}
-                tables={tables}
-                onRefresh={async () => {
-                  await refreshTables()
-                  if (selectedTable) {
-                    try {
-                      const rows = await api.getTableRows(selectedTable.path, 50, 0)
-                      setRowData(rows)
-                    } catch { /* table may have been dropped */ }
-                  }
-                }}
-              />
-            )}
 
             {/* Sample banner */}
             {sampleData && (

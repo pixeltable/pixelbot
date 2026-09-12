@@ -20,7 +20,7 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: '../backend/static',
+    outDir: '../backend/pixelbot/static',
     emptyOutDir: true,
   },
 })

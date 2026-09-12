@@ -1,189 +1,82 @@
-<div align="center">
+# Pixelbot
 
-**Experimental playground for trying every new [Pixeltable](https://github.com/pixeltable/pixeltable) feature in one all-in-one app.**
+Pixelbot 3.0 is a local multimodal AI application built on Pixeltable 0.7.7. One application module, `backend/pixelbot/app.py`, exposes the declarative `TableModel` schema, Pixeltable query routes, the custom FastAPI API, and the bundled React interface.
 
-[![License](https://img.shields.io/badge/License-Apache%202.0-0530AD.svg)](https://opensource.org/licenses/Apache-2.0) [![Discord](https://img.shields.io/badge/Discord-%235865F2.svg)](https://discord.gg/QPyqFYx2UN)
+Pixelbot keeps documents, images, video, audio, memory, chat history, generation jobs, prompt experiments, notifications, and tool calls in Pixeltable. Stored computed columns run extraction, chunking, transcription, captioning, generation, retrieval, and tool invocation when rows are inserted. Provider calls require the matching keys; local schema and API checks do not call paid providers.
 
-[Pixeltable Docs](https://docs.pixeltable.com/) · [Cookbooks](https://docs.pixeltable.com/howto/cookbooks) · [Use Cases](https://docs.pixeltable.com/use-cases/ml-data-wrangling)
+## Requirements
 
-</div>
+- Python 3.11–3.14
+- Node.js 22.12 or newer
+- `uv`
+- Local media tools required by Pixeltable for the media pipelines
 
----
+Pixelbot 3.0 uses a fresh local catalog. Set `PIXELTABLE_HOME` to `backend/.pixeltable-v3`. The application target is `pixelbot_v3`; CSV workspaces use the separate `pixelbot_scratch` namespace. The former `agents` catalog is never opened or migrated by this workflow.
 
-> ⚠️ **Heads up — this is a personal playground, not a product.**
-> Pixelbot is where I experiment with new Pixeltable features, chain them together, and see what breaks when you put everything in one app. Expect rough edges, half-finished flows, and rapid rewrites. Use it to explore what Pixeltable can do — not as a reference architecture.
-
-Pixelbot wires up tables, views, computed columns, embedding indexes, UDFs, tool calling, similarity search, version control, and model orchestration into a single full-stack app — so I can stress-test [Pixeltable](https://github.com/pixeltable/pixeltable) end-to-end and ship the patterns that work as [cookbooks](https://docs.pixeltable.com/howto/cookbooks).
-
-![Overview](docs/images/overview.png)
-
-## Features
-
-<details>
-<summary><b>Chat</b> — Multimodal RAG agent</summary>
-<br>
-
-Semantic search across documents, images, video frames, and audio via `.similarity()` on embedding indexes. Tool calling with external APIs (NewsAPI, yfinance, DuckDuckGo). Inline image generation (Imagen 4.0 / DALL-E 3), video generation (Veo 3.0), and text-to-speech (OpenAI TTS with 6 voice options). Follow-up suggestions via Gemini structured output with `response_schema`. Personas with adjustable system prompts and LLM parameters. Persistent chat history and memory bank.
-</details>
-
-<details>
-<summary><b>Prompt Lab</b> — Multi-model experimentation</summary>
-<br>
-
-Run the same prompt against Claude, Gemini, Mistral, and GPT-4o in parallel via `ThreadPoolExecutor`. Editable model IDs — override presets or add custom models. Response time, word count, and character count metrics with "Fastest" highlight and normalized comparison bars. Every experiment stored in `agents.prompt_experiments` for replay.
-</details>
-
-<details>
-<summary><b>Studio</b> — File explorer + data wrangler</summary>
-<br>
-
-- **Documents**: Auto-summaries (Gemini structured JSON), sentence-level chunks
-- **Images**: PIL transforms with live preview, save or download
-- **Videos**: Keyframe extraction, clip creation, text overlay, scene detection, transcriptions
-- **Audio**: Transcriptions with sentence-level breakdown
-- **CSV**: Inline CRUD, infinite undo via `table.revert()`, version history via `table.get_versions()`
-- **Detection & Segmentation**: On-demand DETR (ResNet-50/101) with SVG bounding boxes, DETR Panoptic segmentation with color-coded regions, ViT classification with confidence bars
-- **Search**: Cross-modal semantic search via `.similarity()` on embedding indexes
-- **Embedding map**: Interactive 2D UMAP projection of text/visual embedding spaces
-</details>
-
-<details>
-<summary><b>Media Library</b> — Gallery + AI editing</summary>
-<br>
-
-Gallery for generated images and videos. Save to collection triggers CLIP embedding, keyframe extraction, transcription, and RAG indexing automatically. Reve AI editing via `reve.edit()` (natural language instructions) and `reve.remix()` (creative blending) with side-by-side preview.
-</details>
-
-<details>
-<summary><b>Developer</b> — Export, API reference, SDK, MCP</summary>
-<br>
-
-- **Export**: Download any table as JSON, CSV, or Parquet with row-limit control and live preview
-- **API**: Categorized endpoint browser with method badges and expandable curl examples
-- **SDK**: Python code snippets — connect, query, semantic search, export to Pandas, versioning
-- **Connect**: MCP server config for Claude/Cursor, direct Python access, REST API examples
-</details>
-
-<details>
-<summary><b>Database</b> — Catalog explorer</summary>
-<br>
-
-Tables and views grouped by type (Agent Pipeline, Documents, Images, Videos, Audio, Generation, Memory, Data Tables). Schema inspection with computed vs. insertable column badges. Paginated row browser with client-side search, row filter, and CSV download. Cross-table join panel (INNER/LEFT/CROSS) with table/column pickers and result preview.
-</details>
-
-<details>
-<summary><b>Architecture</b> — Interactive diagram</summary>
-<br>
-
-React Flow diagram with 38 nodes and 40 edges in swim-lane layout. Click any node to highlight its connections. Covers the full data flow: document chunking, image CLIP, video dual pipeline, audio transcription, 11-step agent pipeline, generation, and feedback edges.
-</details>
-
-<details>
-<summary><b>History & Memory</b></summary>
-<br>
-
-Searchable conversation history with workflow detail dialog and JSON export. Unified timeline across all timestamped Pixeltable tables. Memory bank with semantic search and manual entry.
-</details>
-
-## Pixeltable Coverage
-
-Every row maps to a Pixeltable feature exercised in this app:
-
-| Feature | Usage | Docs |
-|---|---|---|
-| Tables + multimodal types | `Document`, `Image`, `Video`, `Audio`, `Json` | [Tables](https://docs.pixeltable.com/tutorials/tables-and-data-operations) |
-| Computed columns | 11-step agent pipeline, thumbnails, summarization | [Computed Columns](https://docs.pixeltable.com/tutorials/computed-columns) |
-| Views + iterators | `document_splitter`, `frame_iterator`, `audio_splitter`, `string_splitter` | [Iterators](https://docs.pixeltable.com/platform/iterators) |
-| Embedding indexes | Gemini `embed_content`, CLIP ViT-B/32 → `.similarity(string=...)` | [Embedding Indexes](https://docs.pixeltable.com/platform/embedding-indexes) |
-| `@pxt.udf` | News API, financial data, context assembly | [UDFs](https://docs.pixeltable.com/platform/udfs-in-pixeltable) |
-| `@pxt.query` | `search_documents`, `search_images`, `search_video_frames` | [RAG](https://docs.pixeltable.com/howto/cookbooks/agents/pattern-rag-pipeline) |
-| `pxt.tools()` + `invoke_tools()` | Agent tool selection + execution | [Tool Calling](https://docs.pixeltable.com/howto/cookbooks/agents/llm-tool-calling) |
-| Agent memory | Chat history + memory bank with embedding search | [Memory](https://docs.pixeltable.com/howto/cookbooks/agents/pattern-agent-memory) |
-| LLM integrations | Anthropic, Google, OpenAI, Mistral | [Integrations](https://docs.pixeltable.com/integrations/frameworks) |
-| Reve AI | `reve.edit()` / `reve.remix()` for image editing | [Reve](https://docs.pixeltable.com/howto/providers/working-with-reve) |
-| PIL transforms | Resize, rotate, blur, sharpen, edge detect | [PIL](https://docs.pixeltable.com/howto/cookbooks/images/img-pil-transforms) |
-| Video UDFs | `extract_frame`, `clip`, `overlay_text`, `scene_detect_content` | [Video](https://docs.pixeltable.com/howto/cookbooks/video/video-extract-frames) |
-| Document processing | Gemini structured-JSON summarization, chunking | [Chunking](https://docs.pixeltable.com/howto/cookbooks/text/doc-chunk-for-rag) |
-| CSV / tabular data | Dynamic table creation, inline CRUD, type coercion | [CSV Import](https://docs.pixeltable.com/howto/cookbooks/data/data-import-csv) |
-| Object detection | On-demand DETR with bounding box overlay | [Detection](https://docs.pixeltable.com/howto/cookbooks/images/img-detect-objects) |
-| Panoptic segmentation | DETR Panoptic with color-coded segment regions | [Segmentation](https://docs.pixeltable.com/howto/cookbooks/images/img-detection-vs-segmentation) |
-| Text-to-speech | OpenAI TTS computed column with 6 voice options | [TTS](https://docs.pixeltable.com/howto/cookbooks/audio/audio-text-to-speech) |
-| Cross-table joins | `table.join()` with inner/left/cross modes | [Joins](https://docs.pixeltable.com/howto/cookbooks/core/query-join-tables) |
-| Table versioning | `tbl.revert()`, `tbl.get_versions()` | [Versioning](https://docs.pixeltable.com/howto/cookbooks/core/version-control-history) |
-| Structured output | Gemini `response_schema` + Pydantic models | [Structured Output](https://docs.pixeltable.com/howto/cookbooks/agents/llm-tool-calling) |
-| Catalog introspection | `pxt.list_tables()`, `tbl.columns()`, `tbl.count()` | [Tables](https://docs.pixeltable.com/tutorials/tables-and-data-operations) |
-| Data export | JSON, CSV, Parquet via `/api/export/` | [Export](https://docs.pixeltable.com/howto/cookbooks/data/data-export-pytorch) |
-| MCP | Config for Claude, Cursor, AI IDEs | [MCP](https://docs.pixeltable.com/use-cases/agents-mcp) |
-
-## Getting Started
-
-**Prerequisites:** Python 3.10+, Node.js 18+
-
-**Required:** `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GOOGLE_API_KEY`
-**Optional:** `MISTRAL_API_KEY`, `REVE_API_KEY`, `NEWS_API_KEY`
-
-> All providers are swappable. Pixeltable supports [local runtimes](https://docs.pixeltable.com/howto/providers/working-with-ollama) and [20+ integrations](https://docs.pixeltable.com/integrations/frameworks).
+## Install and run
 
 ```bash
-# Install
-cd backend && uv sync && source .venv/bin/activate
-python -m spacy download en_core_web_sm    # required by document splitter
-cd ../frontend && npm install
+cp .env.example backend/.env
+cd backend
+uv sync --locked --group dev
+export PIXELTABLE_HOME="$PWD/.pixeltable-v3"
 
-# Configure — create backend/.env with your API keys
-
-# Run
-cd ../backend && python setup_pixeltable.py   # first time only
-python main.py                                # :8000
-cd ../frontend && npm run dev                 # :5173 → proxies /api to :8000
+uv run --env-file .env pxt schema check pixelbot/app.py
+uv run --env-file .env pxt schema diff pixelbot/app.py pixelbot_v3
+uv run --env-file .env pxt schema update pixelbot/app.py pixelbot_v3 -f
+uv run --env-file .env pxt service update pixelbot/app.py pixelbot_v3 app --port 8000 -f
 ```
 
-**Production:** `cd frontend && npm run build` → `backend/static/`, then `python main.py` serves at `:8000`.
+Build the interface before producing a wheel:
 
-## Project Structure
-
-```
-backend/
-├── main.py                 FastAPI app, CORS, static serving
-├── config.py               model IDs, system prompts, LLM parameters
-├── models.py               Pydantic request/response schemas
-├── functions.py            @pxt.udf and @pxt.query definitions
-├── queries.py              shared query helpers for routers
-├── utils.py                @pxt_retry decorator for transient connection errors
-├── setup_pixeltable.py     full schema (tables, views, columns, indexes)
-└── routers/
-    ├── chat.py             11-step agent workflow
-    ├── studio.py           transforms, detection, segmentation, CSV, Reve, embeddings
-    ├── images.py           Imagen/DALL-E/Veo generation, TTS
-    ├── experiments.py      parallel multi-model prompt runs
-    ├── export.py           JSON/CSV/Parquet for any table
-    ├── database.py         catalog introspection, timeline, joins, pipeline management
-    ├── files.py            upload, URL import
-    ├── history.py          conversation detail, debug export
-    ├── memory.py           memory bank CRUD
-    ├── personas.py         persona CRUD
-    └── integrations.py     Slack/Discord/webhook notification services
-
-frontend/src/
-├── components/
-│   ├── chat/               agent UI, personas, image/video/voice modes
-│   ├── experiments/        prompt lab, model select, metrics
-│   ├── studio/             file browser, transforms, CSV, detection, segmentation, embedding map
-│   ├── developer/          export, API reference, SDK snippets, MCP config
-│   ├── database/           catalog browser, search, filter, download, joins
-│   ├── architecture/       React Flow diagram (38 nodes, swim lanes)
-│   ├── images/             media library, Reve edit/remix
-│   ├── history/            conversations, timeline
-│   ├── memory/             memory bank
-│   └── settings/           persona editor
-├── lib/api.ts              typed fetch wrapper
-└── types/index.ts          shared interfaces
+```bash
+cd ../frontend
+npm ci
+npm run lint
+npm run build
 ```
 
-## Contributing
+Open `http://127.0.0.1:8000`. The Vite development server runs on port 5173 and proxies `/api` to port 8000.
 
-Rough edges are expected. If you find a Pixeltable feature that's missing or awkward, open an issue or PR.
+## Operate and debug
 
-## License
+```bash
+cd backend
+export PIXELTABLE_HOME="$PWD/.pixeltable-v3"
 
-Apache 2.0 — see [LICENSE](LICENSE).
+uv run pxt service list
+uv run pxt service logs pixelbot_v3/app --since 10m --tail 50
+uv run pxt errors pixelbot_v3/collection
+uv run pxt recompute pixelbot_v3/collection summary --errors-only -f
+uv run pxt service stop pixelbot_v3/app
+```
+
+`--errors-only` accepts exactly one computed column. A computed expression cannot be migrated in place: rename the column, or drop and re-add it in separate schema changes. `--allow-destructive` does not make that migration supported.
+
+The Database page is an inspector for catalog rows, schemas, lineage, history, samples, joins, and computation errors. Schema and index changes are made in `pixelbot/schema.py` and applied with `pxt schema update`. CSV uploads remain editable only through their registry UUIDs in `pixelbot_scratch`.
+
+## Safety boundaries
+
+- Uploads are streamed to disk and capped by `MAX_UPLOAD_SIZE_MB`.
+- Remote ingestion accepts public HTTP(S) destinations only.
+- Media reads are confined to the upload root and configured `PIXELTABLE_HOME`, including resolved symlinks.
+- Database inspection and exports are confined to `pixelbot_v3` and registered scratch tables, with result caps.
+- The agent webhook tool can send only to `WEBHOOK_URL` configured at process startup.
+- There is no runtime expression evaluation or general catalog mutation API.
+
+## Validation
+
+```bash
+cd backend
+uv run ruff format --check pixelbot tests
+uv run ruff check pixelbot tests
+uv run mypy pixelbot
+uv run pytest
+uv build
+
+cd ../frontend
+npm run lint
+npm run build
+```
+
+See [`docs/pixeltable-0.7.7-upgrade.md`](docs/pixeltable-0.7.7-upgrade.md) for reviewed versions, reproduced failures, verification evidence, and live-test limits.

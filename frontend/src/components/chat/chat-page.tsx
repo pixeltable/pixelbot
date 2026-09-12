@@ -203,7 +203,7 @@ function ChatPageContent({ conversationId }: { conversationId: string | null }) 
     return () => window.removeEventListener('new-chat', handler)
   })
 
-  const processMessage = useCallback(async (text: string) => {
+  async function processMessage(text: string) {
     isProcessingRef.current = true
     setIsLoading(true)
     setMessages((prev) => {
@@ -335,9 +335,9 @@ function ChatPageContent({ conversationId }: { conversationId: string | null }) 
       }
       return currentQueue
     })
-  }, [mode, selectedPersona, addToast, searchParams, setSearchParams, scrollToBottom])
+  }
 
-  const handleSend = useCallback(() => {
+  function handleSend() {
     const text = input.trim()
     if (!text) return
 
@@ -352,7 +352,7 @@ function ChatPageContent({ conversationId }: { conversationId: string | null }) 
     }
 
     processMessage(text)
-  }, [input, processMessage])
+  }
 
   const handleFollowUp = useCallback((question: string) => {
     setInput(question)

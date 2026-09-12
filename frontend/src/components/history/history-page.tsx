@@ -176,7 +176,7 @@ export function HistoryPage() {
               <button
                 className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
                 onClick={handleDebugExport}
-                title="Export full agents.tools table with all columns for debugging"
+                title="Export full pixelbot_v3.tools table with all columns for debugging"
               >
                 <Bug className="h-3 w-3" /> Debug Export
               </button>

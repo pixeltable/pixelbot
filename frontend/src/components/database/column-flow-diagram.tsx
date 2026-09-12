@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useRef } from 'react'
+import { createElement, useState, useCallback, useMemo, useRef } from 'react'
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -115,7 +115,6 @@ const edgeTypes = { columnEdge: ColumnEdge }
 // ── Custom Node ──────────────────────────────────────────────────────────────
 
 function ColumnNode({ data, selected }: NodeProps<Node<ColumnNodeData>>) {
-  const Icon = getTypeIcon(data.type)
   const funcStyle = data.funcType ? FUNC_STYLES[data.funcType] : null
 
   return (
@@ -159,10 +158,9 @@ function ColumnNode({ data, selected }: NodeProps<Node<ColumnNodeData>>) {
             'w-5 h-5 rounded flex items-center justify-center shrink-0',
             data.isComputed ? 'bg-k-yellow/15' : 'bg-muted/40',
           )}>
-            <Icon className={cn(
-              'h-3 w-3',
-              data.isComputed ? 'text-k-yellow' : 'text-muted-foreground',
-            )} />
+            {createElement(getTypeIcon(data.type), {
+              className: cn('h-3 w-3', data.isComputed ? 'text-k-yellow' : 'text-muted-foreground'),
+            })}
           </div>
           <div className="min-w-0 flex-1">
             <span className="text-[11px] font-semibold text-foreground truncate block leading-tight">
@@ -219,7 +217,6 @@ function ColumnDetailPanel({
   onNavigate: (id: string) => void
 }) {
   const [copied, setCopied] = useState(false)
-  const Icon = getTypeIcon(node.type)
   const funcStyle = node.funcType ? FUNC_STYLES[node.funcType] : null
 
   const handleCopy = useCallback(async () => {
@@ -244,10 +241,9 @@ function ColumnDetailPanel({
               'w-6 h-6 rounded flex items-center justify-center shrink-0',
               node.isComputed ? 'bg-k-yellow/15' : 'bg-muted/40',
             )}>
-              <Icon className={cn(
-                'h-3.5 w-3.5',
-                node.isComputed ? 'text-k-yellow' : 'text-muted-foreground',
-              )} />
+              {createElement(getTypeIcon(node.type), {
+                className: cn('h-3.5 w-3.5', node.isComputed ? 'text-k-yellow' : 'text-muted-foreground'),
+              })}
             </div>
             <div className="min-w-0">
               <h3 className="text-xs font-semibold truncate">{node.name}</h3>

@@ -398,29 +398,6 @@ export interface DetectionResponse {
   segments?: SegmentItem[]
 }
 
-// ── Reve AI Edit / Remix ────────────────────────────────────────────────
-
-export interface ReveEditResponse {
-  preview: string
-  width: number
-  height: number
-  instruction: string
-  temp_path: string
-}
-
-export interface ReveRemixResponse {
-  preview: string
-  width: number
-  height: number
-  prompt: string
-  temp_path: string
-}
-
-export interface ReveSaveResponse {
-  message: string
-  uuid: string
-}
-
 // ── Prompt Lab (Experiments) ─────────────────────────────────────────────────
 
 export interface ExperimentModelInfo {
@@ -572,7 +549,7 @@ export interface PipelineNode extends Record<string, unknown> {
   version: number
   total_errors: number
   columns: PipelineColumn[]
-  indices: PipelineIndex[]
+  indexes: PipelineIndex[]
   versions: PipelineVersion[]
   computed_count: number
   insertable_count: number
@@ -590,55 +567,6 @@ export interface PipelineEdge {
 export interface PipelineResponse {
   nodes: PipelineNode[]
   edges: PipelineEdge[]
-}
-
-// ── Database Management ──────────────────────────────────────────────────────
-
-export interface MgmtResponse {
-  success: boolean
-  message: string
-  path?: string
-  detail?: Record<string, unknown>
-}
-
-export interface ColumnTypeInfo {
-  name: string
-  key: string
-  description: string
-}
-
-export interface FunctionInfo {
-  name: string
-  description: string
-  example: string
-}
-
-export interface FunctionCategory {
-  category: string
-  functions: FunctionInfo[]
-}
-
-export interface IteratorInfo {
-  name: string
-  description: string
-  column_arg: string
-  example_args: Record<string, unknown>
-}
-
-export interface EmbeddingFunctionInfo {
-  name: string
-  description: string
-  modality: string
-}
-
-export interface TypesResponse {
-  types: ColumnTypeInfo[]
-}
-
-export interface FunctionsResponse {
-  functions: FunctionCategory[]
-  iterators: IteratorInfo[]
-  embedding_functions: EmbeddingFunctionInfo[]
 }
 
 export interface VersionEntry {
