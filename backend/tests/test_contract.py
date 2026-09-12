@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 from fastapi import HTTPException, UploadFile
+from fastapi.testclient import TestClient
 
 from pixelbot import __version__, config
 from pixelbot.app import app
@@ -33,6 +34,12 @@ def test_removed_routes_are_not_registered() -> None:
         "/api/db/recompute_columns",
     }
     assert not any(path in removed for _, path in routes)
+
+
+def test_removed_api_routes_return_not_found() -> None:
+    client = TestClient(app)
+    assert client.post("/api/studio/reve/edit", json={}).status_code == 404
+    assert client.post("/api/db/create_table", json={}).status_code == 404
 
 
 def test_webhook_destination_is_configuration_only() -> None:
@@ -91,3 +98,11 @@ def test_schema_has_no_import_time_catalog_mutations() -> None:
     assert not any(token in schema_source for token in forbidden)
     assert "TableModel = pxt.model_base()" in schema_source
     assert "has_default_idxs=False" in schema_source
+
+
+def test_transcript_routes_use_declared_iterator_views() -> None:
+    studio_source = (Path(__file__).parents[1] / "pixelbot" / "routers" / "studio.py").read_text()
+    assert "pixelbot_v3.video_transcript_sentences" not in studio_source
+    assert "pixelbot_v3.audio_transcript_sentences" not in studio_source
+    assert "pixelbot_v3.video_audio_chunks" in studio_source
+    assert "pixelbot_v3.audio_chunks" in studio_source

@@ -7,6 +7,7 @@ Retrieved 2026-09-11.
 | Pixelbot baseline | commit `ef73dc01e0461574d94ca34867924019a142bf7a` |
 | Pixeltable release | tag `v0.7.7`, commit `8d14e6c88d3dcd749d71ef5799447454470f68f9`, released 2026-09-10 |
 | Published wheel | `pixeltable-0.7.7-py3-none-any.whl`, SHA-256 `0642d78d3f90766cc6cec60c587b9e19682df1241dde8000d8e1856a2838610f` |
+| Project guidance | Pixeltable skill `2.10.1`, commit `cd5705537bd2cbc95269706e9092d623e754b05d`, refreshed 2026-09-11 |
 | Python support | Pixeltable 0.7.7 requires Python 3.11+ |
 | Skill baseline | bundled Pixeltable skill 2.10.0 |
 
@@ -47,9 +48,11 @@ uv run pxt service stop pixelbot_v3/app
 
 Verified locally on 2026-09-11:
 
-- Pixeltable 0.7.7 accepted the application file, and a fresh isolated catalog dry run reported 21 creates with zero unsupported or destructive operations (the documented pending-diff exit code was 2).
+- Pixeltable 0.7.7 accepted the application file, and a fresh isolated catalog dry run reported 19 creates with zero unsupported or destructive operations (the documented pending-diff exit code was 2).
 - Ruff check/format and mypy passed all 21 backend source files; pytest passed the deterministic contract suite.
 - The wheel and sdist built, and a clean Python 3.11 environment imported the 3.0.0 wheel and found its bundled SPA.
 - Frontend tests and lint passed. The production build had no 500 kB chunk warning: the initial chunk was 271.64 kB and the largest route chunk was 146.57 kB.
 
-A full local schema apply was stopped after five minutes while Pixeltable's daemon consumed CPU creating `video_transcript_sentences`; the first six models had been created without error. Because the apply did not finish, service start/health/log/stop and a clean second diff remain CI release gates rather than claimed local successes. Provider calls are mocked and establish wiring only. Paid provider calls, hosted deployment, Cloud behavior, and the 48 agent trials were not run. The old `agents` catalog was not opened or changed.
+A fresh local schema apply completed with 19 models. A second diff reported all 19 models up to date, and the managed service started on port 8000 with working health, SPA, and read-only catalog routes. Pixeltable currently reorders JSON objects through PostgreSQL JSONB during catalog persistence, so response schemas and tool declarations are declared in the same deterministic key order to keep subsequent schema diffs clean. Video and audio transcript text and embedding indexes live directly on their iterator views; this avoids a 0.7.7 schema-apply stall observed when creating redundant filtered sentence views.
+
+Provider calls are mocked and establish wiring only. Paid provider calls, hosted deployment, Cloud behavior, and the 48 agent trials were not run. Validation used a separate temporary `PIXELTABLE_HOME`; the old `agents` catalog was not changed.

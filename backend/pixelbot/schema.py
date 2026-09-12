@@ -6,6 +6,8 @@ catalog. Apply it through ``pxt schema update pixelbot/app.py pixelbot_v3``.
 
 from __future__ import annotations
 
+from typing import Any
+
 import pixeltable as pxt
 from pixeltable.functions import bfl, gemini, openai
 from pixeltable.functions import image as pxt_image
@@ -14,7 +16,6 @@ from pixeltable.functions.audio import audio_splitter
 from pixeltable.functions.document import document_splitter
 from pixeltable.functions.gemini import invoke_tools
 from pixeltable.functions.huggingface import clip
-from pixeltable.functions.string import string_splitter
 from pixeltable.functions.video import extract_audio, frame_iterator
 
 from pixelbot import config, functions
@@ -26,6 +27,31 @@ geminiEmbed = gemini.embed_content.using(model=config.GEMINI_EMBEDDING_MODEL_ID)
 clipEmbed = clip.using(model_id=config.CLIP_MODEL_ID)
 
 
+def _jsonb_stable(value: Any) -> Any:
+    """Match PostgreSQL JSONB key ordering for stable schema reconciliation."""
+    if isinstance(value, dict):
+        return {key: _jsonb_stable(value[key]) for key in sorted(value, key=lambda key: (len(key), key))}
+    if isinstance(value, list):
+        return [_jsonb_stable(item) for item in value]
+    return value
+
+
+DOCUMENT_SUMMARY_CONFIG = _jsonb_stable(
+    {
+        "system_instruction": "Analyze the document text and return a structured summary.",
+        "response_mime_type": "application/json",
+        "response_schema": DocumentSummary.model_json_schema(),
+    }
+)
+FOLLOW_UP_CONFIG = _jsonb_stable(
+    {
+        "system_instruction": "Generate exactly 3 relevant follow-up questions based on the conversation.",
+        "response_mime_type": "application/json",
+        "response_schema": FollowUpResponse.model_json_schema(),
+    }
+)
+
+
 class Documents(TableModel, name="collection", has_default_idxs=False):
     document: pxt.Document
     uuid = pxt.Column(type=pxt.String, primary_key=True)
@@ -35,11 +61,7 @@ class Documents(TableModel, name="collection", has_default_idxs=False):
     summary_response = gemini.generate_content(
         contents=document_text,
         model=config.GEMINI_MODEL_ID,
-        config={
-            "system_instruction": "Analyze the document text and return a structured summary.",
-            "response_mime_type": "application/json",
-            "response_schema": DocumentSummary.model_json_schema(),
-        },
+        config=DOCUMENT_SUMMARY_CONFIG,
     )
     summary = summary_response.candidates[0].content.parts[0].text
     __indexes__ = [pxt.BtreeIndex(user_id), pxt.BtreeIndex(timestamp)]
@@ -157,15 +179,7 @@ class VideoAudioChunks(
     has_default_idxs=False,
 ):
     transcription = openai.transcriptions(audio=audio, model=config.WHISPER_MODEL_ID)  # type: ignore[name-defined]
-
-
-class VideoTranscriptSentences(
-    TableModel,
-    name="video_transcript_sentences",
-    base=VideoAudioChunks.where(VideoAudioChunks.transcription != None),  # noqa: E711
-    iterator=string_splitter(VideoAudioChunks.transcription.text, separators="sentence"),
-    has_default_idxs=False,
-):
+    text = transcription.text
     __indexes__ = [
         pxt.EmbeddingIndex(text, string_embed=geminiEmbed, name="video_sentences_gemini"),  # type: ignore[name-defined]
     ]
@@ -173,11 +187,11 @@ class VideoTranscriptSentences(
 
 @pxt.query
 def search_video_transcripts(query_text: str, user_id: str = config.DEFAULT_USER_ID):
-    sim = VideoTranscriptSentences.text.similarity(string=query_text)
+    sim = VideoAudioChunks.text.similarity(string=query_text)
     return (
-        VideoTranscriptSentences.where((VideoTranscriptSentences.user_id == user_id) & (sim > 0.7))
+        VideoAudioChunks.where((VideoAudioChunks.user_id == user_id) & (sim > 0.7))
         .order_by(sim, asc=False)
-        .select(VideoTranscriptSentences.text, source_video=VideoTranscriptSentences.video, sim=sim)
+        .select(VideoAudioChunks.text, source_video=VideoAudioChunks.video, sim=sim)
         .limit(20)
     )
 
@@ -198,15 +212,7 @@ class AudioChunks(
     has_default_idxs=False,
 ):
     transcription = openai.transcriptions(audio=audio, model=config.WHISPER_MODEL_ID)  # type: ignore[name-defined]
-
-
-class AudioTranscriptSentences(
-    TableModel,
-    name="audio_transcript_sentences",
-    base=AudioChunks.where(AudioChunks.transcription != None),  # noqa: E711
-    iterator=string_splitter(AudioChunks.transcription.text, separators="sentence"),
-    has_default_idxs=False,
-):
+    text = transcription.text
     __indexes__ = [
         pxt.EmbeddingIndex(text, string_embed=geminiEmbed, name="audio_sentences_gemini"),  # type: ignore[name-defined]
     ]
@@ -214,11 +220,11 @@ class AudioTranscriptSentences(
 
 @pxt.query
 def search_audio_transcripts(query_text: str, user_id: str = config.DEFAULT_USER_ID):
-    sim = AudioTranscriptSentences.text.similarity(string=query_text)
+    sim = AudioChunks.text.similarity(string=query_text)
     return (
-        AudioTranscriptSentences.where((AudioTranscriptSentences.user_id == user_id) & (sim > 0.6))
+        AudioChunks.where((AudioChunks.user_id == user_id) & (sim > 0.6))
         .order_by(sim, asc=False)
-        .select(AudioTranscriptSentences.text, source_audio=AudioTranscriptSentences.audio, sim=sim)
+        .select(AudioChunks.text, source_audio=AudioChunks.audio, sim=sim)
         .limit(30)
     )
 
@@ -427,6 +433,7 @@ agentTools = pxt.tools(
     search_video_transcripts,
     search_audio_transcripts,
 )
+agentToolDeclarations = _jsonb_stable(agentTools.ser_model())
 
 
 class ToolAgent(TableModel, name="tools", has_default_idxs=False):
@@ -442,7 +449,7 @@ class ToolAgent(TableModel, name="tools", has_default_idxs=False):
     initial_response = gemini.generate_content(
         contents=tool_selection_messages,
         model=config.GEMINI_MODEL_ID,
-        tools=agentTools,
+        tools=agentToolDeclarations,
         config={"system_instruction": initial_system_prompt, "temperature": temperature},
     )
     tool_output = invoke_tools(agentTools, initial_response)
@@ -474,11 +481,7 @@ class ToolAgent(TableModel, name="tools", has_default_idxs=False):
     follow_up_raw_response = gemini.generate_content(
         contents=follow_up_input_message,
         model=config.GEMINI_MODEL_ID,
-        config={
-            "system_instruction": "Generate exactly 3 relevant follow-up questions based on the conversation.",
-            "response_mime_type": "application/json",
-            "response_schema": FollowUpResponse.model_json_schema(),
-        },
+        config=FOLLOW_UP_CONFIG,
     )
     follow_up_text = follow_up_raw_response.candidates[0].content.parts[0].text
     __indexes__ = [pxt.BtreeIndex(user_id), pxt.BtreeIndex(timestamp)]

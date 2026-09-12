@@ -79,27 +79,25 @@ const SCHEMA_NODES: SchemaNode[] = [
 
   // ── Video Processing ─────────────────────────────
   { id: 'video_frames', label: 'video_frames', type: 'view', icon: Film, description: 'pixelbot_v3.video_frames — frame_iterator(keyframes_only=True)', color: '#DC2404', details: ['frame', 'frame_idx', 'frame_thumbnail (192×192)'], group: 'processing' },
-  { id: 'video_audio_chunks', label: 'video_audio_chunks', type: 'view', icon: Layers, description: 'pixelbot_v3.video_audio_chunks — AudioSplitter(30s chunks)', color: '#DC2404', details: ['audio chunks from video'], group: 'processing' },
+  { id: 'video_audio_chunks', label: 'video_audio_chunks', type: 'view', icon: Layers, description: 'pixelbot_v3.video_audio_chunks — AudioSplitter(30s chunks) with Whisper text', color: '#DC2404', details: ['audio', 'transcription', 'text'], group: 'processing' },
   { id: 'whisper_video', label: 'Whisper', type: 'model', icon: Mic, description: 'openai.transcriptions(model=whisper-1) on video audio', color: '#DC2404', details: ['transcription.text'], group: 'processing' },
-  { id: 'video_sentences', label: 'video_transcript_sentences', type: 'view', icon: Layers, description: 'StringSplitter(sentence) on Whisper output', color: '#DC2404', group: 'processing' },
 
   // ── Audio Processing ─────────────────────────────
-  { id: 'audio_chunks', label: 'audio_chunks', type: 'view', icon: Layers, description: 'pixelbot_v3.audio_chunks — AudioSplitter(60s chunks)', color: '#22c55e', group: 'processing' },
+  { id: 'audio_chunks', label: 'audio_chunks', type: 'view', icon: Layers, description: 'pixelbot_v3.audio_chunks — AudioSplitter(60s chunks) with Whisper text', color: '#22c55e', details: ['audio', 'transcription', 'text'], group: 'processing' },
   { id: 'whisper_audio', label: 'Whisper', type: 'model', icon: Mic, description: 'openai.transcriptions(model=whisper-1) on audio', color: '#22c55e', details: ['transcription.text'], group: 'processing' },
-  { id: 'audio_sentences', label: 'audio_transcript_sentences', type: 'view', icon: Layers, description: 'StringSplitter(sentence) on Whisper output', color: '#22c55e', group: 'processing' },
 
   // ── Embedding Indexes ────────────────────────────
-  { id: 'doc_embed', label: 'Text Index', type: 'index', icon: Search, description: 'e5-large-instruct on chunks.text', color: '#7DA8EF', details: ['multilingual-e5-large-instruct'], group: 'index' },
+  { id: 'doc_embed', label: 'Text Index', type: 'index', icon: Search, description: 'Gemini embedding on chunks.text', color: '#7DA8EF', details: ['gemini-embedding-001'], group: 'index' },
   { id: 'img_embed', label: 'Image Index', type: 'index', icon: Search, description: 'CLIP on images.image', color: '#F1AE03', details: ['clip-vit-base-patch32'], group: 'index' },
   { id: 'vid_frame_embed', label: 'Frame Index', type: 'index', icon: Search, description: 'CLIP on video_frames.frame', color: '#DC2404', details: ['clip-vit-base-patch32'], group: 'index' },
-  { id: 'vid_text_embed', label: 'Video Text Index', type: 'index', icon: Search, description: 'e5-large on video_transcript_sentences.text', color: '#DC2404', group: 'index' },
-  { id: 'audio_text_embed', label: 'Audio Text Index', type: 'index', icon: Search, description: 'e5-large on audio_transcript_sentences.text', color: '#22c55e', group: 'index' },
+  { id: 'vid_text_embed', label: 'Video Text Index', type: 'index', icon: Search, description: 'Gemini embedding on video_audio_chunks.text', color: '#DC2404', group: 'index' },
+  { id: 'audio_text_embed', label: 'Audio Text Index', type: 'index', icon: Search, description: 'Gemini embedding on audio_chunks.text', color: '#22c55e', group: 'index' },
 
   // ── Memory & Chat ────────────────────────────────
   { id: 'memory', label: 'Memory Bank', type: 'table', icon: Brain, description: 'pixelbot_v3.memory_bank — user-saved knowledge snippets', color: '#a78bfa', details: ['content', 'type', 'language', 'context_query'], group: 'memory' },
-  { id: 'memory_embed', label: 'Memory Index', type: 'index', icon: Search, description: 'e5-large on memory_bank.content', color: '#a78bfa', group: 'index' },
+  { id: 'memory_embed', label: 'Memory Index', type: 'index', icon: Search, description: 'Gemini embedding on memory_bank.content', color: '#a78bfa', group: 'index' },
   { id: 'chat_history', label: 'Chat History', type: 'table', icon: MessageSquare, description: 'pixelbot_v3.chat_history — full Q&A pairs (role + content)', color: '#a78bfa', details: ['role', 'content', 'timestamp', 'user_id'], group: 'memory' },
-  { id: 'chat_embed', label: 'Chat Index', type: 'index', icon: Search, description: 'e5-large on chat_history.content', color: '#a78bfa', group: 'index' },
+  { id: 'chat_embed', label: 'Chat Index', type: 'index', icon: Search, description: 'Gemini embedding on chat_history.content', color: '#a78bfa', group: 'index' },
 
   // ── Personas ─────────────────────────────────────
   { id: 'personas', label: 'User Personas', type: 'table', icon: UserCog, description: 'pixelbot_v3.user_personas — configurable system prompts + LLM params', color: '#94a3b8', details: ['persona_name', 'initial_prompt', 'final_prompt', 'llm_params (Json)'], group: 'config' },
@@ -109,10 +107,10 @@ const SCHEMA_NODES: SchemaNode[] = [
 
   // ── Agent Pipeline (pixelbot_v3.tools) ────────────────
   { id: 'agent', label: 'Agent Table', type: 'table', icon: Bot, description: 'pixelbot_v3.tools — 11 computed columns, prompt → answer', color: '#fb923c', details: ['prompt', 'initial_system_prompt', 'final_system_prompt', 'max_tokens', 'temperature'], group: 'agent' },
-  { id: 'claude_tools', label: 'Claude → Tools', type: 'model', icon: Bot, description: 'Step 1-2: claude-sonnet-4 selects tools → invoke_tools() executes', color: '#fb923c', details: ['anthropic.messages(tools=...)', 'invoke_tools(tools, response)'], group: 'agent' },
+  { id: 'gemini_tools', label: 'Gemini → Tools', type: 'model', icon: Bot, description: 'Step 1-2: Gemini selects tools → invoke_tools() executes', color: '#fb923c', details: ['gemini.generate_content(tools=...)', 'invoke_tools(tools, response)'], group: 'agent' },
   { id: 'assemble_context', label: 'assemble_context', type: 'udf', icon: GitBranch, description: 'Step 5: Merge tool_output + doc_context + memory + chat_memory into text', color: '#fb923c', details: ['assemble_multimodal_context()'], group: 'agent' },
-  { id: 'assemble_messages', label: 'assemble_messages', type: 'udf', icon: GitBranch, description: 'Step 6: Build multimodal messages with history + images + video frames', color: '#fb923c', details: ['assemble_final_messages()', 'base64 images for Claude vision'], group: 'agent' },
-  { id: 'claude_answer', label: 'Claude → Answer', type: 'model', icon: Bot, description: 'Step 7-8: claude-sonnet-4 generates final answer from full context', color: '#fb923c', details: ['anthropic.messages()', 'answer = response.content[0].text'], group: 'agent' },
+  { id: 'assemble_messages', label: 'assemble_messages', type: 'udf', icon: GitBranch, description: 'Step 6: Build multimodal messages with history + images + video frames', color: '#fb923c', details: ['assemble_final_messages()', 'base64 images for Gemini'], group: 'agent' },
+  { id: 'gemini_answer', label: 'Gemini → Answer', type: 'model', icon: Bot, description: 'Step 7-8: Gemini generates the final answer from full context', color: '#fb923c', details: ['gemini.generate_content()', 'answer = response.candidates[0].content.parts[0].text'], group: 'agent' },
   { id: 'gemini_followup', label: 'Gemini → Follow-ups', type: 'model', icon: Sparkles, description: 'Step 9-11: gemini-2.5-flash generates 3 follow-up questions (JSON)', color: '#fb923c', details: ['assemble_follow_up_prompt()', 'generate_content(JSON)'], group: 'agent' },
   { id: 'answer', label: 'Answer + Follow-ups', type: 'output', icon: ArrowRight, description: 'Final answer text + 3 follow-up suggestions. Q&A pair written back to Chat History.', color: '#fb923c', group: 'agent' },
 
@@ -133,7 +131,7 @@ const SCHEMA_EDGES: SchemaEdge[] = [
   { source: 'documents', target: 'chunks', label: 'document_splitter' },
   { source: 'documents', target: 'extract_text', label: 'extract' },
   { source: 'extract_text', target: 'gemini_summary', label: 'summarize' },
-  { source: 'chunks', target: 'doc_embed', label: 'e5-large' },
+  { source: 'chunks', target: 'doc_embed', label: 'Gemini embed' },
 
   // ── Image pipeline ────────────────────────────────
   { source: 'images', target: 'img_thumb', label: 'resize' },
@@ -146,34 +144,32 @@ const SCHEMA_EDGES: SchemaEdge[] = [
   // ── Video pipeline (audio transcription) ──────────
   { source: 'videos', target: 'video_audio_chunks', label: 'extract_audio → split' },
   { source: 'video_audio_chunks', target: 'whisper_video', label: 'transcribe' },
-  { source: 'whisper_video', target: 'video_sentences', label: 'StringSplitter' },
-  { source: 'video_sentences', target: 'vid_text_embed', label: 'e5-large' },
+  { source: 'whisper_video', target: 'vid_text_embed', label: 'Gemini embed' },
 
   // ── Audio pipeline ────────────────────────────────
   { source: 'audios', target: 'audio_chunks', label: 'AudioSplitter' },
   { source: 'audio_chunks', target: 'whisper_audio', label: 'transcribe' },
-  { source: 'whisper_audio', target: 'audio_sentences', label: 'StringSplitter' },
-  { source: 'audio_sentences', target: 'audio_text_embed', label: 'e5-large' },
+  { source: 'whisper_audio', target: 'audio_text_embed', label: 'Gemini embed' },
 
   // ── Memory & Chat → Embedding ─────────────────────
-  { source: 'memory', target: 'memory_embed', label: 'e5-large' },
-  { source: 'chat_history', target: 'chat_embed', label: 'e5-large' },
+  { source: 'memory', target: 'memory_embed', label: 'Gemini embed' },
+  { source: 'chat_history', target: 'chat_embed', label: 'Gemini embed' },
 
   // ── Personas → Agent (system prompts + LLM config) ─
   { source: 'personas', target: 'agent', label: 'system prompts' },
 
-  // ── Agent Step 1-2: Claude tool selection + external API calls ─
-  { source: 'agent', target: 'claude_tools', label: 'step 1' },
-  { source: 'ext_apis', target: 'claude_tools', label: 'tools' },
-  { source: 'csv_registry', target: 'claude_tools', label: 'query_csv_table' },
-  { source: 'vid_text_embed', target: 'claude_tools', label: 'search_video_transcripts' },
-  { source: 'audio_text_embed', target: 'claude_tools', label: 'search_audio_transcripts' },
+  // ── Agent Step 1-2: Gemini tool selection + external API calls ─
+  { source: 'agent', target: 'gemini_tools', label: 'step 1' },
+  { source: 'ext_apis', target: 'gemini_tools', label: 'tools' },
+  { source: 'csv_registry', target: 'gemini_tools', label: 'query_csv_table' },
+  { source: 'vid_text_embed', target: 'gemini_tools', label: 'search_video_transcripts' },
+  { source: 'audio_text_embed', target: 'gemini_tools', label: 'search_audio_transcripts' },
 
   // ── Agent Step 3-4: RAG retrieval (computed columns on agent table) ─
   { source: 'doc_embed', target: 'assemble_context', label: 'search_documents' },
   { source: 'memory_embed', target: 'assemble_context', label: 'search_memory' },
   { source: 'chat_embed', target: 'assemble_context', label: 'search_chat_history' },
-  { source: 'claude_tools', target: 'assemble_context', label: 'tool_output' },
+  { source: 'gemini_tools', target: 'assemble_context', label: 'tool_output' },
 
   // ── Agent Step 5-6: assemble_context → assemble_messages (multimodal) ─
   { source: 'assemble_context', target: 'assemble_messages', label: 'text context' },
@@ -182,10 +178,10 @@ const SCHEMA_EDGES: SchemaEdge[] = [
   { source: 'chat_history', target: 'assemble_messages', label: 'recent 4 Q&A' },
 
   // ── Agent Step 7-8: Final LLM answer ──────────────
-  { source: 'assemble_messages', target: 'claude_answer', label: 'step 7' },
+  { source: 'assemble_messages', target: 'gemini_answer', label: 'step 7' },
 
   // ── Agent Step 9-11: Follow-ups ───────────────────
-  { source: 'claude_answer', target: 'gemini_followup', label: 'step 9' },
+  { source: 'gemini_answer', target: 'gemini_followup', label: 'step 9' },
   { source: 'gemini_followup', target: 'answer', label: 'step 11' },
 
   // ── Feedback: Q&A pairs written back ──────────────
@@ -285,21 +281,19 @@ const GRID: Record<string, [number, number]> = {
   vid_frame_embed:     [370,  295],
   video_audio_chunks:  [185,  385],
   whisper_video:       [370,  385],
-  video_sentences:     [555,  385],
-  vid_text_embed:      [740,  385],
+  vid_text_embed:      [555,  385],
 
   // ── Audio Pipeline (y ≈ 480) ──
   audios:              [0,    480],
   audio_chunks:        [185,  480],
   whisper_audio:       [370,  480],
-  audio_sentences:     [555,  480],
-  audio_text_embed:    [740,  480],
+  audio_text_embed:    [555,  480],
 
   // ── Agent Pipeline (y ≈ 575, horizontal band) ──
-  claude_tools:        [925,  575],
+  gemini_tools:        [925,  575],
   assemble_context:    [1100, 575],
   assemble_messages:   [1275, 575],
-  claude_answer:       [1450, 575],
+  gemini_answer:       [1450, 575],
   gemini_followup:     [1625, 575],
   answer:              [1800, 575],
 

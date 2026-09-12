@@ -74,13 +74,13 @@ const GROUPS: TableGroup[] = [
     label: 'Videos',
     icon: Film,
     color: 'text-rose-400',
-    match: (n) => ['videos', 'video_frames', 'video_audio_chunks', 'video_transcript_sentences'].includes(n),
+    match: (n) => ['videos', 'video_frames', 'video_audio_chunks'].includes(n),
   },
   {
     label: 'Audio',
     icon: Music,
     color: 'text-orange-400',
-    match: (n) => ['audios', 'audio_chunks', 'audio_transcript_sentences'].includes(n),
+    match: (n) => ['audios', 'audio_chunks'].includes(n),
   },
   {
     label: 'Generation',
