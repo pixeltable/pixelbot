@@ -5,9 +5,8 @@ import sys
 from pathlib import Path
 
 
-def test_schema_check_uses_an_isolated_catalog(tmp_path: Path) -> None:
+def test_schema_check_uses_an_isolated_catalog() -> None:
     env = os.environ.copy()
-    env["PIXELTABLE_HOME"] = str(tmp_path / "catalog")
     env["PYTHONPATH"] = str(Path(__file__).parents[1])
     with socket.socket() as port_socket:
         port_socket.bind(("127.0.0.1", 0))

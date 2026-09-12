@@ -7,7 +7,6 @@ from pydantic import BaseModel
 
 from pixelbot import config
 from pixelbot.models import DeleteMemoryResponse, MemoryBankRow, MessageResponse
-from pixelbot.utils import pxt_retry
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["memory"])
@@ -53,7 +52,6 @@ def _insert_memory(body: SaveMemoryRequest) -> dict:
 
 
 @router.post("/memory", status_code=201, response_model=MessageResponse)
-@pxt_retry()
 def save_memory(body: SaveMemoryRequest):
     """Save a memory item (code or text)."""
     return _insert_memory(body)
@@ -63,7 +61,6 @@ def save_memory(body: SaveMemoryRequest):
 
 
 @router.delete("/memory/{timestamp_str}", response_model=DeleteMemoryResponse)
-@pxt_retry()
 def delete_memory(timestamp_str: str):
     """Delete a memory item by timestamp."""
     user_id = config.DEFAULT_USER_ID
@@ -72,20 +69,10 @@ def delete_memory(timestamp_str: str):
         target_timestamp = datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S.%f")
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid timestamp format")
+    memory_table = pxt.get_table("pixelbot_v3.memory_bank")
+    status = memory_table.delete(where=(memory_table.timestamp == target_timestamp) & (memory_table.user_id == user_id))
 
-    try:
-        memory_table = pxt.get_table("pixelbot_v3.memory_bank")
-        status = memory_table.delete(
-            where=(memory_table.timestamp == target_timestamp) & (memory_table.user_id == user_id)
-        )
+    if status.num_rows == 0:
+        raise HTTPException(status_code=404, detail="No memory item found with that timestamp")
 
-        if status.num_rows == 0:
-            raise HTTPException(status_code=404, detail="No memory item found with that timestamp")
-
-        return DeleteMemoryResponse(message="Memory item deleted", num_deleted=status.num_rows)
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error deleting memory: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+    return DeleteMemoryResponse(message="Memory item deleted", num_deleted=status.num_rows)

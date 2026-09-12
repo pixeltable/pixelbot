@@ -249,7 +249,6 @@ def get_available_models():
 
 
 @router.post("/run", response_model=RunExperimentResponse)
-@pxt_retry()
 def run_experiment(body: RunExperimentRequest):
     """Run a prompt against multiple models in parallel and store results."""
     if not body.user_prompt.strip():
@@ -419,75 +418,64 @@ def get_experiment_history():
 @pxt_retry()
 def get_experiment(experiment_id: str):
     """Return full results for a specific experiment."""
-    try:
-        table = pxt.get_table(_TABLE_PATH)
-        rows = (
-            table.where((table.experiment_id == experiment_id) & (table.user_id == config.DEFAULT_USER_ID))
-            .select(
-                table.experiment_id,
-                table.task,
-                table.system_prompt,
-                table.user_prompt,
-                table.model_id,
-                table.model_name,
-                table.provider,
-                table.temperature,
-                table.max_tokens,
-                table.response,
-                table.response_time_ms,
-                table.word_count,
-                table.char_count,
-                table.error,
-                table.timestamp,
+    table = pxt.get_table(_TABLE_PATH)
+    rows = (
+        table.where((table.experiment_id == experiment_id) & (table.user_id == config.DEFAULT_USER_ID))
+        .select(
+            table.experiment_id,
+            table.task,
+            table.system_prompt,
+            table.user_prompt,
+            table.model_id,
+            table.model_name,
+            table.provider,
+            table.temperature,
+            table.max_tokens,
+            table.response,
+            table.response_time_ms,
+            table.word_count,
+            table.char_count,
+            table.error,
+            table.timestamp,
+        )
+        .collect()
+    )
+
+    if not rows:
+        raise HTTPException(status_code=404, detail="Experiment not found")
+
+    first = rows[0]
+    results = []
+    for row in rows:
+        error_val = row.get("error") or ""
+        results.append(
+            ExperimentResult(
+                model_id=row["model_id"],
+                model_name=row["model_name"],
+                provider=row["provider"],
+                response=row["response"] if not error_val else None,
+                response_time_ms=row.get("response_time_ms", 0),
+                word_count=row.get("word_count", 0),
+                char_count=row.get("char_count", 0),
+                error=error_val if error_val else None,
             )
-            .collect()
         )
 
-        if not rows:
-            raise HTTPException(status_code=404, detail="Experiment not found")
-
-        first = rows[0]
-        results = []
-        for row in rows:
-            error_val = row.get("error") or ""
-            results.append(
-                ExperimentResult(
-                    model_id=row["model_id"],
-                    model_name=row["model_name"],
-                    provider=row["provider"],
-                    response=row["response"] if not error_val else None,
-                    response_time_ms=row.get("response_time_ms", 0),
-                    word_count=row.get("word_count", 0),
-                    char_count=row.get("char_count", 0),
-                    error=error_val if error_val else None,
-                )
-            )
-
-        return RunExperimentResponse(
-            experiment_id=experiment_id,
-            task=first["task"],
-            system_prompt=first["system_prompt"],
-            user_prompt=first["user_prompt"],
-            temperature=first["temperature"],
-            max_tokens=first["max_tokens"],
-            timestamp=first["timestamp"].isoformat() if first["timestamp"] else "",
-            results=results,
-        )
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to get experiment {experiment_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+    return RunExperimentResponse(
+        experiment_id=experiment_id,
+        task=first["task"],
+        system_prompt=first["system_prompt"],
+        user_prompt=first["user_prompt"],
+        temperature=first["temperature"],
+        max_tokens=first["max_tokens"],
+        timestamp=first["timestamp"].isoformat() if first["timestamp"] else "",
+        results=results,
+    )
 
 
 @router.delete("/{experiment_id}")
-@pxt_retry()
 def delete_experiment(experiment_id: str):
     """Delete all results for an experiment."""
-    try:
-        table = pxt.get_table(_TABLE_PATH)
-        table.delete(where=(table.experiment_id == experiment_id) & (table.user_id == config.DEFAULT_USER_ID))
-        return {"message": f"Experiment {experiment_id} deleted"}
-    except Exception as e:
-        logger.error(f"Failed to delete experiment {experiment_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+    table = pxt.get_table(_TABLE_PATH)
+    table.delete(where=(table.experiment_id == experiment_id) & (table.user_id == config.DEFAULT_USER_ID))
+    return {"message": f"Experiment {experiment_id} deleted"}

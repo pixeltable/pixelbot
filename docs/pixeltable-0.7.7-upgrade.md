@@ -57,4 +57,10 @@ A fresh local schema apply completed with 19 models. A second diff reported all 
 
 On September 12, 2026, the read API was simplified against the canonical Pixeltable app guidance. The duplicated `pixelbot/queries.py` execution layer and versioned memory/persona reads were removed. `pixelbot/app.py` now declares the endpoint queries and exposes them through `FastAPIRouter`; custom FastAPI handlers retain the validation-heavy writes. A catalog created from the merged 3.0 schema remained fully in agreement (19 of 19 models, zero schema operations), and a real managed service returned 200 from the canonical memory and persona reads while the removed versioned routes returned 404.
 
+A second simplification removed unused file-wide deletion, per-entry workflow, TTS voice-list, and standalone database schema/version endpoints. Duplicate route-level exception wrappers now fall through to the application's sanitized error handler, while expected validation and missing-resource responses remain explicit. Retries remain only on read-only operations so provider calls and catalog writes cannot be repeated after partial success. Notification delivery is implemented once for both HTTP tests and Pixeltable tools, returns typed delivery status, and stores a redacted destination origin.
+
+The pytest fixture now reuses one isolated Pixeltable catalog and stops its PostgreSQL server when the session ends. Two consecutive full backend runs passed with 15 tests and left no Pixelbot test database process running.
+
+Torch and Transformers remain base dependencies because the declared CLIP indexes power core image and video-frame retrieval. Making Studio detection optional would not reduce the installation until those indexes move to another embedding model; that change requires retrieval-quality evaluation and similarity-threshold retuning and is outside this behavior-preserving cleanup.
+
 Provider calls are mocked and establish wiring only. Paid provider calls, hosted deployment, Cloud behavior, and the 48 agent trials were not run. Validation used a separate temporary `PIXELTABLE_HOME`; the old `agents` catalog was not changed.

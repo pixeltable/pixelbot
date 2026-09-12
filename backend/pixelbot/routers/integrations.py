@@ -4,7 +4,6 @@ import logging
 from datetime import datetime
 
 import pixeltable as pxt
-import requests as http_requests
 from fastapi import APIRouter, Query
 
 from pixelbot import config
@@ -17,6 +16,7 @@ from pixelbot.models import (
     TestNotificationRequest,
     TestNotificationResponse,
 )
+from pixelbot.notifications import deliver_notification, redacted_destination
 from pixelbot.utils import pxt_retry
 
 logger = logging.getLogger(__name__)
@@ -38,14 +38,13 @@ def get_integrations_status():
 
 
 @router.post("/test", response_model=TestNotificationResponse)
-@pxt_retry()
 def test_notification(req: TestNotificationRequest):
     """Send a test notification and log it to the notifications table."""
     service = req.service.lower()
-    now = datetime.utcnow()
+    now = datetime.now()
 
-    result = _send_notification(service, req.message)
-    if result is None:
+    delivery = deliver_notification(service, req.message)
+    if delivery is None:
         return TestNotificationResponse(
             service=service,
             status="error",
@@ -53,23 +52,21 @@ def test_notification(req: TestNotificationRequest):
             timestamp=now.isoformat(),
         )
 
-    is_success = "successfully" in result.lower() or "delivered" in result.lower()
-
     notifications = pxt.get_table("pixelbot_v3.notifications")
     row = NotificationRow(
         service=service,
-        destination=_get_destination(service),
+        destination=redacted_destination(service),
         message=req.message,
-        status="success" if is_success else "error",
-        response_code=200 if is_success else 0,
+        status="success" if delivery.success else "error",
+        response_code=delivery.response_code,
         timestamp=now,
     )
     notifications.insert([row])
 
     return TestNotificationResponse(
         service=service,
-        status="success" if is_success else "error",
-        result=result,
+        status="success" if delivery.success else "error",
+        result=delivery.message,
         timestamp=now.isoformat(),
     )
 
@@ -152,59 +149,3 @@ def get_notification_log(limit: int = Query(default=50, ge=1, le=100)):
 
     entries.sort(key=lambda e: e.timestamp, reverse=True)
     return NotificationLogResponse(notifications=entries[:limit], total=len(entries))
-
-
-def _send_notification(service: str, message: str) -> str | None:
-    """Call the notification service directly (not via Pixeltable UDF)."""
-    try:
-        if service == "slack":
-            url = config.SLACK_WEBHOOK_URL
-            if not url:
-                return "Error: SLACK_WEBHOOK_URL not configured."
-            resp = http_requests.post(url, json={"text": message}, timeout=10)
-            return (
-                "Slack message sent successfully."
-                if resp.status_code == 200
-                else f"Slack error ({resp.status_code}): {resp.text}"
-            )
-
-        if service == "discord":
-            url = config.DISCORD_WEBHOOK_URL
-            if not url:
-                return "Error: DISCORD_WEBHOOK_URL not configured."
-            resp = http_requests.post(url, json={"content": message}, timeout=10)
-            return (
-                "Discord message sent successfully."
-                if resp.status_code in (200, 204)
-                else f"Discord error ({resp.status_code}): {resp.text}"
-            )
-
-        if service == "webhook":
-            url = config.WEBHOOK_URL
-            if not url:
-                return "Error: WEBHOOK_URL not configured."
-            payload = {"text": message, "source": "pixelbot", "timestamp": datetime.utcnow().isoformat()}
-            resp = http_requests.post(url, json=payload, timeout=10)
-            return (
-                f"Webhook delivered ({resp.status_code})."
-                if resp.status_code < 300
-                else f"Webhook error ({resp.status_code}): {resp.text}"
-            )
-
-        return None
-    except http_requests.RequestException as e:
-        return f"{service} request failed: {e}"
-
-
-def _get_destination(service: str) -> str:
-    url_map = {
-        "slack": config.SLACK_WEBHOOK_URL,
-        "discord": config.DISCORD_WEBHOOK_URL,
-        "webhook": config.WEBHOOK_URL,
-    }
-    url = url_map.get(service, "")
-    if not url:
-        return "(not configured)"
-    if len(url) > 40:
-        return url[:20] + "..." + url[-15:]
-    return url

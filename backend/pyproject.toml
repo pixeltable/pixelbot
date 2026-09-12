@@ -14,6 +14,7 @@ dependencies = [
     "anthropic",
     "openai",
     "mistralai",
+    # Required by the core CLIP image/video indexes as well as Studio detection.
     "torch",
     "transformers",
     "spacy",

@@ -64,6 +64,7 @@ The Database page is an inspector for catalog rows, schemas, lineage, history, s
 - Media reads are confined to the upload root and configured `PIXELTABLE_HOME`, including resolved symlinks.
 - Database inspection and exports are confined to `pixelbot_v3` and registered scratch tables, with result caps.
 - The agent webhook tool can send only to `WEBHOOK_URL` configured at process startup.
+- HTTP routes and agent tools share one notification transport, and catalog logs store only the destination origin.
 - There is no runtime expression evaluation or general catalog mutation API.
 
 ## Validation

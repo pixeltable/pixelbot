@@ -64,44 +64,39 @@ def _column_info(tbl) -> list[dict]:
 @pxt_retry()
 def list_all_tables():
     """List all tables and views in the agents namespace with schema info."""
-    try:
-        table_paths = pxt.list_tables(NAMESPACE, recursive=True)
+    table_paths = pxt.list_tables(NAMESPACE, recursive=True)
 
-        tables = []
-        for path in sorted(table_paths):
-            try:
-                tbl = pxt.get_table(path)
-                row_count = tbl.count()
-                meta = tbl.get_metadata()
-                base_path = meta.get("base")
+    tables = []
+    for path in sorted(table_paths):
+        try:
+            tbl = pxt.get_table(path)
+            row_count = tbl.count()
+            meta = tbl.get_metadata()
+            base_path = meta.get("base")
 
-                tables.append(
-                    {
-                        "path": path,
-                        "type": "view" if meta.get("is_view") else "table",
-                        "base_table": base_path,
-                        "columns": _column_info(tbl),
-                        "row_count": row_count,
-                    }
-                )
-            except Exception as e:
-                logger.warning(f"Could not inspect table {path}: {e}")
-                tables.append(
-                    {
-                        "path": path,
-                        "type": "unknown",
-                        "base_table": None,
-                        "columns": [],
-                        "row_count": 0,
-                        "error": str(e),
-                    }
-                )
+            tables.append(
+                {
+                    "path": path,
+                    "type": "view" if meta.get("is_view") else "table",
+                    "base_table": base_path,
+                    "columns": _column_info(tbl),
+                    "row_count": row_count,
+                }
+            )
+        except Exception as e:
+            logger.warning(f"Could not inspect table {path}: {e}")
+            tables.append(
+                {
+                    "path": path,
+                    "type": "unknown",
+                    "base_table": None,
+                    "columns": [],
+                    "row_count": 0,
+                    "error": str(e),
+                }
+            )
 
-        return {"namespace": NAMESPACE, "tables": tables, "count": len(tables)}
-
-    except Exception as e:
-        logger.error(f"Error listing tables: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+    return {"namespace": NAMESPACE, "tables": tables, "count": len(tables)}
 
 
 @router.get("/table/{path:path}/rows")
@@ -115,59 +110,27 @@ def get_table_rows(path: str, limit: int = 50, offset: int = 0):
         tbl = pxt.get_table(path)
     except Exception:
         raise HTTPException(status_code=404, detail=f"Table '{path}' not found")
+    total = tbl.count()
+    col_names = tbl.columns()
 
-    try:
-        total = tbl.count()
-        col_names = tbl.columns()
+    raw_rows = tbl.select().limit(limit, offset=offset).collect()
 
-        raw_rows = tbl.select().limit(limit, offset=offset).collect()
+    rows = []
+    for raw in raw_rows:
+        row: dict = {}
+        for col in col_names:
+            val = raw.get(col)
+            row[col] = _safe_value(val)
+        rows.append(row)
 
-        rows = []
-        for raw in raw_rows:
-            row: dict = {}
-            for col in col_names:
-                val = raw.get(col)
-                row[col] = _safe_value(val)
-            rows.append(row)
-
-        return {
-            "path": path,
-            "columns": col_names,
-            "rows": rows,
-            "total": total,
-            "offset": offset,
-            "limit": limit,
-        }
-
-    except Exception as e:
-        logger.error(f"Error fetching rows from {path}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/table/{path:path}/schema")
-@pxt_retry()
-def get_table_schema(path: str):
-    """Get detailed schema for a specific table."""
-    path = require_allowed_table(path)
-    try:
-        tbl = pxt.get_table(path)
-    except Exception:
-        raise HTTPException(status_code=404, detail=f"Table '{path}' not found")
-
-    try:
-        meta = tbl.get_metadata()
-        base_path = meta.get("base")
-        return {
-            "path": path,
-            "type": "view" if meta.get("is_view") else "table",
-            "base_table": base_path,
-            "columns": _column_info(tbl),
-            "row_count": tbl.count(),
-        }
-
-    except Exception as e:
-        logger.error(f"Error getting schema for {path}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+    return {
+        "path": path,
+        "columns": col_names,
+        "rows": rows,
+        "total": total,
+        "offset": offset,
+        "limit": limit,
+    }
 
 
 class SampleRequest(BaseModel):
@@ -194,56 +157,48 @@ def sample_table(body: SampleRequest):
 
     if not body.n and not body.fraction:
         raise HTTPException(status_code=400, detail="Provide either 'n' or 'fraction'")
+    total = tbl.count()
+    query = tbl.select()
 
-    try:
-        total = tbl.count()
-        query = tbl.select()
+    sample_kwargs: dict = {}
+    if body.n is not None:
+        sample_kwargs["n"] = min(body.n, total)
+    elif body.fraction is not None:
+        sample_kwargs["fraction"] = max(0.0, min(1.0, body.fraction))
 
-        sample_kwargs: dict = {}
-        if body.n is not None:
-            sample_kwargs["n"] = min(body.n, total)
-        elif body.fraction is not None:
-            sample_kwargs["fraction"] = max(0.0, min(1.0, body.fraction))
+    if body.seed is not None:
+        sample_kwargs["seed"] = body.seed
 
-        if body.seed is not None:
-            sample_kwargs["seed"] = body.seed
-
-        if body.stratify_by:
-            col_names = tbl.columns()
-            if body.stratify_by not in col_names:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Column '{body.stratify_by}' not found in {body.path}",
-                )
-            sample_kwargs["stratify_by"] = getattr(tbl, body.stratify_by)
-
-        raw_rows = query.sample(**sample_kwargs).collect()
-
+    if body.stratify_by:
         col_names = tbl.columns()
-        rows = []
-        for raw in raw_rows:
-            row = {col: _safe_value(raw.get(col)) for col in col_names}
-            rows.append(row)
+        if body.stratify_by not in col_names:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Column '{body.stratify_by}' not found in {body.path}",
+            )
+        sample_kwargs["stratify_by"] = getattr(tbl, body.stratify_by)
 
-        return {
-            "path": body.path,
-            "columns": col_names,
-            "rows": rows,
-            "sample_count": len(rows),
-            "total": total,
-            "params": {
-                "n": body.n,
-                "fraction": body.fraction,
-                "stratify_by": body.stratify_by,
-                "seed": body.seed,
-            },
-        }
+    raw_rows = query.sample(**sample_kwargs).collect()
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Sample error for {body.path}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+    col_names = tbl.columns()
+    rows = []
+    for raw in raw_rows:
+        row = {col: _safe_value(raw.get(col)) for col in col_names}
+        rows.append(row)
+
+    return {
+        "path": body.path,
+        "columns": col_names,
+        "rows": rows,
+        "sample_count": len(rows),
+        "total": total,
+        "params": {
+            "n": body.n,
+            "fraction": body.fraction,
+            "stratify_by": body.stratify_by,
+            "seed": body.seed,
+        },
+    }
 
 
 @router.get("/timeline")
@@ -353,58 +308,50 @@ def join_tables(body: JoinRequest):
 
     if body.join_type not in ("inner", "left", "cross"):
         raise HTTPException(status_code=400, detail=f"Unsupported join type: {body.join_type}")
+    left_col_ref = getattr(left, body.left_column)
+    right_col_ref = getattr(right, body.right_column)
 
-    try:
-        left_col_ref = getattr(left, body.left_column)
-        right_col_ref = getattr(right, body.right_column)
+    # Build join
+    join_type = cast(Literal["inner", "left", "cross"], body.join_type)
+    if join_type == "cross":
+        joined = left.join(right, how="cross")
+    else:
+        joined = left.join(right, on=left_col_ref == right_col_ref, how=join_type)
 
-        # Build join
-        join_type = cast(Literal["inner", "left", "cross"], body.join_type)
-        if join_type == "cross":
-            joined = left.join(right, how="cross")
-        else:
-            joined = left.join(right, on=left_col_ref == right_col_ref, how=join_type)
+    # Select all columns from both tables (prefix to avoid collisions)
+    select_kwargs = {}
+    for col in left_cols:
+        key = f"l_{col}"
+        try:
+            select_kwargs[key] = getattr(left, col)
+        except Exception:
+            pass
+    for col in right_cols:
+        key = f"r_{col}"
+        try:
+            select_kwargs[key] = getattr(right, col)
+        except Exception:
+            pass
 
-        # Select all columns from both tables (prefix to avoid collisions)
-        select_kwargs = {}
-        for col in left_cols:
-            key = f"l_{col}"
-            try:
-                select_kwargs[key] = getattr(left, col)
-            except Exception:
-                pass
-        for col in right_cols:
-            key = f"r_{col}"
-            try:
-                select_kwargs[key] = getattr(right, col)
-            except Exception:
-                pass
+    raw_rows = joined.select(**select_kwargs).limit(body.limit).collect()
 
-        raw_rows = joined.select(**select_kwargs).limit(body.limit).collect()
+    rows = []
+    for raw in raw_rows:
+        row = {}
+        for k, v in raw.items():
+            row[k] = _safe_value(v)
+        rows.append(row)
 
-        rows = []
-        for raw in raw_rows:
-            row = {}
-            for k, v in raw.items():
-                row[k] = _safe_value(v)
-            rows.append(row)
-
-        return {
-            "left_table": body.left_table,
-            "right_table": body.right_table,
-            "join_type": body.join_type,
-            "left_column": body.left_column,
-            "right_column": body.right_column,
-            "columns": list(select_kwargs.keys()),
-            "rows": rows,
-            "count": len(rows),
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Join error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+    return {
+        "left_table": body.left_table,
+        "right_table": body.right_table,
+        "join_type": body.join_type,
+        "left_column": body.left_column,
+        "right_column": body.right_column,
+        "columns": list(select_kwargs.keys()),
+        "rows": rows,
+        "count": len(rows),
+    }
 
 
 # ── Pipeline Inspector ────────────────────────────────────────────────────────
@@ -516,220 +463,174 @@ def get_pipeline():
     Includes tables, views, computed column lineage, embedding indices,
     version history, and per-column error counts.
     """
-    try:
-        table_paths = sorted(pxt.list_tables(NAMESPACE, recursive=True))
+    table_paths = sorted(pxt.list_tables(NAMESPACE, recursive=True))
 
-        nodes: list[dict] = []
-        edges: list[dict] = []
+    nodes: list[dict] = []
+    edges: list[dict] = []
 
-        for path in table_paths:
+    for path in table_paths:
+        try:
+            tbl = pxt.get_table(path)
+            md = tbl.get_metadata()
+            col_meta = md.get("columns", {})
+            row_count = tbl.count()
+
+            all_col_names = set(col_meta.keys())
+
+            columns = []
+            computed_cols = []
+            insertable_cols: set[str] = set()
+
+            short_name = path.rsplit("/", 1)[-1]
+
+            for col_name, info in col_meta.items():
+                cw = info.get("computed_with")
+                is_computed = cw is not None
+                if not is_computed:
+                    insertable_cols.add(col_name)
+                defined_in = info.get("defined_in")
+
+                cw_str = str(cw)[:200] if cw else None
+                func_name = _extract_func_name(cw_str) if is_computed else None
+                func_type = _classify_func(func_name) if func_name else None
+
+                col_entry: dict = {
+                    "name": col_name,
+                    "type": info.get("type_", "unknown"),
+                    "is_computed": is_computed,
+                    "computed_with": cw_str,
+                    "defined_in": defined_in,
+                    "defined_in_self": defined_in == short_name,
+                    "func_name": func_name,
+                    "func_type": func_type,
+                }
+                comment = info.get("comment")
+                if comment:
+                    col_entry["comment"] = comment
+                custom_meta = info.get("custom_metadata")
+                if custom_meta:
+                    col_entry["custom_metadata"] = custom_meta
+                columns.append(col_entry)
+                if is_computed:
+                    computed_cols.append(col_name)
+
+            # Compute error counts for computed columns (sample first 500 rows)
+            total_errors = 0
+            for col in columns:
+                if col["is_computed"]:
+                    errs = _count_col_errors(tbl, col["name"])
+                    col["error_count"] = errs
+                    total_errors += errs
+                else:
+                    col["error_count"] = 0
+
+            # Column-level dependency edges (within this table)
+            for col in columns:
+                if col["is_computed"] and col["computed_with"]:
+                    deps = _parse_deps(col["computed_with"], all_col_names)
+                    col["depends_on"] = deps
+
+            # Indices
+            raw_indexes = md.get("indexes", {})
+            indexes = []
+            for idx_name, idx_info in raw_indexes.items():
+                indexes.append(
+                    {
+                        "name": idx_name,
+                        "columns": idx_info.get("columns", []),
+                        "type": idx_info.get("index_type", "unknown"),
+                        "embedding": str(idx_info.get("parameters", {}).get("embedding", ""))[:120],
+                    }
+                )
+
+            # Version history (last 10)
             try:
-                tbl = pxt.get_table(path)
-                md = tbl.get_metadata()
-                col_meta = md.get("columns", {})
-                row_count = tbl.count()
-
-                all_col_names = set(col_meta.keys())
-
-                columns = []
-                computed_cols = []
-                insertable_cols: set[str] = set()
-
-                short_name = path.rsplit("/", 1)[-1]
-
-                for col_name, info in col_meta.items():
-                    cw = info.get("computed_with")
-                    is_computed = cw is not None
-                    if not is_computed:
-                        insertable_cols.add(col_name)
-                    defined_in = info.get("defined_in")
-
-                    cw_str = str(cw)[:200] if cw else None
-                    func_name = _extract_func_name(cw_str) if is_computed else None
-                    func_type = _classify_func(func_name) if func_name else None
-
-                    col_entry: dict = {
-                        "name": col_name,
-                        "type": info.get("type_", "unknown"),
-                        "is_computed": is_computed,
-                        "computed_with": cw_str,
-                        "defined_in": defined_in,
-                        "defined_in_self": defined_in == short_name,
-                        "func_name": func_name,
-                        "func_type": func_type,
-                    }
-                    comment = info.get("comment")
-                    if comment:
-                        col_entry["comment"] = comment
-                    custom_meta = info.get("custom_metadata")
-                    if custom_meta:
-                        col_entry["custom_metadata"] = custom_meta
-                    columns.append(col_entry)
-                    if is_computed:
-                        computed_cols.append(col_name)
-
-                # Compute error counts for computed columns (sample first 500 rows)
-                total_errors = 0
-                for col in columns:
-                    if col["is_computed"]:
-                        errs = _count_col_errors(tbl, col["name"])
-                        col["error_count"] = errs
-                        total_errors += errs
-                    else:
-                        col["error_count"] = 0
-
-                # Column-level dependency edges (within this table)
-                for col in columns:
-                    if col["is_computed"] and col["computed_with"]:
-                        deps = _parse_deps(col["computed_with"], all_col_names)
-                        col["depends_on"] = deps
-
-                # Indices
-                raw_indexes = md.get("indexes", {})
-                indexes = []
-                for idx_name, idx_info in raw_indexes.items():
-                    indexes.append(
+                raw_versions = tbl.get_versions()
+                versions = []
+                for v in raw_versions[:10]:
+                    versions.append(
                         {
-                            "name": idx_name,
-                            "columns": idx_info.get("columns", []),
-                            "type": idx_info.get("index_type", "unknown"),
-                            "embedding": str(idx_info.get("parameters", {}).get("embedding", ""))[:120],
+                            "version": v["version"],
+                            "created_at": v["created_at"].isoformat() if v.get("created_at") else None,
+                            "change_type": v.get("change_type"),
+                            "inserts": v.get("inserts", 0),
+                            "updates": v.get("updates", 0),
+                            "deletes": v.get("deletes", 0),
+                            "errors": v.get("errors", 0),
                         }
                     )
+            except Exception:
+                versions = []
 
-                # Version history (last 10)
-                try:
-                    raw_versions = tbl.get_versions()
-                    versions = []
-                    for v in raw_versions[:10]:
-                        versions.append(
-                            {
-                                "version": v["version"],
-                                "created_at": v["created_at"].isoformat() if v.get("created_at") else None,
-                                "change_type": v.get("change_type"),
-                                "inserts": v.get("inserts", 0),
-                                "updates": v.get("updates", 0),
-                                "deletes": v.get("deletes", 0),
-                                "errors": v.get("errors", 0),
-                            }
-                        )
-                except Exception:
-                    versions = []
+            base_path = md.get("base")
+            is_view = md.get("is_view", False)
 
-                base_path = md.get("base")
-                is_view = md.get("is_view", False)
+            iterator_type = _detect_iterator(columns) if is_view else None
 
-                iterator_type = _detect_iterator(columns) if is_view else None
-
-                nodes.append(
-                    {
-                        "path": path,
-                        "name": short_name,
-                        "is_view": is_view,
-                        "base": base_path,
-                        "row_count": row_count,
-                        "version": md.get("version", 0),
-                        "total_errors": total_errors,
-                        "columns": columns,
-                        "indexes": indexes,
-                        "versions": versions,
-                        "computed_count": len(computed_cols),
-                        "insertable_count": len(columns) - len(computed_cols),
-                        "iterator_type": iterator_type,
-                    }
-                )
-
-                if is_view and base_path:
-                    edges.append(
-                        {
-                            "source": base_path,
-                            "target": path,
-                            "type": "view",
-                            "label": iterator_type or "view",
-                        }
-                    )
-
-                # Cross-table query edges (e.g., tools -> chunks via search_documents)
-                seen_query_targets: set[str] = set()
-                for col in columns:
-                    fn = col.get("func_name")
-                    if fn and fn in _QUERY_TABLE_MAP:
-                        target_table = _QUERY_TABLE_MAP[fn]
-                        edge_key = f"{path}->{target_table}"
-                        if edge_key not in seen_query_targets:
-                            seen_query_targets.add(edge_key)
-                            edges.append(
-                                {
-                                    "source": target_table,
-                                    "target": path,
-                                    "type": "query",
-                                    "label": fn,
-                                }
-                            )
-
-            except Exception as e:
-                logger.warning(f"Pipeline: could not inspect {path}: {e}")
-                nodes.append(
-                    {
-                        "path": path,
-                        "name": path.split(".")[-1] if "." in path else path,
-                        "is_view": False,
-                        "base": None,
-                        "row_count": 0,
-                        "version": 0,
-                        "total_errors": 0,
-                        "columns": [],
-                        "indexes": [],
-                        "versions": [],
-                        "computed_count": 0,
-                        "insertable_count": 0,
-                        "error": str(e),
-                    }
-                )
-
-        return {"nodes": nodes, "edges": edges}
-
-    except Exception as e:
-        logger.error(f"Pipeline error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-# ── Version History ───────────────────────────────────────────────────────────
-
-
-@router.get("/table/{path:path}/versions")
-@pxt_retry()
-def get_table_versions(path: str, limit: int = 20):
-    """Get the version history for a specific table."""
-    path = require_allowed_table(path)
-    try:
-        tbl = pxt.get_table(path)
-    except Exception:
-        raise HTTPException(status_code=404, detail=f"Table '{path}' not found")
-
-    try:
-        raw_versions = tbl.get_versions()
-        versions = []
-        for v in raw_versions[:limit]:
-            versions.append(
+            nodes.append(
                 {
-                    "version": v["version"],
-                    "created_at": v["created_at"].isoformat() if v.get("created_at") else None,
-                    "change_type": v.get("change_type"),
-                    "inserts": v.get("inserts", 0),
-                    "updates": v.get("updates", 0),
-                    "deletes": v.get("deletes", 0),
-                    "errors": v.get("errors", 0),
-                    "schema_change": v.get("schema_change"),
+                    "path": path,
+                    "name": short_name,
+                    "is_view": is_view,
+                    "base": base_path,
+                    "row_count": row_count,
+                    "version": md.get("version", 0),
+                    "total_errors": total_errors,
+                    "columns": columns,
+                    "indexes": indexes,
+                    "versions": versions,
+                    "computed_count": len(computed_cols),
+                    "insertable_count": len(columns) - len(computed_cols),
+                    "iterator_type": iterator_type,
                 }
             )
 
-        return {
-            "path": path,
-            "current_version": versions[0]["version"] if versions else 0,
-            "can_revert": len(versions) > 1,
-            "versions": versions,
-        }
-    except Exception as e:
-        logger.error(f"get_versions error for {path}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+            if is_view and base_path:
+                edges.append(
+                    {
+                        "source": base_path,
+                        "target": path,
+                        "type": "view",
+                        "label": iterator_type or "view",
+                    }
+                )
+
+            # Cross-table query edges (e.g., tools -> chunks via search_documents)
+            seen_query_targets: set[str] = set()
+            for col in columns:
+                fn = col.get("func_name")
+                if fn and fn in _QUERY_TABLE_MAP:
+                    target_table = _QUERY_TABLE_MAP[fn]
+                    edge_key = f"{path}->{target_table}"
+                    if edge_key not in seen_query_targets:
+                        seen_query_targets.add(edge_key)
+                        edges.append(
+                            {
+                                "source": target_table,
+                                "target": path,
+                                "type": "query",
+                                "label": fn,
+                            }
+                        )
+
+        except Exception as e:
+            logger.warning(f"Pipeline: could not inspect {path}: {e}")
+            nodes.append(
+                {
+                    "path": path,
+                    "name": path.split(".")[-1] if "." in path else path,
+                    "is_view": False,
+                    "base": None,
+                    "row_count": 0,
+                    "version": 0,
+                    "total_errors": 0,
+                    "columns": [],
+                    "indexes": [],
+                    "versions": [],
+                    "computed_count": 0,
+                    "insertable_count": 0,
+                    "error": str(e),
+                }
+            )
+
+    return {"nodes": nodes, "edges": edges}
