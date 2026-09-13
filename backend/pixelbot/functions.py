@@ -9,6 +9,8 @@ import requests
 import yfinance as yf
 from duckduckgo_search import DDGS
 
+from pixelbot.notifications import deliver_notification
+
 
 @pxt.udf
 def get_latest_news(topic: str) -> str:
@@ -186,47 +188,25 @@ def fetch_financial_data(ticker: str) -> str:
 @pxt.udf
 def send_slack_message(message: str) -> str:
     """Send a message to a configured Slack channel via incoming webhook."""
-    webhook_url = os.environ.get("SLACK_WEBHOOK_URL", "")
-    if not webhook_url:
-        return "Error: SLACK_WEBHOOK_URL not configured."
-    try:
-        resp = requests.post(webhook_url, json={"text": message}, timeout=10)
-        if resp.status_code == 200:
-            return "Slack message sent successfully."
-        return f"Slack error ({resp.status_code}): {resp.text}"
-    except requests.RequestException as e:
-        return f"Slack request failed: {e}"
+    result = deliver_notification("slack", message)
+    assert result is not None
+    return result.message
 
 
 @pxt.udf
 def send_discord_message(message: str) -> str:
     """Send a message to a configured Discord channel via webhook."""
-    webhook_url = os.environ.get("DISCORD_WEBHOOK_URL", "")
-    if not webhook_url:
-        return "Error: DISCORD_WEBHOOK_URL not configured."
-    try:
-        resp = requests.post(webhook_url, json={"content": message}, timeout=10)
-        if resp.status_code in (200, 204):
-            return "Discord message sent successfully."
-        return f"Discord error ({resp.status_code}): {resp.text}"
-    except requests.RequestException as e:
-        return f"Discord request failed: {e}"
+    result = deliver_notification("discord", message)
+    assert result is not None
+    return result.message
 
 
 @pxt.udf
 def send_webhook(message: str) -> str:
     """POST a JSON payload to the configured webhook URL."""
-    target_url = os.environ.get("WEBHOOK_URL", "")
-    if not target_url:
-        return "Error: WEBHOOK_URL not configured."
-    try:
-        payload = {"text": message, "source": "pixelbot", "timestamp": datetime.utcnow().isoformat()}
-        resp = requests.post(target_url, json=payload, timeout=10)
-        if resp.status_code < 300:
-            return f"Webhook delivered ({resp.status_code})."
-        return f"Webhook error ({resp.status_code}): {resp.text}"
-    except requests.RequestException as e:
-        return f"Webhook request failed: {e}"
+    result = deliver_notification("webhook", message)
+    assert result is not None
+    return result.message
 
 
 @pxt.udf

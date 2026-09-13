@@ -525,80 +525,64 @@ class CsvRowsRequest(BaseModel):
 def get_csv_rows(body: CsvRowsRequest):
     """Return paginated rows from a CSV table."""
     user_id = config.DEFAULT_USER_ID
+    registration = _verify_csv_ownership(body.csv_uuid, user_id)
+    table_name = registration["table_name"]
+    col_names = registration["col_names"]
+    total_rows = registration["row_count"]
 
-    try:
-        registration = _verify_csv_ownership(body.csv_uuid, user_id)
-        table_name = registration["table_name"]
-        col_names = registration["col_names"]
-        total_rows = registration["row_count"]
+    # Fetch rows from the actual CSV table
+    tbl = pxt.get_table(table_name)
+    rows_data: list[dict] = []
+    all_rows = list(tbl.select().limit(body.limit + body.offset).collect())
 
-        # Fetch rows from the actual CSV table
-        tbl = pxt.get_table(table_name)
-        rows_data: list[dict] = []
-        all_rows = list(tbl.select().limit(body.limit + body.offset).collect())
+    for row in all_rows[body.offset :]:
+        row_dict: dict = {}
+        for col in col_names:
+            val = row.get(col)
+            # Ensure JSON-serializable values
+            if val is None:
+                row_dict[col] = None
+            elif isinstance(val, (int, float, bool, str)):
+                row_dict[col] = val
+            else:
+                row_dict[col] = str(val)
+        rows_data.append(row_dict)
 
-        for row in all_rows[body.offset :]:
-            row_dict: dict = {}
-            for col in col_names:
-                val = row.get(col)
-                # Ensure JSON-serializable values
-                if val is None:
-                    row_dict[col] = None
-                elif isinstance(val, (int, float, bool, str)):
-                    row_dict[col] = val
-                else:
-                    row_dict[col] = str(val)
-            rows_data.append(row_dict)
-
-        return {
-            "table_name": table_name,
-            "columns": col_names,
-            "rows": rows_data,
-            "total": total_rows,
-            "offset": body.offset,
-            "limit": body.limit,
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error fetching CSV rows: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+    return {
+        "table_name": table_name,
+        "columns": col_names,
+        "rows": rows_data,
+        "total": total_rows,
+        "offset": body.offset,
+        "limit": body.limit,
+    }
 
 
 @router.delete("/csv/{csv_uuid}")
 def delete_csv_table(csv_uuid: str):
     """Delete a CSV table and its registry entry."""
     user_id = config.DEFAULT_USER_ID
+    registry = pxt.get_table("pixelbot_v3.csv_registry")
+    check = (
+        registry.where((registry.uuid == csv_uuid) & (registry.user_id == user_id))
+        .select(registry.table_name)
+        .collect()
+    )
+    if not check:
+        raise HTTPException(status_code=404, detail="CSV table not found")
 
+    table_name = check[0]["table_name"]
+
+    # Drop the actual CSV table
     try:
-        registry = pxt.get_table("pixelbot_v3.csv_registry")
-        check = (
-            registry.where((registry.uuid == csv_uuid) & (registry.user_id == user_id))
-            .select(registry.table_name)
-            .collect()
-        )
-        if not check:
-            raise HTTPException(status_code=404, detail="CSV table not found")
-
-        table_name = check[0]["table_name"]
-
-        # Drop the actual CSV table
-        try:
-            pxt.drop_table(table_name, force=True)
-        except Exception as e:
-            logger.warning(f"Could not drop CSV table {table_name}: {e}")
-
-        # Remove from registry
-        registry.delete(where=(registry.uuid == csv_uuid) & (registry.user_id == user_id))
-
-        return {"message": f"CSV table '{table_name}' deleted"}
-
-    except HTTPException:
-        raise
+        pxt.drop_table(table_name, force=True)
     except Exception as e:
-        logger.error(f"Error deleting CSV table: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.warning(f"Could not drop CSV table {table_name}: {e}")
+
+    # Remove from registry
+    registry.delete(where=(registry.uuid == csv_uuid) & (registry.user_id == user_id))
+
+    return {"message": f"CSV table '{table_name}' deleted"}
 
 
 # ── CSV Row CRUD ─────────────────────────────────────────────────────────────
@@ -699,32 +683,24 @@ def csv_add_rows(body: CsvAddRowsRequest):
 
     if not body.rows:
         raise HTTPException(status_code=400, detail="No rows provided")
+    tbl = pxt.get_table(table_name)
+    schema = _get_col_schema(tbl)
 
-    try:
-        tbl = pxt.get_table(table_name)
-        schema = _get_col_schema(tbl)
+    coerced_rows = []
+    for row in body.rows:
+        coerced = {}
+        for col in col_names:
+            coerced[col] = _coerce_value(row.get(col), col, schema)
+        coerced_rows.append(coerced)
 
-        coerced_rows = []
-        for row in body.rows:
-            coerced = {}
-            for col in col_names:
-                coerced[col] = _coerce_value(row.get(col), col, schema)
-            coerced_rows.append(coerced)
+    tbl.insert(coerced_rows)
+    new_count = _sync_registry_row_count(table_name, user_id)
 
-        tbl.insert(coerced_rows)
-        new_count = _sync_registry_row_count(table_name, user_id)
-
-        return {
-            "message": f"Added {len(coerced_rows)} row(s)",
-            "rows_added": len(coerced_rows),
-            "new_total": new_count,
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error adding CSV rows: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+    return {
+        "message": f"Added {len(coerced_rows)} row(s)",
+        "rows_added": len(coerced_rows),
+        "new_total": new_count,
+    }
 
 
 class CsvUpdateRowRequest(BaseModel):
@@ -747,39 +723,31 @@ def csv_update_row(body: CsvUpdateRowRequest):
 
     if not body.updated_values:
         raise HTTPException(status_code=400, detail="No updated values provided")
+    tbl = pxt.get_table(table_name)
+    schema = _get_col_schema(tbl)
 
-    try:
-        tbl = pxt.get_table(table_name)
-        schema = _get_col_schema(tbl)
+    # Coerce original row values
+    coerced_original: dict = {}
+    for col in col_names:
+        coerced_original[col] = _coerce_value(body.original_row.get(col), col, schema)
 
-        # Coerce original row values
-        coerced_original: dict = {}
-        for col in col_names:
-            coerced_original[col] = _coerce_value(body.original_row.get(col), col, schema)
+    where = _build_row_where(tbl, col_names, coerced_original)
 
-        where = _build_row_where(tbl, col_names, coerced_original)
+    # Coerce updated values
+    update_dict: dict = {}
+    for col, val in body.updated_values.items():
+        if col in col_names:
+            update_dict[col] = _coerce_value(val, col, schema)
 
-        # Coerce updated values
-        update_dict: dict = {}
-        for col, val in body.updated_values.items():
-            if col in col_names:
-                update_dict[col] = _coerce_value(val, col, schema)
+    if not update_dict:
+        raise HTTPException(status_code=400, detail="No valid columns to update")
 
-        if not update_dict:
-            raise HTTPException(status_code=400, detail="No valid columns to update")
+    status = tbl.update(update_dict, where=where)
 
-        status = tbl.update(update_dict, where=where)
-
-        return {
-            "message": f"Updated {status.num_rows} row(s)",
-            "rows_updated": status.num_rows,
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error updating CSV row: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+    return {
+        "message": f"Updated {status.num_rows} row(s)",
+        "rows_updated": status.num_rows,
+    }
 
 
 class CsvDeleteRowsRequest(BaseModel):
@@ -794,30 +762,22 @@ def csv_delete_rows(body: CsvDeleteRowsRequest):
     reg = _verify_csv_ownership(body.csv_uuid, user_id)
     table_name = reg["table_name"]
     col_names: list[str] = reg["col_names"]
+    tbl = pxt.get_table(table_name)
+    schema = _get_col_schema(tbl)
 
-    try:
-        tbl = pxt.get_table(table_name)
-        schema = _get_col_schema(tbl)
+    coerced: dict = {}
+    for col in col_names:
+        coerced[col] = _coerce_value(body.row_values.get(col), col, schema)
 
-        coerced: dict = {}
-        for col in col_names:
-            coerced[col] = _coerce_value(body.row_values.get(col), col, schema)
+    where = _build_row_where(tbl, col_names, coerced)
+    status = tbl.delete(where=where)
+    new_count = _sync_registry_row_count(table_name, user_id)
 
-        where = _build_row_where(tbl, col_names, coerced)
-        status = tbl.delete(where=where)
-        new_count = _sync_registry_row_count(table_name, user_id)
-
-        return {
-            "message": f"Deleted {status.num_rows} row(s)",
-            "rows_deleted": status.num_rows,
-            "new_total": new_count,
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error deleting CSV rows: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+    return {
+        "message": f"Deleted {status.num_rows} row(s)",
+        "rows_deleted": status.num_rows,
+        "new_total": new_count,
+    }
 
 
 class CsvRevertRequest(BaseModel):
@@ -830,25 +790,19 @@ def csv_revert(body: CsvRevertRequest):
     user_id = config.DEFAULT_USER_ID
     registration = _verify_csv_ownership(body.csv_uuid, user_id)
     table_name = registration["table_name"]
+    tbl = pxt.get_table(table_name)
+    tbl.revert()
+    new_count = _sync_registry_row_count(table_name, user_id)
 
-    try:
-        tbl = pxt.get_table(table_name)
-        tbl.revert()
-        new_count = _sync_registry_row_count(table_name, user_id)
+    versions = tbl.get_versions()
+    can_undo = len(versions) > 1
 
-        versions = tbl.get_versions()
-        can_undo = len(versions) > 1
-
-        return {
-            "message": "Reverted to previous version",
-            "new_total": new_count,
-            "current_version": versions[0]["version"] if versions else 0,
-            "can_undo": can_undo,
-        }
-
-    except Exception as e:
-        logger.error(f"Error reverting CSV table: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+    return {
+        "message": "Reverted to previous version",
+        "new_total": new_count,
+        "current_version": versions[0]["version"] if versions else 0,
+        "can_undo": can_undo,
+    }
 
 
 # ── CSV Version History ──────────────────────────────────────────────────────
@@ -860,33 +814,27 @@ def csv_versions(csv_uuid: str):
     user_id = config.DEFAULT_USER_ID
     registration = _verify_csv_ownership(csv_uuid, user_id)
     table_name = registration["table_name"]
+    tbl = pxt.get_table(table_name)
+    versions = tbl.get_versions()
 
-    try:
-        tbl = pxt.get_table(table_name)
-        versions = tbl.get_versions()
-
-        return {
-            "table_name": table_name,
-            "current_version": versions[0]["version"] if versions else 0,
-            "can_undo": len(versions) > 1,
-            "versions": [
-                {
-                    "version": v["version"],
-                    "created_at": v["created_at"].isoformat() if v.get("created_at") else None,
-                    "change_type": v.get("change_type", "data"),
-                    "inserts": v.get("inserts", 0),
-                    "updates": v.get("updates", 0),
-                    "deletes": v.get("deletes", 0),
-                    "errors": v.get("errors", 0),
-                    "schema_change": v.get("schema_change"),
-                }
-                for v in versions
-            ],
-        }
-
-    except Exception as e:
-        logger.error(f"Error fetching CSV versions: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+    return {
+        "table_name": table_name,
+        "current_version": versions[0]["version"] if versions else 0,
+        "can_undo": len(versions) > 1,
+        "versions": [
+            {
+                "version": v["version"],
+                "created_at": v["created_at"].isoformat() if v.get("created_at") else None,
+                "change_type": v.get("change_type", "data"),
+                "inserts": v.get("inserts", 0),
+                "updates": v.get("updates", 0),
+                "deletes": v.get("deletes", 0),
+                "errors": v.get("errors", 0),
+                "schema_change": v.get("schema_change"),
+            }
+            for v in versions
+        ],
+    }
 
 
 # ── Cross-modal Similarity Search ────────────────────────────────────────────
@@ -900,7 +848,6 @@ class SearchRequest(BaseModel):
 
 
 @router.post("/search")
-@pxt_retry()
 def search_studio(body: SearchRequest):
     """Cross-modal semantic search across all file types using embedding indexes."""
     user_id = config.DEFAULT_USER_ID
@@ -1097,7 +1044,6 @@ def _get_embed_clip_fn():
 
 
 @router.get("/embeddings")
-@pxt_retry()
 def get_embeddings(space: str = "text", limit: int = 200):
     """
     Return 2-D UMAP-projected embeddings for visualization.
@@ -1322,34 +1268,26 @@ def _collect_visual_embeddings(
 def get_image_preview(uuid: str):
     """Get a larger preview of an image for the studio workspace."""
     user_id = config.DEFAULT_USER_ID
-    try:
-        img_table = _get_pxt_table("image")
-        rows = (
-            img_table.where((img_table.uuid == uuid) & (img_table.user_id == user_id))
-            .select(img=img_table.image)
-            .collect()
-        )
+    img_table = _get_pxt_table("image")
+    rows = (
+        img_table.where((img_table.uuid == uuid) & (img_table.user_id == user_id)).select(img=img_table.image).collect()
+    )
 
-        if len(rows) == 0:
-            raise HTTPException(status_code=404, detail="Image not found")
+    if len(rows) == 0:
+        raise HTTPException(status_code=404, detail="Image not found")
 
-        img = rows[0]["img"]
-        if not isinstance(img, Image.Image):
-            raise HTTPException(status_code=500, detail="Could not load image")
+    img = rows[0]["img"]
+    if not isinstance(img, Image.Image):
+        raise HTTPException(status_code=500, detail="Could not load image")
 
-        width, height = img.size
-        preview = _pil_image_to_data_uri(img, max_size=PREVIEW_SIZE)
-        return {
-            "preview": preview,
-            "width": width,
-            "height": height,
-            "mode": img.mode,
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Studio: error getting image preview: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+    width, height = img.size
+    preview = _pil_image_to_data_uri(img, max_size=PREVIEW_SIZE)
+    return {
+        "preview": preview,
+        "width": width,
+        "height": height,
+        "mode": img.mode,
+    }
 
 
 # ── Image Transform ──────────────────────────────────────────────────────────
@@ -1366,37 +1304,30 @@ class TransformRequest(BaseModel):
 def transform_image(body: TransformRequest):
     """Apply a PIL transform to an image and return the preview (no storage)."""
     user_id = config.DEFAULT_USER_ID
-    try:
-        img_table = _get_pxt_table("image")
-        rows = (
-            img_table.where((img_table.uuid == body.uuid) & (img_table.user_id == user_id))
-            .select(img=img_table.image)
-            .collect()
-        )
+    img_table = _get_pxt_table("image")
+    rows = (
+        img_table.where((img_table.uuid == body.uuid) & (img_table.user_id == user_id))
+        .select(img=img_table.image)
+        .collect()
+    )
 
-        if len(rows) == 0:
-            raise HTTPException(status_code=404, detail="Image not found")
+    if len(rows) == 0:
+        raise HTTPException(status_code=404, detail="Image not found")
 
-        img = rows[0]["img"]
-        if not isinstance(img, Image.Image):
-            raise HTTPException(status_code=500, detail="Could not load image")
+    img = rows[0]["img"]
+    if not isinstance(img, Image.Image):
+        raise HTTPException(status_code=500, detail="Could not load image")
 
-        result = _apply_image_operation(img, body.operation, body.params)
-        preview = _pil_image_to_data_uri(result, max_size=PREVIEW_SIZE)
+    result = _apply_image_operation(img, body.operation, body.params)
+    preview = _pil_image_to_data_uri(result, max_size=PREVIEW_SIZE)
 
-        return {
-            "preview": preview,
-            "width": result.size[0],
-            "height": result.size[1],
-            "mode": result.mode,
-            "operation": body.operation,
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Studio: image transform error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+    return {
+        "preview": preview,
+        "width": result.size[0],
+        "height": result.size[1],
+        "mode": result.mode,
+        "operation": body.operation,
+    }
 
 
 def _get_full_res_transform(body: TransformRequest) -> Image.Image:
@@ -1515,235 +1446,211 @@ def detect_objects(body: DetectRequest):
     model_info = DETECTION_MODELS.get(body.model)
     if not model_info:
         raise HTTPException(status_code=400, detail=f"Unknown model: {body.model}")
+    img: Image.Image | None = None
 
-    # Load image from the right table
-    try:
-        img: Image.Image | None = None
-
-        if body.source == "video_frame":
-            if body.frame_idx is None:
-                raise HTTPException(status_code=400, detail="frame_idx required for video_frame source")
-            frames_view = pxt.get_table("pixelbot_v3.video_frames")
-            rows = (
-                frames_view.where(
-                    (frames_view.uuid == body.uuid)
-                    & (frames_view.user_id == user_id)
-                    & (frames_view.frame_idx == body.frame_idx)
-                )
-                .select(frame=frames_view.frame)
-                .collect()
+    if body.source == "video_frame":
+        if body.frame_idx is None:
+            raise HTTPException(status_code=400, detail="frame_idx required for video_frame source")
+        frames_view = pxt.get_table("pixelbot_v3.video_frames")
+        rows = (
+            frames_view.where(
+                (frames_view.uuid == body.uuid)
+                & (frames_view.user_id == user_id)
+                & (frames_view.frame_idx == body.frame_idx)
             )
-            if rows:
-                img = rows[0].get("frame")
-        else:
-            img_table = _get_pxt_table("image")
-            rows = (
-                img_table.where((img_table.uuid == body.uuid) & (img_table.user_id == user_id))
-                .select(img=img_table.image)
-                .collect()
+            .select(frame=frames_view.frame)
+            .collect()
+        )
+        if rows:
+            img = rows[0].get("frame")
+    else:
+        img_table = _get_pxt_table("image")
+        rows = (
+            img_table.where((img_table.uuid == body.uuid) & (img_table.user_id == user_id))
+            .select(img=img_table.image)
+            .collect()
+        )
+        if rows:
+            img = rows[0].get("img")
+
+    if img is None or not isinstance(img, Image.Image):
+        raise HTTPException(status_code=404, detail="Image not found")
+
+    # Convert to RGB if needed
+    if img.mode != "RGB":
+        img = img.convert("RGB")
+    processor, model = _get_detection_model(body.model)
+    img_width, img_height = img.size
+
+    if model_info["type"] == "detection":
+        inputs = processor(images=img, return_tensors="pt")
+        with torch.no_grad():
+            outputs = model(**inputs)
+
+        target_sizes = torch.tensor([[img_height, img_width]])
+        results = processor.post_process_object_detection(outputs, target_sizes=target_sizes, threshold=body.threshold)[
+            0
+        ]
+
+        detections = []
+        for score, label_id, box in zip(
+            results["scores"].tolist(),
+            results["labels"].tolist(),
+            results["boxes"].tolist(),
+        ):
+            detections.append(
+                {
+                    "label": model.config.id2label[label_id],
+                    "score": round(score, 3),
+                    "box": {
+                        "x1": round(box[0], 1),
+                        "y1": round(box[1], 1),
+                        "x2": round(box[2], 1),
+                        "y2": round(box[3], 1),
+                    },
+                }
             )
-            if rows:
-                img = rows[0].get("img")
 
-        if img is None or not isinstance(img, Image.Image):
-            raise HTTPException(status_code=404, detail="Image not found")
+        # Sort by score descending
+        detections.sort(key=lambda d: d["score"], reverse=True)
 
-        # Convert to RGB if needed
-        if img.mode != "RGB":
-            img = img.convert("RGB")
+        return {
+            "type": "detection",
+            "model": body.model,
+            "image_width": img_width,
+            "image_height": img_height,
+            "count": len(detections),
+            "detections": detections,
+        }
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Detection: error loading image: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to load image: {e}")
+    elif model_info["type"] == "segmentation":
+        inputs = processor(images=img, return_tensors="pt")
+        with torch.no_grad():
+            outputs = model(**inputs)
 
-    # Run inference
-    try:
-        processor, model = _get_detection_model(body.model)
-        img_width, img_height = img.size
+        result = processor.post_process_panoptic_segmentation(
+            outputs, threshold=body.threshold, target_sizes=[(img_height, img_width)]
+        )[0]
 
-        if model_info["type"] == "detection":
-            inputs = processor(images=img, return_tensors="pt")
-            with torch.no_grad():
-                outputs = model(**inputs)
+        seg_array = result["segmentation"].cpu().numpy()
+        segments = []
+        for seg_info in result.get("segments_info", []):
+            seg_id = seg_info["id"]
+            label_id = seg_info["label_id"]
+            label_text = model.config.id2label.get(label_id, f"class_{label_id}")
+            score = round(seg_info.get("score", 0.0), 3)
 
-            target_sizes = torch.tensor([[img_height, img_width]])
-            results = processor.post_process_object_detection(
-                outputs, target_sizes=target_sizes, threshold=body.threshold
-            )[0]
+            # Compute bounding box from segment mask
+            mask = seg_array == seg_id
+            ys, xs = mask.nonzero()
+            if len(ys) == 0:
+                continue
 
-            detections = []
-            for score, label_id, box in zip(
-                results["scores"].tolist(),
-                results["labels"].tolist(),
-                results["boxes"].tolist(),
-            ):
-                detections.append(
-                    {
-                        "label": model.config.id2label[label_id],
-                        "score": round(score, 3),
-                        "box": {
-                            "x1": round(box[0], 1),
-                            "y1": round(box[1], 1),
-                            "x2": round(box[2], 1),
-                            "y2": round(box[3], 1),
-                        },
-                    }
-                )
+            segments.append(
+                {
+                    "id": int(seg_id),
+                    "label": label_text,
+                    "score": score,
+                    "is_thing": seg_info.get("isthing", True),
+                    "box": {
+                        "x1": round(float(xs.min()), 1),
+                        "y1": round(float(ys.min()), 1),
+                        "x2": round(float(xs.max()), 1),
+                        "y2": round(float(ys.max()), 1),
+                    },
+                    "pixel_count": int(mask.sum()),
+                }
+            )
 
-            # Sort by score descending
-            detections.sort(key=lambda d: d["score"], reverse=True)
+        segments.sort(key=lambda s: s["score"], reverse=True)
 
-            return {
-                "type": "detection",
-                "model": body.model,
-                "image_width": img_width,
-                "image_height": img_height,
-                "count": len(detections),
-                "detections": detections,
-            }
+        return {
+            "type": "segmentation",
+            "model": body.model,
+            "image_width": img_width,
+            "image_height": img_height,
+            "count": len(segments),
+            "segments": segments,
+        }
 
-        elif model_info["type"] == "segmentation":
-            inputs = processor(images=img, return_tensors="pt")
-            with torch.no_grad():
-                outputs = model(**inputs)
+    else:
+        inputs = processor(images=img, return_tensors="pt")
+        with torch.no_grad():
+            outputs = model(**inputs)
 
-            result = processor.post_process_panoptic_segmentation(
-                outputs, threshold=body.threshold, target_sizes=[(img_height, img_width)]
-            )[0]
+        logits = outputs.logits[0]
+        probs = torch.nn.functional.softmax(logits, dim=-1)
+        top_k = min(body.top_k, len(probs))
+        top_probs, top_indices = torch.topk(probs, top_k)
 
-            seg_array = result["segmentation"].cpu().numpy()
-            segments = []
-            for seg_info in result.get("segments_info", []):
-                seg_id = seg_info["id"]
-                label_id = seg_info["label_id"]
-                label_text = model.config.id2label.get(label_id, f"class_{label_id}")
-                score = round(seg_info.get("score", 0.0), 3)
+        classifications = []
+        for prob, idx in zip(top_probs.tolist(), top_indices.tolist()):
+            classifications.append(
+                {
+                    "label": model.config.id2label[idx],
+                    "score": round(prob, 4),
+                }
+            )
 
-                # Compute bounding box from segment mask
-                mask = seg_array == seg_id
-                ys, xs = mask.nonzero()
-                if len(ys) == 0:
-                    continue
-
-                segments.append(
-                    {
-                        "id": int(seg_id),
-                        "label": label_text,
-                        "score": score,
-                        "is_thing": seg_info.get("isthing", True),
-                        "box": {
-                            "x1": round(float(xs.min()), 1),
-                            "y1": round(float(ys.min()), 1),
-                            "x2": round(float(xs.max()), 1),
-                            "y2": round(float(ys.max()), 1),
-                        },
-                        "pixel_count": int(mask.sum()),
-                    }
-                )
-
-            segments.sort(key=lambda s: s["score"], reverse=True)
-
-            return {
-                "type": "segmentation",
-                "model": body.model,
-                "image_width": img_width,
-                "image_height": img_height,
-                "count": len(segments),
-                "segments": segments,
-            }
-
-        else:
-            inputs = processor(images=img, return_tensors="pt")
-            with torch.no_grad():
-                outputs = model(**inputs)
-
-            logits = outputs.logits[0]
-            probs = torch.nn.functional.softmax(logits, dim=-1)
-            top_k = min(body.top_k, len(probs))
-            top_probs, top_indices = torch.topk(probs, top_k)
-
-            classifications = []
-            for prob, idx in zip(top_probs.tolist(), top_indices.tolist()):
-                classifications.append(
-                    {
-                        "label": model.config.id2label[idx],
-                        "score": round(prob, 4),
-                    }
-                )
-
-            return {
-                "type": "classification",
-                "model": body.model,
-                "image_width": img_width,
-                "image_height": img_height,
-                "count": len(classifications),
-                "classifications": classifications,
-            }
-
-    except Exception as e:
-        logger.error(f"Detection: inference error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Detection failed: {e}")
+        return {
+            "type": "classification",
+            "model": body.model,
+            "image_width": img_width,
+            "image_height": img_height,
+            "count": len(classifications),
+            "classifications": classifications,
+        }
 
 
 # ── Save Transformed Image ───────────────────────────────────────────────────
 
 
 @router.post("/save/image", response_model=SaveImageToCollectionResponse)
-@pxt_retry()
 def save_transformed_image(body: TransformRequest):
     """Apply transform at full resolution and save as a new image in Pixeltable."""
     user_id = config.DEFAULT_USER_ID
-    try:
-        # Get original filename for naming the derivative
-        img_table = _get_pxt_table("image")
-        name_rows = (
-            img_table.where((img_table.uuid == body.uuid) & (img_table.user_id == user_id))
-            .select(img_source=img_table.image)
-            .collect()
-        )
+    # Get original filename for naming the derivative
+    img_table = _get_pxt_table("image")
+    name_rows = (
+        img_table.where((img_table.uuid == body.uuid) & (img_table.user_id == user_id))
+        .select(img_source=img_table.image)
+        .collect()
+    )
 
-        original_name = "image"
-        if len(name_rows) > 0:
-            original_name = _source_to_filename(name_rows[0]["img_source"])
+    original_name = "image"
+    if len(name_rows) > 0:
+        original_name = _source_to_filename(name_rows[0]["img_source"])
 
-        result = _get_full_res_transform(body)
+    result = _get_full_res_transform(body)
 
-        # Ensure the result is RGB/RGBA (save as PNG)
-        derived_name = _derive_filename(original_name, body.operation)
-        if not derived_name.lower().endswith(".png"):
-            derived_name = os.path.splitext(derived_name)[0] + ".png"
+    # Ensure the result is RGB/RGBA (save as PNG)
+    derived_name = _derive_filename(original_name, body.operation)
+    if not derived_name.lower().endswith(".png"):
+        derived_name = os.path.splitext(derived_name)[0] + ".png"
 
-        # Write to the upload folder
-        os.makedirs(config.UPLOAD_FOLDER, exist_ok=True)
-        file_uuid = str(uuid_mod.uuid4())
-        save_path = os.path.join(config.UPLOAD_FOLDER, f"{file_uuid}_{derived_name}")
+    # Write to the upload folder
+    os.makedirs(config.UPLOAD_FOLDER, exist_ok=True)
+    file_uuid = str(uuid_mod.uuid4())
+    save_path = os.path.join(config.UPLOAD_FOLDER, f"{file_uuid}_{derived_name}")
 
-        if result.mode == "L":
-            result = result.convert("RGB")
-        result.save(save_path, format="PNG")
+    if result.mode == "L":
+        result = result.convert("RGB")
+    result.save(save_path, format="PNG")
 
-        # Insert into Pixeltable images table
-        row = ImageRow(
-            image=save_path,
-            uuid=file_uuid,
-            timestamp=datetime.now(),
-            user_id=user_id,
-        )
-        img_table.insert([row])
+    # Insert into Pixeltable images table
+    row = ImageRow(
+        image=save_path,
+        uuid=file_uuid,
+        timestamp=datetime.now(),
+        user_id=user_id,
+    )
+    img_table.insert([row])
 
-        return SaveImageToCollectionResponse(
-            message=f"Saved {body.operation} result as new image",
-            uuid=file_uuid,
-            filename=derived_name,
-        )
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Studio: save image error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+    return SaveImageToCollectionResponse(
+        message=f"Saved {body.operation} result as new image",
+        uuid=file_uuid,
+        filename=derived_name,
+    )
 
 
 # ── Download Transformed Image ───────────────────────────────────────────────
@@ -1753,44 +1660,37 @@ def save_transformed_image(body: TransformRequest):
 @pxt_retry()
 def download_transformed_image(body: TransformRequest):
     """Apply transform at full resolution and return as a downloadable PNG."""
-    try:
-        # Get original filename for the download name
-        user_id = config.DEFAULT_USER_ID
-        img_table = _get_pxt_table("image")
-        name_rows = (
-            img_table.where((img_table.uuid == body.uuid) & (img_table.user_id == user_id))
-            .select(img_source=img_table.image)
-            .collect()
-        )
+    # Get original filename for the download name
+    user_id = config.DEFAULT_USER_ID
+    img_table = _get_pxt_table("image")
+    name_rows = (
+        img_table.where((img_table.uuid == body.uuid) & (img_table.user_id == user_id))
+        .select(img_source=img_table.image)
+        .collect()
+    )
 
-        original_name = "image"
-        if len(name_rows) > 0:
-            original_name = _source_to_filename(name_rows[0]["img_source"])
+    original_name = "image"
+    if len(name_rows) > 0:
+        original_name = _source_to_filename(name_rows[0]["img_source"])
 
-        result = _get_full_res_transform(body)
+    result = _get_full_res_transform(body)
 
-        derived_name = _derive_filename(original_name, body.operation)
-        if not derived_name.lower().endswith(".png"):
-            derived_name = os.path.splitext(derived_name)[0] + ".png"
+    derived_name = _derive_filename(original_name, body.operation)
+    if not derived_name.lower().endswith(".png"):
+        derived_name = os.path.splitext(derived_name)[0] + ".png"
 
-        if result.mode == "L":
-            result = result.convert("RGB")
+    if result.mode == "L":
+        result = result.convert("RGB")
 
-        buf = io.BytesIO()
-        result.save(buf, format="PNG")
-        buf.seek(0)
+    buf = io.BytesIO()
+    result.save(buf, format="PNG")
+    buf.seek(0)
 
-        return StreamingResponse(
-            buf,
-            media_type="image/png",
-            headers={"Content-Disposition": f'attachment; filename="{derived_name}"'},
-        )
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Studio: download image error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+    return StreamingResponse(
+        buf,
+        media_type="image/png",
+        headers={"Content-Disposition": f'attachment; filename="{derived_name}"'},
+    )
 
 
 # ── Video Transform ──────────────────────────────────────────────────────────
@@ -1801,198 +1701,189 @@ def download_transformed_image(body: TransformRequest):
 def transform_video(body: TransformRequest):
     """Apply a Pixeltable video UDF and return the result (metadata, frame, clip, overlay, scenes)."""
     user_id = config.DEFAULT_USER_ID
-    try:
+    vid_table = _get_pxt_table("video")
+    match = vid_table.where((vid_table.uuid == body.uuid) & (vid_table.user_id == user_id))
+
+    if body.operation == "view_metadata":
+        rows = match.select(
+            meta=pxt_video.get_metadata(vid_table.video),
+            dur=pxt_video.get_duration(vid_table.video),
+        ).collect()
+        if not rows:
+            raise HTTPException(status_code=404, detail="Video not found")
+        meta = rows[0].get("meta", {})
+        dur = rows[0].get("dur")
+        streams = meta.get("streams", [])
+        video_stream: dict = next((s for s in streams if s.get("type") == "video"), {})
+        return {
+            "operation": "view_metadata",
+            "duration": round(dur, 2) if dur else None,
+            "metadata": {
+                "format_size": meta.get("size"),
+                "bit_rate": meta.get("bit_rate"),
+                "width": video_stream.get("width"),
+                "height": video_stream.get("height"),
+                "fps": video_stream.get("average_rate"),
+                "total_frames": video_stream.get("frames"),
+                "codec": video_stream.get("codec_context", {}).get("name"),
+                "profile": video_stream.get("codec_context", {}).get("profile"),
+                "pix_fmt": video_stream.get("codec_context", {}).get("pix_fmt"),
+            },
+        }
+
+    elif body.operation == "extract_frame":
+        ts = float(body.params.get("timestamp", 0.0))
+        rows = match.select(
+            frame=pxt_video.extract_frame(vid_table.video, timestamp=ts),
+        ).collect()
+        if not rows:
+            raise HTTPException(status_code=404, detail="Video not found")
+        frame = rows[0].get("frame")
+        if not isinstance(frame, Image.Image):
+            raise HTTPException(status_code=400, detail="No frame at that timestamp (may be past end of video)")
+        preview = _pil_image_to_data_uri(frame, max_size=PREVIEW_SIZE)
+        return {
+            "operation": "extract_frame",
+            "frame": preview,
+            "width": frame.size[0],
+            "height": frame.size[1],
+            "timestamp": ts,
+        }
+
+    elif body.operation == "clip_video":
+        start = float(body.params.get("start", 0.0))
+        duration = float(body.params.get("duration", 10.0))
+        rows = match.select(
+            clipped=pxt_video.clip(vid_table.video, start_time=start, duration=duration),
+        ).collect()
+        if not rows:
+            raise HTTPException(status_code=404, detail="Video not found")
+        clipped = rows[0].get("clipped")
+        if clipped is None:
+            raise HTTPException(status_code=400, detail="Clip start is past end of video")
+        video_path = str(clipped)
+        clip_dur = round(duration, 2)
+        return {
+            "operation": "clip_video",
+            "video_url": f"/api/serve_video?path={video_path}",
+            "video_path": video_path,
+            "duration": clip_dur,
+        }
+
+    elif body.operation == "overlay_text":
+        text = str(body.params.get("text", "Hello World"))
+        font_size = int(body.params.get("font_size", 32))
+        position = str(body.params.get("position", "bottom"))
+        v_align = "bottom" if position == "bottom" else "top" if position == "top" else "center"
+        rows = match.select(
+            result=pxt_video.overlay_text(
+                vid_table.video,
+                text,
+                font_size=font_size,
+                color="white",
+                vertical_align=v_align,
+                vertical_margin=40,
+                horizontal_align="center",
+                box=True,
+                box_color="black",
+                box_opacity=0.7,
+                box_border=[8, 16],
+            ),
+        ).collect()
+        if not rows:
+            raise HTTPException(status_code=404, detail="Video not found")
+        result = rows[0].get("result")
+        video_path = str(result)
+        return {
+            "operation": "overlay_text",
+            "video_url": f"/api/serve_video?path={video_path}",
+            "video_path": video_path,
+        }
+
+    elif body.operation == "crop_video":
+        x = int(body.params.get("x", 0))
+        y = int(body.params.get("y", 0))
+        w = int(body.params.get("width", 640))
+        h = int(body.params.get("height", 480))
+        bbox = [x, y, w, h]
+        rows = match.select(
+            cropped=pxt_video.crop(vid_table.video, bbox=bbox, bbox_format="xywh"),
+        ).collect()
+        if not rows:
+            raise HTTPException(status_code=404, detail="Video not found")
+        cropped = rows[0].get("cropped")
+        if cropped is None:
+            raise HTTPException(status_code=400, detail="Crop failed — check bbox against video dimensions")
+        video_path = str(cropped)
+        return {
+            "operation": "crop_video",
+            "video_url": f"/api/serve_video?path={video_path}",
+            "video_path": video_path,
+            "bbox": bbox,
+        }
+
+    elif body.operation == "resize_video":
+        w = int(body.params.get("width", 640))
+        h = int(body.params.get("height", 480))
+        # pxt_video.resize uses 'size=(w, h)' per typical PIL/Pixeltable patterns or 'width=w, height=h'
+        # Based on Pixeltable PR #1210 and image.resize, we will use size=(w,h) or w,h.
+        # However some functions use kwargs `width=w, height=h`. Let's try size=[w, h] or let's use kwargs directly based on `image.resize`
+        rows = match.select(
+            resized=pxt_video.resize(vid_table.video, size=[w, h]),
+        ).collect()
+        if not rows:
+            raise HTTPException(status_code=404, detail="Video not found")
+        resized = rows[0].get("resized")
+        if resized is None:
+            raise HTTPException(status_code=400, detail="Resize failed")
+        video_path = str(resized)
+        return {
+            "operation": "resize_video",
+            "video_url": f"/api/serve_video?path={video_path}",
+            "video_path": video_path,
+            "dimensions": [w, h],
+        }
+
+    elif body.operation == "concat_videos":
+        uuid_str = body.params.get("uuids", "")
+        uuids_list = [u.strip() for u in uuid_str.split(",") if u.strip()]
+        if len(uuids_list) < 2:
+            raise HTTPException(status_code=400, detail="Provide at least 2 comma-separated UUIDs")
         vid_table = _get_pxt_table("video")
-        match = vid_table.where((vid_table.uuid == body.uuid) & (vid_table.user_id == user_id))
+        concat_result = (
+            vid_table.where(vid_table.uuid.isin(uuids_list))
+            .select(concat=pxt_video.concat_videos_agg(vid_table.timestamp, vid_table.video))
+            .collect()
+        )
+        if not concat_result or concat_result[0].get("concat") is None:
+            raise HTTPException(status_code=400, detail="Concat failed — ensure all videos share the same resolution")
+        video_path = str(concat_result[0]["concat"])
+        return {
+            "operation": "concat_videos",
+            "video_url": f"/api/serve_video?path={video_path}",
+            "video_path": video_path,
+            "source_uuids": uuids_list,
+        }
 
-        if body.operation == "view_metadata":
-            rows = match.select(
-                meta=pxt_video.get_metadata(vid_table.video),
-                dur=pxt_video.get_duration(vid_table.video),
-            ).collect()
-            if not rows:
-                raise HTTPException(status_code=404, detail="Video not found")
-            meta = rows[0].get("meta", {})
-            dur = rows[0].get("dur")
-            streams = meta.get("streams", [])
-            video_stream: dict = next((s for s in streams if s.get("type") == "video"), {})
-            return {
-                "operation": "view_metadata",
-                "duration": round(dur, 2) if dur else None,
-                "metadata": {
-                    "format_size": meta.get("size"),
-                    "bit_rate": meta.get("bit_rate"),
-                    "width": video_stream.get("width"),
-                    "height": video_stream.get("height"),
-                    "fps": video_stream.get("average_rate"),
-                    "total_frames": video_stream.get("frames"),
-                    "codec": video_stream.get("codec_context", {}).get("name"),
-                    "profile": video_stream.get("codec_context", {}).get("profile"),
-                    "pix_fmt": video_stream.get("codec_context", {}).get("pix_fmt"),
-                },
-            }
+    elif body.operation == "detect_scenes":
+        threshold = float(body.params.get("threshold", 27.0))
+        rows = match.select(
+            scenes=pxt_video.scene_detect_content(vid_table.video, threshold=threshold),
+            dur=pxt_video.get_duration(vid_table.video),
+        ).collect()
+        if not rows:
+            raise HTTPException(status_code=404, detail="Video not found")
+        scenes = rows[0].get("scenes", [])
+        dur = rows[0].get("dur")
+        return {
+            "operation": "detect_scenes",
+            "scenes": scenes,
+            "total_duration": round(dur, 2) if dur else None,
+            "scene_count": len(scenes),
+        }
 
-        elif body.operation == "extract_frame":
-            ts = float(body.params.get("timestamp", 0.0))
-            rows = match.select(
-                frame=pxt_video.extract_frame(vid_table.video, timestamp=ts),
-            ).collect()
-            if not rows:
-                raise HTTPException(status_code=404, detail="Video not found")
-            frame = rows[0].get("frame")
-            if not isinstance(frame, Image.Image):
-                raise HTTPException(status_code=400, detail="No frame at that timestamp (may be past end of video)")
-            preview = _pil_image_to_data_uri(frame, max_size=PREVIEW_SIZE)
-            return {
-                "operation": "extract_frame",
-                "frame": preview,
-                "width": frame.size[0],
-                "height": frame.size[1],
-                "timestamp": ts,
-            }
-
-        elif body.operation == "clip_video":
-            start = float(body.params.get("start", 0.0))
-            duration = float(body.params.get("duration", 10.0))
-            rows = match.select(
-                clipped=pxt_video.clip(vid_table.video, start_time=start, duration=duration),
-            ).collect()
-            if not rows:
-                raise HTTPException(status_code=404, detail="Video not found")
-            clipped = rows[0].get("clipped")
-            if clipped is None:
-                raise HTTPException(status_code=400, detail="Clip start is past end of video")
-            video_path = str(clipped)
-            clip_dur = round(duration, 2)
-            return {
-                "operation": "clip_video",
-                "video_url": f"/api/serve_video?path={video_path}",
-                "video_path": video_path,
-                "duration": clip_dur,
-            }
-
-        elif body.operation == "overlay_text":
-            text = str(body.params.get("text", "Hello World"))
-            font_size = int(body.params.get("font_size", 32))
-            position = str(body.params.get("position", "bottom"))
-            v_align = "bottom" if position == "bottom" else "top" if position == "top" else "center"
-            rows = match.select(
-                result=pxt_video.overlay_text(
-                    vid_table.video,
-                    text,
-                    font_size=font_size,
-                    color="white",
-                    vertical_align=v_align,
-                    vertical_margin=40,
-                    horizontal_align="center",
-                    box=True,
-                    box_color="black",
-                    box_opacity=0.7,
-                    box_border=[8, 16],
-                ),
-            ).collect()
-            if not rows:
-                raise HTTPException(status_code=404, detail="Video not found")
-            result = rows[0].get("result")
-            video_path = str(result)
-            return {
-                "operation": "overlay_text",
-                "video_url": f"/api/serve_video?path={video_path}",
-                "video_path": video_path,
-            }
-
-        elif body.operation == "crop_video":
-            x = int(body.params.get("x", 0))
-            y = int(body.params.get("y", 0))
-            w = int(body.params.get("width", 640))
-            h = int(body.params.get("height", 480))
-            bbox = [x, y, w, h]
-            rows = match.select(
-                cropped=pxt_video.crop(vid_table.video, bbox=bbox, bbox_format="xywh"),
-            ).collect()
-            if not rows:
-                raise HTTPException(status_code=404, detail="Video not found")
-            cropped = rows[0].get("cropped")
-            if cropped is None:
-                raise HTTPException(status_code=400, detail="Crop failed — check bbox against video dimensions")
-            video_path = str(cropped)
-            return {
-                "operation": "crop_video",
-                "video_url": f"/api/serve_video?path={video_path}",
-                "video_path": video_path,
-                "bbox": bbox,
-            }
-
-        elif body.operation == "resize_video":
-            w = int(body.params.get("width", 640))
-            h = int(body.params.get("height", 480))
-            # pxt_video.resize uses 'size=(w, h)' per typical PIL/Pixeltable patterns or 'width=w, height=h'
-            # Based on Pixeltable PR #1210 and image.resize, we will use size=(w,h) or w,h.
-            # However some functions use kwargs `width=w, height=h`. Let's try size=[w, h] or let's use kwargs directly based on `image.resize`
-            rows = match.select(
-                resized=pxt_video.resize(vid_table.video, size=[w, h]),
-            ).collect()
-            if not rows:
-                raise HTTPException(status_code=404, detail="Video not found")
-            resized = rows[0].get("resized")
-            if resized is None:
-                raise HTTPException(status_code=400, detail="Resize failed")
-            video_path = str(resized)
-            return {
-                "operation": "resize_video",
-                "video_url": f"/api/serve_video?path={video_path}",
-                "video_path": video_path,
-                "dimensions": [w, h],
-            }
-
-        elif body.operation == "concat_videos":
-            uuid_str = body.params.get("uuids", "")
-            uuids_list = [u.strip() for u in uuid_str.split(",") if u.strip()]
-            if len(uuids_list) < 2:
-                raise HTTPException(status_code=400, detail="Provide at least 2 comma-separated UUIDs")
-            vid_table = _get_pxt_table("video")
-            concat_result = (
-                vid_table.where(vid_table.uuid.isin(uuids_list))
-                .select(concat=pxt_video.concat_videos_agg(vid_table.timestamp, vid_table.video))
-                .collect()
-            )
-            if not concat_result or concat_result[0].get("concat") is None:
-                raise HTTPException(
-                    status_code=400, detail="Concat failed — ensure all videos share the same resolution"
-                )
-            video_path = str(concat_result[0]["concat"])
-            return {
-                "operation": "concat_videos",
-                "video_url": f"/api/serve_video?path={video_path}",
-                "video_path": video_path,
-                "source_uuids": uuids_list,
-            }
-
-        elif body.operation == "detect_scenes":
-            threshold = float(body.params.get("threshold", 27.0))
-            rows = match.select(
-                scenes=pxt_video.scene_detect_content(vid_table.video, threshold=threshold),
-                dur=pxt_video.get_duration(vid_table.video),
-            ).collect()
-            if not rows:
-                raise HTTPException(status_code=404, detail="Video not found")
-            scenes = rows[0].get("scenes", [])
-            dur = rows[0].get("dur")
-            return {
-                "operation": "detect_scenes",
-                "scenes": scenes,
-                "total_duration": round(dur, 2) if dur else None,
-                "scene_count": len(scenes),
-            }
-
-        else:
-            raise HTTPException(status_code=400, detail=f"Unknown video operation: {body.operation}")
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Studio: video transform error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+    else:
+        raise HTTPException(status_code=400, detail=f"Unknown video operation: {body.operation}")
 
 
 # ── Save Video Transform Result ──────────────────────────────────────────────
@@ -2005,74 +1896,58 @@ class SaveVideoRequest(BaseModel):
 
 
 @router.post("/save/video")
-@pxt_retry()
 def save_video_result(body: SaveVideoRequest):
     """Save a video transform result (clip or overlay) as a new video in Pixeltable."""
     user_id = config.DEFAULT_USER_ID
-    try:
-        # Re-run the transform to get the result video
-        result = transform_video(TransformRequest(uuid=body.uuid, operation=body.operation, params=body.params))
-        video_path = result.get("video_path")
-        if not video_path or not os.path.exists(video_path):
-            raise HTTPException(status_code=400, detail="Operation did not produce a video file")
+    # Re-run the transform to get the result video
+    result = transform_video(TransformRequest(uuid=body.uuid, operation=body.operation, params=body.params))
+    video_path = result.get("video_path")
+    if not video_path or not os.path.exists(video_path):
+        raise HTTPException(status_code=400, detail="Operation did not produce a video file")
 
-        import shutil
+    import shutil
 
-        os.makedirs(config.UPLOAD_FOLDER, exist_ok=True)
-        file_uuid = str(uuid_mod.uuid4())
-        dest = os.path.join(config.UPLOAD_FOLDER, f"{file_uuid}_{body.operation}.mp4")
-        shutil.copy2(video_path, dest)
+    os.makedirs(config.UPLOAD_FOLDER, exist_ok=True)
+    file_uuid = str(uuid_mod.uuid4())
+    dest = os.path.join(config.UPLOAD_FOLDER, f"{file_uuid}_{body.operation}.mp4")
+    shutil.copy2(video_path, dest)
 
-        vid_table = _get_pxt_table("video")
-        vid_table.insert([VideoRow(video=dest, uuid=file_uuid, timestamp=datetime.now(), user_id=user_id)])
+    vid_table = _get_pxt_table("video")
+    vid_table.insert([VideoRow(video=dest, uuid=file_uuid, timestamp=datetime.now(), user_id=user_id)])
 
-        return {"message": f"Saved {body.operation} result as new video", "uuid": file_uuid}
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Studio: save video error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+    return {"message": f"Saved {body.operation} result as new video", "uuid": file_uuid}
 
 
 # ── Save Extracted Frame as Image ─────────────────────────────────────────────
 
 
 @router.post("/save/extracted_frame")
-@pxt_retry()
 def save_extracted_frame(body: TransformRequest):
     """Extract a frame and save it as a new image in Pixeltable."""
     user_id = config.DEFAULT_USER_ID
-    try:
-        vid_table = _get_pxt_table("video")
-        ts = float(body.params.get("timestamp", 0.0))
-        rows = (
-            vid_table.where((vid_table.uuid == body.uuid) & (vid_table.user_id == user_id))
-            .select(frame=pxt_video.extract_frame(vid_table.video, timestamp=ts))
-            .collect()
-        )
+    vid_table = _get_pxt_table("video")
+    ts = float(body.params.get("timestamp", 0.0))
+    rows = (
+        vid_table.where((vid_table.uuid == body.uuid) & (vid_table.user_id == user_id))
+        .select(frame=pxt_video.extract_frame(vid_table.video, timestamp=ts))
+        .collect()
+    )
 
-        if not rows:
-            raise HTTPException(status_code=404, detail="Video not found")
-        frame = rows[0].get("frame")
-        if not isinstance(frame, Image.Image):
-            raise HTTPException(status_code=400, detail="No frame at that timestamp")
+    if not rows:
+        raise HTTPException(status_code=404, detail="Video not found")
+    frame = rows[0].get("frame")
+    if not isinstance(frame, Image.Image):
+        raise HTTPException(status_code=400, detail="No frame at that timestamp")
 
-        os.makedirs(config.UPLOAD_FOLDER, exist_ok=True)
-        file_uuid = str(uuid_mod.uuid4())
-        save_path = os.path.join(config.UPLOAD_FOLDER, f"{file_uuid}_frame_{ts}s.png")
-        frame.save(save_path, format="PNG")
+    os.makedirs(config.UPLOAD_FOLDER, exist_ok=True)
+    file_uuid = str(uuid_mod.uuid4())
+    save_path = os.path.join(config.UPLOAD_FOLDER, f"{file_uuid}_frame_{ts}s.png")
+    frame.save(save_path, format="PNG")
 
-        img_table = _get_pxt_table("image")
-        img_table.insert([ImageRow(image=save_path, uuid=file_uuid, timestamp=datetime.now(), user_id=user_id)])
+    img_table = _get_pxt_table("image")
+    img_table.insert([ImageRow(image=save_path, uuid=file_uuid, timestamp=datetime.now(), user_id=user_id)])
 
-        return {"message": f"Saved frame at {ts}s as new image", "uuid": file_uuid}
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Studio: save extracted frame error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+    return {"message": f"Saved frame at {ts}s as new image", "uuid": file_uuid}
 
 
 # ── Image Operations ─────────────────────────────────────────────────────────
@@ -2156,36 +2031,27 @@ def _apply_image_operation(img: Image.Image, operation: str, params: dict) -> Im
 def get_document_summary(uuid: str):
     """Get the auto-generated summary for a document."""
     user_id = config.DEFAULT_USER_ID
-    try:
-        doc_table = _get_pxt_table("document")
-        select_cols = dict(uuid_col=doc_table.uuid)
-        if hasattr(doc_table, "summary"):
-            select_cols["summary_json"] = doc_table.summary
-        if hasattr(doc_table, "document_text"):
-            select_cols["doc_text"] = doc_table.document_text
+    doc_table = _get_pxt_table("document")
+    select_cols = dict(uuid_col=doc_table.uuid)
+    if hasattr(doc_table, "summary"):
+        select_cols["summary_json"] = doc_table.summary
+    if hasattr(doc_table, "document_text"):
+        select_cols["doc_text"] = doc_table.document_text
 
-        rows = (
-            doc_table.where((doc_table.uuid == uuid) & (doc_table.user_id == user_id)).select(**select_cols).collect()
-        )
+    rows = doc_table.where((doc_table.uuid == uuid) & (doc_table.user_id == user_id)).select(**select_cols).collect()
 
-        if len(rows) == 0:
-            raise HTTPException(status_code=404, detail="Document not found")
+    if len(rows) == 0:
+        raise HTTPException(status_code=404, detail="Document not found")
 
-        row = rows[0]
-        summary = _parse_summary(row.get("summary_json"))
-        doc_text_preview = (row.get("doc_text") or "")[:500]
+    row = rows[0]
+    summary = _parse_summary(row.get("summary_json"))
+    doc_text_preview = (row.get("doc_text") or "")[:500]
 
-        return {
-            "uuid": uuid,
-            "summary": summary,
-            "text_preview": doc_text_preview,
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Studio: error fetching document summary: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+    return {
+        "uuid": uuid,
+        "summary": summary,
+        "text_preview": doc_text_preview,
+    }
 
 
 # ── Document Chunks ──────────────────────────────────────────────────────────
@@ -2196,34 +2062,29 @@ def get_document_summary(uuid: str):
 def get_document_chunks(uuid: str, limit: int = 50):
     """Get extracted text chunks for a document."""
     user_id = config.DEFAULT_USER_ID
-    try:
-        chunks_view = pxt.get_table("pixelbot_v3.chunks")
-        results = []
-        for row in (
-            chunks_view.where((chunks_view.uuid == uuid) & (chunks_view.user_id == user_id))
-            .select(
-                text=chunks_view.text,
-                title=chunks_view.title,
-                heading=chunks_view.heading,
-                page=chunks_view.page,
-            )
-            .limit(limit)
-            .collect()
-        ):
-            results.append(
-                {
-                    "text": row.get("text", ""),
-                    "title": row.get("title"),
-                    "heading": row.get("heading"),
-                    "page": row.get("page"),
-                }
-            )
+    chunks_view = pxt.get_table("pixelbot_v3.chunks")
+    results = []
+    for row in (
+        chunks_view.where((chunks_view.uuid == uuid) & (chunks_view.user_id == user_id))
+        .select(
+            text=chunks_view.text,
+            title=chunks_view.title,
+            heading=chunks_view.heading,
+            page=chunks_view.page,
+        )
+        .limit(limit)
+        .collect()
+    ):
+        results.append(
+            {
+                "text": row.get("text", ""),
+                "title": row.get("title"),
+                "heading": row.get("heading"),
+                "page": row.get("page"),
+            }
+        )
 
-        return {"uuid": uuid, "chunks": results, "total": len(results)}
-
-    except Exception as e:
-        logger.error(f"Studio: error fetching chunks: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+    return {"uuid": uuid, "chunks": results, "total": len(results)}
 
 
 # ── Video Frames ─────────────────────────────────────────────────────────────
@@ -2234,36 +2095,31 @@ def get_document_chunks(uuid: str, limit: int = 50):
 def get_video_frames(uuid: str, limit: int = 12):
     """Get extracted frames from a video as base64 thumbnails."""
     user_id = config.DEFAULT_USER_ID
-    try:
-        frames_view = pxt.get_table("pixelbot_v3.video_frames")
-        results = []
-        for row in (
-            frames_view.where((frames_view.uuid == uuid) & (frames_view.user_id == user_id))
-            .select(
-                frame=frames_view.frame,
-                pos_msec=frames_view.pos_msec,
-            )
-            .order_by(frames_view.pos_msec)
-            .limit(limit)
-            .collect()
-        ):
-            frame = row.get("frame")
-            if isinstance(frame, Image.Image):
-                thumb = create_thumbnail_base64(frame, (192, 192))
-                if thumb:
-                    pos_sec = round(row.get("pos_msec", 0) / 1000, 1)
-                    results.append(
-                        {
-                            "frame": thumb,
-                            "position": pos_sec,
-                        }
-                    )
+    frames_view = pxt.get_table("pixelbot_v3.video_frames")
+    results = []
+    for row in (
+        frames_view.where((frames_view.uuid == uuid) & (frames_view.user_id == user_id))
+        .select(
+            frame=frames_view.frame,
+            pos_msec=frames_view.pos_msec,
+        )
+        .order_by(frames_view.pos_msec)
+        .limit(limit)
+        .collect()
+    ):
+        frame = row.get("frame")
+        if isinstance(frame, Image.Image):
+            thumb = create_thumbnail_base64(frame, (192, 192))
+            if thumb:
+                pos_sec = round(row.get("pos_msec", 0) / 1000, 1)
+                results.append(
+                    {
+                        "frame": thumb,
+                        "position": pos_sec,
+                    }
+                )
 
-        return {"uuid": uuid, "frames": results, "total": len(results)}
-
-    except Exception as e:
-        logger.error(f"Studio: error fetching frames: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+    return {"uuid": uuid, "frames": results, "total": len(results)}
 
 
 # ── Transcription ────────────────────────────────────────────────────────────
@@ -2277,27 +2133,21 @@ def get_transcription(uuid: str, media_type: str):
 
     if media_type not in ("audio", "video"):
         raise HTTPException(status_code=400, detail="media_type must be 'audio' or 'video'")
+    if media_type == "audio":
+        view_name = "pixelbot_v3.audio_chunks"
+    else:
+        view_name = "pixelbot_v3.video_audio_chunks"
 
-    try:
-        if media_type == "audio":
-            view_name = "pixelbot_v3.audio_chunks"
-        else:
-            view_name = "pixelbot_v3.video_audio_chunks"
+    view = pxt.get_table(view_name)
+    sentences = []
+    for row in view.where((view.uuid == uuid) & (view.user_id == user_id)).select(text=view.text).collect():
+        text = row.get("text", "")
+        if text and text.strip():
+            sentences.append(text.strip())
 
-        view = pxt.get_table(view_name)
-        sentences = []
-        for row in view.where((view.uuid == uuid) & (view.user_id == user_id)).select(text=view.text).collect():
-            text = row.get("text", "")
-            if text and text.strip():
-                sentences.append(text.strip())
-
-        return {
-            "uuid": uuid,
-            "media_type": media_type,
-            "sentences": sentences,
-            "full_text": " ".join(sentences),
-        }
-
-    except Exception as e:
-        logger.error(f"Studio: error fetching transcription: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+    return {
+        "uuid": uuid,
+        "media_type": media_type,
+        "sentences": sentences,
+        "full_text": " ".join(sentences),
+    }

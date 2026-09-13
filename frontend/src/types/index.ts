@@ -96,12 +96,6 @@ export interface Conversation {
   message_count: number
 }
 
-export interface TtsVoice {
-  id: string
-  label: string
-  style: string
-}
-
 export interface JoinResult {
   left_table: string
   right_table: string
@@ -525,24 +519,6 @@ export interface PipelineEdge {
 export interface PipelineResponse {
   nodes: PipelineNode[]
   edges: PipelineEdge[]
-}
-
-export interface VersionEntry {
-  version: number
-  created_at: string | null
-  change_type: string | null
-  inserts: number
-  updates: number
-  deletes: number
-  errors: number
-  schema_change?: string | null
-}
-
-export interface VersionsResponse {
-  path: string
-  current_version: number
-  can_revert: boolean
-  versions: VersionEntry[]
 }
 
 // Integrations

@@ -18,8 +18,6 @@ from pixelbot.models import (
     MEDIA_ROW_MODELS,
     AddUrlResponse,
     CsvRegistryRow,
-    DeleteAllResponse,
-    DeleteFileResponse,
     UploadResponse,
 )
 from pixelbot.utils import create_thumbnail_base64, pxt_retry
@@ -166,7 +164,6 @@ def _source_to_filename(source) -> str:
 
 
 @router.post("/upload", response_model=UploadResponse)
-@pxt_retry()
 def upload_file(file: UploadFile = File(...)):
     """Handle file uploads. CSVs are imported into their own Pixeltable table."""
     user_id = config.DEFAULT_USER_ID
@@ -200,9 +197,6 @@ def upload_file(file: UploadFile = File(...)):
             except FileNotFoundError:
                 pass
         raise
-    except Exception as e:
-        logger.error(f"Error saving file to disk: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
 
     # CSV files get their own Pixeltable table
     if file_ext == "csv":
@@ -213,27 +207,21 @@ def upload_file(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail=f"Unsupported file extension: {file_ext}")
 
     table_key, data_col = mapping
+    file_uuid = str(uuid.uuid4())
+    current_timestamp = datetime.now()
 
-    try:
-        file_uuid = str(uuid.uuid4())
-        current_timestamp = datetime.now()
+    table = get_pxt_table(table_key)
+    RowModel = MEDIA_ROW_MODELS[table_key]
+    row = RowModel(**{data_col: file_path, "uuid": file_uuid, "timestamp": current_timestamp, "user_id": user_id})
+    status = table.insert([row], return_rows=True)
+    if status.errors:
+        raise RuntimeError(f"Insert failed: {status.errors}")
 
-        table = get_pxt_table(table_key)
-        RowModel = MEDIA_ROW_MODELS[table_key]
-        row = RowModel(**{data_col: file_path, "uuid": file_uuid, "timestamp": current_timestamp, "user_id": user_id})
-        status = table.insert([row], return_rows=True)
-        if status.errors:
-            raise RuntimeError(f"Insert failed: {status.errors}")
-
-        return UploadResponse(
-            message=f"File successfully uploaded to {table_key} table",
-            filename=safe_name,
-            uuid=file_uuid,
-        )
-
-    except Exception as e:
-        logger.error(f"Error uploading file: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+    return UploadResponse(
+        message=f"File successfully uploaded to {table_key} table",
+        filename=safe_name,
+        uuid=file_uuid,
+    )
 
 
 def _import_csv(file_path: str, display_name: str, user_id: str) -> UploadResponse:
@@ -285,7 +273,7 @@ def _import_csv(file_path: str, display_name: str, user_id: str) -> UploadRespon
         except Exception:
             pass
         logger.error(f"Error importing CSV: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise
 
 
 # ── Add URL ───────────────────────────────────────────────────────────────────
@@ -296,7 +284,6 @@ class AddUrlRequest(BaseModel):
 
 
 @router.post("/add_url", response_model=AddUrlResponse)
-@pxt_retry()
 def add_url(body: AddUrlRequest):
     """Add a URL as a data source."""
     user_id = config.DEFAULT_USER_ID
@@ -343,100 +330,7 @@ def add_url(body: AddUrlRequest):
                 detail="Document is too large to process (exceeds 1M characters). Try a shorter document or a direct file upload.",
             )
         logger.error(f"Error adding URL: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
-    except Exception as e:
-        logger.error(f"Error adding URL: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-# ── Delete File ───────────────────────────────────────────────────────────────
-
-
-@router.delete("/delete_file/{file_uuid}/{file_type}", response_model=DeleteFileResponse)
-@pxt_retry()
-def delete_file(file_uuid: str, file_type: str):
-    """Delete a file by UUID and type."""
-    user_id = config.DEFAULT_USER_ID
-
-    if file_type not in TABLE_MAP:
-        raise HTTPException(status_code=400, detail=f"Invalid file type: {file_type}")
-
-    try:
-        table = get_pxt_table(file_type)
-        data_col_map = {"document": "document", "image": "image", "video": "video", "audio": "audio"}
-        data_col = data_col_map.get(file_type)
-        if not data_col:
-            raise HTTPException(status_code=400, detail=f"Cannot map file_type '{file_type}'")
-
-        # Retrieve file path before deletion
-        file_path_to_delete = None
-        try:
-            record = (
-                table.where((table.uuid == file_uuid) & (table.user_id == user_id))
-                .select(file_source=getattr(table, data_col))
-                .collect()
-            )
-            if len(record) > 0:
-                file_source = record[0].get("file_source")
-                if isinstance(file_source, str) and not file_source.startswith(("http://", "https://")):
-                    possible = os.path.abspath(os.path.join(config.UPLOAD_FOLDER, os.path.basename(file_source)))
-                    if os.path.exists(possible):
-                        file_path_to_delete = possible
-        except Exception as e:
-            logger.error(f"Error retrieving file path: {e}")
-
-        # Delete from DB
-        status = table.delete(where=(table.uuid == file_uuid) & (table.user_id == user_id))
-        db_deleted = status.num_rows > 0
-
-        file_deleted = False
-        if db_deleted and file_path_to_delete:
-            try:
-                os.remove(file_path_to_delete)
-                file_deleted = True
-            except Exception as e:
-                logger.error(f"Error deleting file from disk: {e}")
-
-        if not db_deleted:
-            raise HTTPException(status_code=404, detail=f"No {file_type} found with UUID {file_uuid}")
-
-        return DeleteFileResponse(
-            message=f"{file_type.capitalize()} deleted successfully",
-            db_deleted=db_deleted,
-            file_deleted=file_deleted,
-            uuid=file_uuid,
-        )
-
-    except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"Error deleting file: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-# ── Delete All ────────────────────────────────────────────────────────────────
-
-
-class DeleteAllRequest(BaseModel):
-    type: str
-
-
-@router.post("/delete_all", response_model=DeleteAllResponse)
-@pxt_retry()
-def delete_all(body: DeleteAllRequest):
-    """Delete all items from a given table type."""
-    user_id = config.DEFAULT_USER_ID
-
-    if body.type not in TABLE_MAP:
-        raise HTTPException(status_code=400, detail=f"Invalid type. Must be one of: {', '.join(TABLE_MAP.keys())}")
-
-    try:
-        table = get_pxt_table(body.type)
-        status = table.delete(where=table.user_id == user_id)
-        return DeleteAllResponse(message=f"Deleted {status.num_rows} {body.type} items")
-    except Exception as e:
-        logger.error(f"Error deleting all {body.type}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ── Context Info ──────────────────────────────────────────────────────────────
@@ -462,175 +356,169 @@ def get_context_info():
     direct ResultSet iteration (no pandas conversion).
     """
     user_id = config.DEFAULT_USER_ID
+    # Available tools
+    available_tools = [
+        {"name": "get_latest_news", "description": inspect.getdoc(functions.get_latest_news)},
+        {"name": "fetch_financial_data", "description": inspect.getdoc(functions.fetch_financial_data)},
+        {"name": "search_news", "description": inspect.getdoc(functions.search_news)},
+    ]
 
+    # Documents — direct iteration over ResultSet
+    document_list: list[dict] = []
     try:
-        # Available tools
-        available_tools = [
-            {"name": "get_latest_news", "description": inspect.getdoc(functions.get_latest_news)},
-            {"name": "fetch_financial_data", "description": inspect.getdoc(functions.fetch_financial_data)},
-            {"name": "search_news", "description": inspect.getdoc(functions.search_news)},
-        ]
-
-        # Documents — direct iteration over ResultSet
-        document_list: list[dict] = []
-        try:
-            doc_table = get_pxt_table("document")
-            for row in (
-                doc_table.where(doc_table.user_id == user_id)
-                .select(doc_source=doc_table.document, uuid_col=doc_table.uuid)
-                .collect()
-            ):
-                document_list.append({"name": _source_to_filename(row["doc_source"]), "uuid": row["uuid_col"]})
-        except Exception as e:
-            logger.error(f"Error fetching documents: {e}")
-
-        # Images — use precomputed `thumbnail` column from Pixeltable
-        image_list: list[dict] = []
-        try:
-            img_table = get_pxt_table("image")
-            for row in (
-                img_table.where(img_table.user_id == user_id)
-                .select(
-                    img_source=img_table.image,
-                    uuid_col=img_table.uuid,
-                    thumb=img_table.thumbnail,
-                )
-                .collect()
-            ):
-                thumbnail = _pxt_thumbnail_to_data_uri(row.get("thumb"))
-                image_list.append(
-                    {
-                        "name": _source_to_filename(row["img_source"]),
-                        "thumbnail": thumbnail,
-                        "uuid": row["uuid_col"],
-                    }
-                )
-        except Exception as e:
-            logger.error(f"Error fetching images: {e}")
-
-        # Videos (with thumbnails from first frame)
-        video_list: list[dict] = []
-        try:
-            vid_table = get_pxt_table("video")
-            video_frames_view = pxt.get_table("pixelbot_v3.video_frames")
-
-            # Build a map of uuid → first-frame thumbnail
-            first_frames_map: dict[str, str | None] = {}
-            try:
-                for row in (
-                    video_frames_view.where(video_frames_view.pos == 0)
-                    .select(
-                        video_uuid=video_frames_view.uuid,
-                        frame=video_frames_view.frame,
-                    )
-                    .collect()
-                ):
-                    frame = row.get("frame")
-                    if isinstance(frame, Image.Image):
-                        first_frames_map[row["video_uuid"]] = create_thumbnail_base64(frame, THUMB_SIZE_SIDEBAR)
-            except Exception as e:
-                logger.error(f"Error fetching video first frames: {e}")
-
-            for row in (
-                vid_table.where(vid_table.user_id == user_id)
-                .select(
-                    video_col=vid_table.video,
-                    uuid_col=vid_table.uuid,
-                )
-                .collect()
-            ):
-                video_list.append(
-                    {
-                        "name": _source_to_filename(row["video_col"]),
-                        "thumbnail": first_frames_map.get(row["uuid_col"]),
-                        "uuid": row["uuid_col"],
-                    }
-                )
-        except Exception as e:
-            logger.error(f"Error fetching videos: {e}")
-
-        # Audios
-        audio_list: list[dict] = []
-        try:
-            audio_table = get_pxt_table("audio")
-            for row in (
-                audio_table.where(audio_table.user_id == user_id)
-                .select(
-                    audio_col=audio_table.audio,
-                    uuid_col=audio_table.uuid,
-                )
-                .collect()
-            ):
-                audio_list.append({"name": _source_to_filename(row["audio_col"]), "uuid": row["uuid_col"]})
-        except Exception as e:
-            logger.error(f"Error fetching audios: {e}")
-
-        # CSV tables (from registry)
-        csv_tables: list[dict] = []
-        try:
-            csv_registry = pxt.get_table("pixelbot_v3.csv_registry")
-            for row in (
-                csv_registry.where(csv_registry.user_id == user_id)
-                .select(
-                    csv_registry.display_name,
-                    csv_registry.uuid,
-                    csv_registry.row_count,
-                    csv_registry.col_names,
-                )
-                .collect()
-            ):
-                csv_tables.append(
-                    {
-                        "name": row["display_name"],
-                        "uuid": row["uuid"],
-                        "row_count": row["row_count"],
-                        "columns": row["col_names"],
-                    }
-                )
-        except Exception as e:
-            logger.error(f"Error fetching CSV tables: {e}")
-
-        # Workflow history — direct iteration, no pandas
-        workflow_data: list[dict] = []
-        try:
-            wf_table = pxt.get_table("pixelbot_v3.tools")
-            for row in (
-                wf_table.where(wf_table.user_id == user_id)
-                .select(
-                    wf_table.timestamp,
-                    wf_table.prompt,
-                    wf_table.answer,
-                )
-                .order_by(wf_table.timestamp, asc=False)
-                .collect()
-            ):
-                ts = row.get("timestamp")
-                workflow_data.append(
-                    {
-                        "timestamp": ts.strftime("%Y-%m-%d %H:%M:%S.%f") if ts else None,
-                        "prompt": row.get("prompt"),
-                        "answer": row.get("answer"),
-                    }
-                )
-        except Exception as e:
-            logger.error(f"Error fetching workflow data: {e}")
-
-        return {
-            "tools": available_tools,
-            "documents": document_list,
-            "images": image_list,
-            "videos": video_list,
-            "audios": audio_list,
-            "csv_tables": csv_tables,
-            "initial_prompt": config.INITIAL_SYSTEM_PROMPT,
-            "final_prompt": config.FINAL_SYSTEM_PROMPT,
-            "workflow_data": workflow_data,
-            "parameters": {
-                "max_tokens": config.DEFAULT_MAX_TOKENS,
-                "temperature": config.DEFAULT_TEMPERATURE,
-            },
-        }
-
+        doc_table = get_pxt_table("document")
+        for row in (
+            doc_table.where(doc_table.user_id == user_id)
+            .select(doc_source=doc_table.document, uuid_col=doc_table.uuid)
+            .collect()
+        ):
+            document_list.append({"name": _source_to_filename(row["doc_source"]), "uuid": row["uuid_col"]})
     except Exception as e:
-        logger.error(f"Error fetching context info: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error fetching documents: {e}")
+
+    # Images — use precomputed `thumbnail` column from Pixeltable
+    image_list: list[dict] = []
+    try:
+        img_table = get_pxt_table("image")
+        for row in (
+            img_table.where(img_table.user_id == user_id)
+            .select(
+                img_source=img_table.image,
+                uuid_col=img_table.uuid,
+                thumb=img_table.thumbnail,
+            )
+            .collect()
+        ):
+            thumbnail = _pxt_thumbnail_to_data_uri(row.get("thumb"))
+            image_list.append(
+                {
+                    "name": _source_to_filename(row["img_source"]),
+                    "thumbnail": thumbnail,
+                    "uuid": row["uuid_col"],
+                }
+            )
+    except Exception as e:
+        logger.error(f"Error fetching images: {e}")
+
+    # Videos (with thumbnails from first frame)
+    video_list: list[dict] = []
+    try:
+        vid_table = get_pxt_table("video")
+        video_frames_view = pxt.get_table("pixelbot_v3.video_frames")
+
+        # Build a map of uuid → first-frame thumbnail
+        first_frames_map: dict[str, str | None] = {}
+        try:
+            for row in (
+                video_frames_view.where(video_frames_view.pos == 0)
+                .select(
+                    video_uuid=video_frames_view.uuid,
+                    frame=video_frames_view.frame,
+                )
+                .collect()
+            ):
+                frame = row.get("frame")
+                if isinstance(frame, Image.Image):
+                    first_frames_map[row["video_uuid"]] = create_thumbnail_base64(frame, THUMB_SIZE_SIDEBAR)
+        except Exception as e:
+            logger.error(f"Error fetching video first frames: {e}")
+
+        for row in (
+            vid_table.where(vid_table.user_id == user_id)
+            .select(
+                video_col=vid_table.video,
+                uuid_col=vid_table.uuid,
+            )
+            .collect()
+        ):
+            video_list.append(
+                {
+                    "name": _source_to_filename(row["video_col"]),
+                    "thumbnail": first_frames_map.get(row["uuid_col"]),
+                    "uuid": row["uuid_col"],
+                }
+            )
+    except Exception as e:
+        logger.error(f"Error fetching videos: {e}")
+
+    # Audios
+    audio_list: list[dict] = []
+    try:
+        audio_table = get_pxt_table("audio")
+        for row in (
+            audio_table.where(audio_table.user_id == user_id)
+            .select(
+                audio_col=audio_table.audio,
+                uuid_col=audio_table.uuid,
+            )
+            .collect()
+        ):
+            audio_list.append({"name": _source_to_filename(row["audio_col"]), "uuid": row["uuid_col"]})
+    except Exception as e:
+        logger.error(f"Error fetching audios: {e}")
+
+    # CSV tables (from registry)
+    csv_tables: list[dict] = []
+    try:
+        csv_registry = pxt.get_table("pixelbot_v3.csv_registry")
+        for row in (
+            csv_registry.where(csv_registry.user_id == user_id)
+            .select(
+                csv_registry.display_name,
+                csv_registry.uuid,
+                csv_registry.row_count,
+                csv_registry.col_names,
+            )
+            .collect()
+        ):
+            csv_tables.append(
+                {
+                    "name": row["display_name"],
+                    "uuid": row["uuid"],
+                    "row_count": row["row_count"],
+                    "columns": row["col_names"],
+                }
+            )
+    except Exception as e:
+        logger.error(f"Error fetching CSV tables: {e}")
+
+    # Workflow history — direct iteration, no pandas
+    workflow_data: list[dict] = []
+    try:
+        wf_table = pxt.get_table("pixelbot_v3.tools")
+        for row in (
+            wf_table.where(wf_table.user_id == user_id)
+            .select(
+                wf_table.timestamp,
+                wf_table.prompt,
+                wf_table.answer,
+            )
+            .order_by(wf_table.timestamp, asc=False)
+            .collect()
+        ):
+            ts = row.get("timestamp")
+            workflow_data.append(
+                {
+                    "timestamp": ts.strftime("%Y-%m-%d %H:%M:%S.%f") if ts else None,
+                    "prompt": row.get("prompt"),
+                    "answer": row.get("answer"),
+                }
+            )
+    except Exception as e:
+        logger.error(f"Error fetching workflow data: {e}")
+
+    return {
+        "tools": available_tools,
+        "documents": document_list,
+        "images": image_list,
+        "videos": video_list,
+        "audios": audio_list,
+        "csv_tables": csv_tables,
+        "initial_prompt": config.INITIAL_SYSTEM_PROMPT,
+        "final_prompt": config.FINAL_SYSTEM_PROMPT,
+        "workflow_data": workflow_data,
+        "parameters": {
+            "max_tokens": config.DEFAULT_MAX_TOKENS,
+            "temperature": config.DEFAULT_TEMPERATURE,
+        },
+    }

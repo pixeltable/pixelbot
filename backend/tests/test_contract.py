@@ -2,12 +2,13 @@ import inspect
 import io
 import socket
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException, UploadFile
 from fastapi.testclient import TestClient
 
-from pixelbot import __version__, config
+from pixelbot import __version__, config, notifications
 from pixelbot.app import app
 from pixelbot.catalog_access import require_allowed_table
 from pixelbot.functions import send_webhook
@@ -37,6 +38,13 @@ def test_removed_routes_are_not_registered() -> None:
         "/api/memory/v2/delete",
         "/api/memory/manual",
         "/api/download_memory",
+        "/api/delete_file/{file_uuid}/{file_type}",
+        "/api/delete_all",
+        "/api/workflow_detail/{timestamp_str}",
+        "/api/delete_history/{timestamp_str}",
+        "/api/tts_voices",
+        "/api/db/table/{path}/schema",
+        "/api/db/table/{path}/versions",
     }
     assert not any(path in removed for _, path in routes)
 
@@ -55,12 +63,48 @@ def test_pixeltable_query_routes_are_canonical() -> None:
 
 def test_removed_api_routes_return_not_found() -> None:
     client = TestClient(app)
-    assert client.post("/api/studio/reve/edit", json={}).status_code == 404
-    assert client.post("/api/db/create_table", json={}).status_code == 404
+    removed_requests = (
+        ("POST", "/api/studio/reve/edit"),
+        ("POST", "/api/db/create_table"),
+        ("DELETE", "/api/delete_file/example/image"),
+        ("POST", "/api/delete_all"),
+        ("GET", "/api/workflow_detail/2026-01-01"),
+        ("DELETE", "/api/delete_history/2026-01-01"),
+        ("GET", "/api/tts_voices"),
+        ("GET", "/api/db/table/pixelbot_v3.images/schema"),
+        ("GET", "/api/db/table/pixelbot_v3.images/versions"),
+    )
+    for method, path in removed_requests:
+        assert client.request(method, path).status_code == 404
+
+
+def test_unexpected_route_errors_are_sanitized(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fail_catalog_lookup(_: str):
+        raise RuntimeError("secret catalog detail")
+
+    monkeypatch.setattr("pixelbot.routers.history.pxt.get_table", fail_catalog_lookup)
+    response = TestClient(app, raise_server_exceptions=False).get("/api/conversations")
+
+    assert response.status_code == 500
+    assert response.json() == {"detail": "Internal server error"}
 
 
 def test_webhook_destination_is_configuration_only() -> None:
     assert list(inspect.signature(send_webhook.py_fn).parameters) == ["message"]
+
+
+def test_notification_delivery_is_shared_and_typed(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(config, "SLACK_WEBHOOK_URL", "https://example.test/secret-token")
+    monkeypatch.setattr(
+        notifications.requests,
+        "post",
+        lambda url, **kwargs: SimpleNamespace(status_code=200),
+    )
+
+    result = notifications.deliver_notification("slack", "hello")
+
+    assert result == notifications.DeliveryResult("Slack message sent successfully.", True, 200)
+    assert notifications.redacted_destination("slack") == "https://example.test/..."
 
 
 def test_private_url_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:

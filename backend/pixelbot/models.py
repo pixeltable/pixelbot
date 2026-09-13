@@ -263,18 +263,6 @@ class AddUrlResponse(BaseModel):
     uuid: str
 
 
-class DeleteFileResponse(BaseModel):
-    message: str
-    db_deleted: bool
-    file_deleted: bool
-    uuid: str
-
-
-class DeleteAllResponse(BaseModel):
-    message: str
-    should_refresh: bool = True
-
-
 # ── History ──────────────────────────────────────────────────────────────────
 
 

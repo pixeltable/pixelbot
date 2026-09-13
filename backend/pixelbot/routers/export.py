@@ -68,28 +68,24 @@ def _collect_rows(table_path: str, limit: int, columns: list[str] | None) -> tup
 @pxt_retry()
 def list_exportable_tables():
     """Return all tables with their column info for the export picker."""
-    try:
-        tables_raw = list(pxt.list_tables(config.APP_NAMESPACE, recursive=True))
-        tables_raw.extend(registered_scratch_tables())
-        result = []
-        for path in tables_raw:
-            try:
-                tbl = pxt.get_table(path)
-                col_names = tbl.columns()
-                row_count = tbl.count()
-                result.append(
-                    {
-                        "path": path,
-                        "columns": col_names,
-                        "row_count": row_count,
-                    }
-                )
-            except Exception:
-                result.append({"path": path, "columns": [], "row_count": 0})
-        return {"tables": result}
-    except Exception as e:
-        logger.error(f"Failed to list tables: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+    tables_raw = list(pxt.list_tables(config.APP_NAMESPACE, recursive=True))
+    tables_raw.extend(registered_scratch_tables())
+    result = []
+    for path in tables_raw:
+        try:
+            tbl = pxt.get_table(path)
+            col_names = tbl.columns()
+            row_count = tbl.count()
+            result.append(
+                {
+                    "path": path,
+                    "columns": col_names,
+                    "row_count": row_count,
+                }
+            )
+        except Exception:
+            result.append({"path": path, "columns": [], "row_count": 0})
+    return {"tables": result}
 
 
 # ── Export as JSON ───────────────────────────────────────────────────────────
@@ -230,9 +226,6 @@ def export_json_column(
         }
     except ImportError:
         raise HTTPException(status_code=501, detail="pixeltable.functions.json not available")
-    except Exception as e:
-        logger.error(f"JSON dumps error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/preview/{table_path:path}", response_model=PreviewResponse)
