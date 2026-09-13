@@ -214,8 +214,8 @@ const SDK_SNIPPETS: CodeSnippet[] = [
     language: 'python',
     code: `import pixeltable as pxt
 
-# List all tables in the agents namespace
-for tbl in pxt.list_tables("agents", recursive=True):
+# List all tables in the Pixelbot 3 catalog
+for tbl in pxt.list_tables("pixelbot_v3", recursive=True):
     path = tbl.get_path()
     print(f"{path}: {tbl.count()} rows, {len(tbl.columns())} columns")`,
   },
@@ -245,7 +245,7 @@ for row in recent:
 
 chunks = pxt.get_table("pixelbot_v3.chunks")
 
-# Semantic search — Gemini embed_content index (0.6.5+)
+# Semantic search — Gemini embed_content index (Pixeltable 0.7.7)
 sim = chunks.text.similarity(string="machine learning best practices")
 results = (
     chunks.where(sim > 0.5)

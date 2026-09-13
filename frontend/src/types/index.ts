@@ -207,7 +207,7 @@ export interface DocumentChunks {
 
 export interface VideoFrames {
   uuid: string
-  frames: { frame: string; position: number }[]
+  frames: { frame: string; frame_idx: number; position: number }[]
   total: number
 }
 

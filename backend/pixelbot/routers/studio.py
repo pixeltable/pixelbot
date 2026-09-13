@@ -5,18 +5,18 @@ import os
 import re
 import uuid as uuid_mod
 from datetime import datetime
-from typing import Any, cast
+from typing import Any, Literal, cast
 from urllib.parse import urlparse
 
 import numpy as np
 import pixeltable as pxt
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from PIL import Image, ImageEnhance, ImageFilter, ImageOps
 from pixeltable.functions import gemini
 from pixeltable.functions import video as pxt_video
 from pixeltable.functions.huggingface import clip
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from umap import UMAP
 
 from pixelbot import config
@@ -35,6 +35,12 @@ TABLE_MAP = {
     "video": "pixelbot_v3.videos",
     "audio": "pixelbot_v3.audios",
 }
+
+SearchType = Literal["document", "image", "video", "audio"]
+
+
+def _default_search_types() -> list[SearchType]:
+    return ["document", "image", "video", "audio"]
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -104,6 +110,14 @@ def _pil_image_to_data_uri(img: Image.Image, max_size: tuple[int, int] | None = 
     img.save(buf, format="PNG")
     encoded = base64.b64encode(buf.getvalue()).decode("utf-8")
     return f"data:image/png;base64,{encoded}"
+
+
+def _frame_time_seconds(frame_attrs: object) -> float:
+    """Read the public frame iterator timestamp from its metadata object."""
+    if not isinstance(frame_attrs, dict):
+        return 0.0
+    value = frame_attrs.get("time")
+    return round(float(value), 1) if isinstance(value, (int, float)) else 0.0
 
 
 # ── Operations Catalog ───────────────────────────────────────────────────────
@@ -406,7 +420,7 @@ def get_studio_files():
         first_frames_map: dict[str, str | None] = {}
         try:
             for row in (
-                video_frames_view.where(video_frames_view.frame_idx == 0)
+                video_frames_view.where(video_frames_view.pos == 0)
                 .select(
                     video_uuid=video_frames_view.uuid,
                     frame=video_frames_view.frame,
@@ -516,8 +530,8 @@ def _get_csv_tables(user_id: str) -> list[dict]:
 
 class CsvRowsRequest(BaseModel):
     csv_uuid: str
-    offset: int = 0
-    limit: int = 50
+    offset: int = Field(default=0, ge=0)
+    limit: int = Field(default=50, ge=1, le=100)
 
 
 @router.post("/csv/rows")
@@ -670,7 +684,7 @@ def _coerce_value(val, col_name: str, schema: dict[str, str]):
 
 class CsvAddRowsRequest(BaseModel):
     csv_uuid: str
-    rows: list[dict]
+    rows: list[dict] = Field(min_length=1, max_length=1000)
 
 
 @router.post("/csv/rows/add")
@@ -841,10 +855,10 @@ def csv_versions(csv_uuid: str):
 
 
 class SearchRequest(BaseModel):
-    query: str
-    types: list[str] = ["document", "image", "video", "audio"]
-    limit: int = 20
-    threshold: float = 0.2
+    query: str = Field(min_length=1, max_length=2000)
+    types: list[SearchType] = Field(default_factory=_default_search_types, max_length=4)
+    limit: int = Field(default=20, ge=1, le=100)
+    threshold: float = Field(default=0.2, ge=-1.0, le=1.0)
 
 
 @router.post("/search")
@@ -923,7 +937,7 @@ def search_studio(body: SearchRequest):
                 .select(
                     uuid_col=frames_view.uuid,
                     frame=frames_view.frame,
-                    pos_msec=frames_view.pos_msec,
+                    frame_attrs=frames_view.frame_attrs,
                     sim=sim,
                 )
                 .order_by(sim, asc=False)
@@ -938,7 +952,7 @@ def search_studio(body: SearchRequest):
                 frame = row.get("frame")
                 if isinstance(frame, Image.Image):
                     thumb = create_thumbnail_base64(frame, THUMB_SIZE)
-                pos_sec = round(row.get("pos_msec", 0) / 1000, 1)
+                pos_sec = _frame_time_seconds(row.get("frame_attrs"))
                 results.append(
                     {
                         "type": "video",
@@ -1044,7 +1058,7 @@ def _get_embed_clip_fn():
 
 
 @router.get("/embeddings")
-def get_embeddings(space: str = "text", limit: int = 200):
+def get_embeddings(space: str = "text", limit: int = Query(default=200, ge=2, le=500)):
     """
     Return 2-D UMAP-projected embeddings for visualization.
 
@@ -1234,7 +1248,7 @@ def _collect_visual_embeddings(
             .select(
                 uuid_col=frames_view.uuid,
                 frame=frames_view.frame,
-                pos_msec=frames_view.pos_msec,
+                frame_attrs=frames_view.frame_attrs,
                 emb=_get_embed_clip_fn()(frames_view.frame),
             )
             .limit(per_type_limit)
@@ -1247,7 +1261,7 @@ def _collect_visual_embeddings(
                 frame = row.get("frame")
                 if isinstance(frame, Image.Image):
                     thumb = create_thumbnail_base64(frame, (64, 64))
-                pos_sec = round(row.get("pos_msec", 0) / 1000, 1)
+                pos_sec = _frame_time_seconds(row.get("frame_attrs"))
                 items.append(
                     {
                         "type": "video_frame",
@@ -1296,7 +1310,7 @@ def get_image_preview(uuid: str):
 class TransformRequest(BaseModel):
     uuid: str
     operation: str
-    params: dict = {}
+    params: dict = Field(default_factory=dict)
 
 
 @router.post("/transform/image")
@@ -1454,9 +1468,7 @@ def detect_objects(body: DetectRequest):
         frames_view = pxt.get_table("pixelbot_v3.video_frames")
         rows = (
             frames_view.where(
-                (frames_view.uuid == body.uuid)
-                & (frames_view.user_id == user_id)
-                & (frames_view.frame_idx == body.frame_idx)
+                (frames_view.uuid == body.uuid) & (frames_view.user_id == user_id) & (frames_view.pos == body.frame_idx)
             )
             .select(frame=frames_view.frame)
             .collect()
@@ -1892,7 +1904,7 @@ def transform_video(body: TransformRequest):
 class SaveVideoRequest(BaseModel):
     uuid: str
     operation: str
-    params: dict = {}
+    params: dict = Field(default_factory=dict)
 
 
 @router.post("/save/video")
@@ -2059,7 +2071,7 @@ def get_document_summary(uuid: str):
 
 @router.get("/chunks/{uuid}")
 @pxt_retry()
-def get_document_chunks(uuid: str, limit: int = 50):
+def get_document_chunks(uuid: str, limit: int = Query(default=50, ge=1, le=100)):
     """Get extracted text chunks for a document."""
     user_id = config.DEFAULT_USER_ID
     chunks_view = pxt.get_table("pixelbot_v3.chunks")
@@ -2092,7 +2104,7 @@ def get_document_chunks(uuid: str, limit: int = 50):
 
 @router.get("/frames/{uuid}")
 @pxt_retry()
-def get_video_frames(uuid: str, limit: int = 12):
+def get_video_frames(uuid: str, limit: int = Query(default=12, ge=1, le=100)):
     """Get extracted frames from a video as base64 thumbnails."""
     user_id = config.DEFAULT_USER_ID
     frames_view = pxt.get_table("pixelbot_v3.video_frames")
@@ -2101,9 +2113,10 @@ def get_video_frames(uuid: str, limit: int = 12):
         frames_view.where((frames_view.uuid == uuid) & (frames_view.user_id == user_id))
         .select(
             frame=frames_view.frame,
-            pos_msec=frames_view.pos_msec,
+            frame_idx=frames_view.pos,
+            frame_attrs=frames_view.frame_attrs,
         )
-        .order_by(frames_view.pos_msec)
+        .order_by(frames_view.pos)
         .limit(limit)
         .collect()
     ):
@@ -2111,10 +2124,11 @@ def get_video_frames(uuid: str, limit: int = 12):
         if isinstance(frame, Image.Image):
             thumb = create_thumbnail_base64(frame, (192, 192))
             if thumb:
-                pos_sec = round(row.get("pos_msec", 0) / 1000, 1)
+                pos_sec = _frame_time_seconds(row.get("frame_attrs"))
                 results.append(
                     {
                         "frame": thumb,
+                        "frame_idx": row["frame_idx"],
                         "position": pos_sec,
                     }
                 )

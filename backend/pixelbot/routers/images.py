@@ -5,6 +5,7 @@ import os
 import uuid
 from datetime import datetime
 
+import av
 import pixeltable as pxt
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
@@ -562,8 +563,6 @@ def save_generated_video_to_collection(body: SaveToCollectionRequest):
 def generate_slideshow(body: GenerateSlideshowRequest):
     """Generate a video slideshow from a list of generated image timestamps."""
     user_id = config.DEFAULT_USER_ID
-    current_timestamp = datetime.now()
-
     if not body.timestamps or len(body.timestamps) < 2:
         raise HTTPException(status_code=400, detail="Slideshow requires at least 2 images")
 
@@ -601,64 +600,11 @@ def generate_slideshow(body: GenerateSlideshowRequest):
     if len(images) < 2:
         raise HTTPException(status_code=404, detail="Could not find at least 2 valid images matching timestamps")
 
-    # Force uniform dimensions (using first image's size)
-    from PIL import ImageOps
-
-    target_size = images[0].size
-
     os.makedirs(config.UPLOAD_FOLDER, exist_ok=True)
-    slideshow_id = uuid.uuid4().hex[:10]
-
-    saved_paths = []
-    for i, img in enumerate(images):
-        if img.mode != "RGB":
-            img = img.convert("RGB")
-        if img.size != target_size:
-            img = ImageOps.fit(img, target_size, Image.Resampling.LANCZOS)
-
-        p = os.path.join(config.UPLOAD_FOLDER, f"slide_{slideshow_id}_{i}.png")
-        img.save(p, format="PNG")
-        saved_paths.append(p)
-
-    temp_table_name = f"pixelbot_v3.temp_slideshow_{slideshow_id}"
+    file_uuid = str(uuid.uuid4())
+    dest_path = os.path.join(config.UPLOAD_FOLDER, f"{file_uuid}_slideshow.mp4")
     try:
-        from pixeltable.functions import video as pxt_video
-
-        # Create temp table
-        temp_tbl = pxt.create_table(temp_table_name, {"idx": pxt.Int, "img": pxt.Image})
-
-        # Insert rows
-        temp_tbl.insert([{"idx": i, "img": path} for i, path in enumerate(saved_paths)])
-
-        # Aggregate to video
-        result = temp_tbl.select(vid=pxt_video.concat_videos_agg(temp_tbl.idx, temp_tbl.img)).collect()
-        if not result or result[0].get("vid") is None:
-            raise HTTPException(status_code=500, detail="Slideshow concatenation failed")
-
-        video_path = str(result[0]["vid"])
-
-        file_uuid = str(uuid.uuid4())
-        dest_path = os.path.join(config.UPLOAD_FOLDER, f"{file_uuid}_slideshow.mp4")
-
-        import shutil
-
-        shutil.copy2(video_path, dest_path)
-
-        # Insert into video generation tasks to appear in UI
-        vid_gen_tbl = pxt.get_table("pixelbot_v3.video_generation_tasks")
-        vid_gen_tbl.insert(
-            [
-                VideoGenRow(
-                    prompt=f"Slideshow from {len(saved_paths)} selected images",
-                    timestamp=current_timestamp,
-                    user_id=user_id,
-                )
-            ]
-        )
-
-        # Finally, we must manually update the generated_video property so it points to our custom file!
-        # Wait, generated_video is a computed column on pixelbot_v3.video_generation_tasks. We can't insert it.
-        # Instead, we will directly insert into pixelbot_v3.videos collection!
+        _write_slideshow(images, dest_path)
         videos_table = pxt.get_table("pixelbot_v3.videos")
         videos_table.insert(
             [
@@ -674,11 +620,35 @@ def generate_slideshow(body: GenerateSlideshowRequest):
         return GenerateSlideshowResponse(
             video_url=f"/api/serve_video?path={dest_path}", video_path=dest_path, uuid=file_uuid
         )
-    finally:
+    except Exception:
         try:
-            pxt.drop_table(temp_table_name, force=True)
-        except Exception:
+            os.remove(dest_path)
+        except FileNotFoundError:
             pass
+        raise
+
+
+def _write_slideshow(images: list[Image.Image], destination: str, *, fps: int = 10, seconds_per_slide: int = 2) -> None:
+    """Write an MP4 slideshow without mutating the Pixeltable catalog."""
+    from PIL import ImageOps
+
+    first = images[0]
+    target_size = (max(2, first.width - first.width % 2), max(2, first.height - first.height % 2))
+    container = av.open(destination, mode="w")
+    try:
+        stream = container.add_stream("h264", rate=fps)
+        stream.pix_fmt = "yuv420p"
+        stream.width, stream.height = target_size
+        for image in images:
+            prepared = ImageOps.fit(image.convert("RGB"), target_size, Image.Resampling.LANCZOS)
+            for _ in range(fps * seconds_per_slide):
+                frame = av.VideoFrame.from_image(prepared)
+                for packet in stream.encode(frame):
+                    container.mux(packet)
+        for packet in stream.encode():
+            container.mux(packet)
+    finally:
+        container.close()
 
 
 # ── Text-to-Speech (OpenAI TTS) ──────────────────────────────────────────────
@@ -735,14 +705,13 @@ def save_generated_speech_to_collection(body: SaveSpeechRequest):
     """Save a TTS audio file into pixelbot_v3.audios so it enters the transcription + RAG pipeline."""
     user_id = config.DEFAULT_USER_ID
 
-    if not os.path.exists(body.audio_path):
-        raise HTTPException(status_code=404, detail="Audio file not found on disk")
+    audio_path = resolve_served_media_path(body.audio_path)
     file_uuid = str(uuid.uuid4())
     audios_table = pxt.get_table("pixelbot_v3.audios")
     audios_table.insert(
         [
             AudioRow(
-                audio=body.audio_path,
+                audio=audio_path,
                 uuid=file_uuid,
                 timestamp=datetime.now(),
                 user_id=user_id,

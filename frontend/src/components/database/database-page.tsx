@@ -103,7 +103,7 @@ const GROUPS: TableGroup[] = [
 ]
 
 function getShortName(path: string): string {
-  return path.replace(/^agents\//, '')
+  return path.split('/').at(-1) ?? path
 }
 
 interface GroupedTables {

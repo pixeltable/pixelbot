@@ -6,12 +6,13 @@ import re
 import socket
 import uuid
 from datetime import datetime
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 import pixeltable as pxt
+import requests
 from fastapi import APIRouter, File, HTTPException, UploadFile
 from PIL import Image
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from pixelbot import config, functions
 from pixelbot.models import (
@@ -35,7 +36,7 @@ def _secure_filename(filename: str) -> str:
 
 def _validate_public_http_url(raw_url: str) -> None:
     parsed = urlparse(raw_url)
-    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password:
         raise HTTPException(status_code=400, detail="URL must use public HTTP(S)")
     try:
         addresses = {item[4][0] for item in socket.getaddrinfo(parsed.hostname, parsed.port)}
@@ -45,6 +46,61 @@ def _validate_public_http_url(raw_url: str) -> None:
         ip = ipaddress.ip_address(address)
         if not ip.is_global:
             raise HTTPException(status_code=400, detail="URL must resolve to a public address")
+
+
+def _download_public_url(raw_url: str, filename: str) -> tuple[str, str]:
+    """Download a public URL with redirect validation and a streaming size cap."""
+    os.makedirs(config.UPLOAD_FOLDER, exist_ok=True)
+    destination = os.path.join(config.UPLOAD_FOLDER, f"{uuid.uuid4()}_{_secure_filename(filename)}")
+    max_bytes = config.MAX_UPLOAD_SIZE_MB * 1024 * 1024
+    current_url = raw_url
+    session = requests.Session()
+    session.trust_env = False
+
+    try:
+        for _ in range(6):
+            _validate_public_http_url(current_url)
+            response = session.get(current_url, stream=True, allow_redirects=False, timeout=(5, 30))
+            try:
+                if response.status_code in {301, 302, 303, 307, 308}:
+                    location = response.headers.get("location")
+                    if not location:
+                        raise HTTPException(status_code=400, detail="URL redirect has no destination")
+                    current_url = urljoin(current_url, location)
+                    continue
+
+                response.raise_for_status()
+                content_length = response.headers.get("content-length")
+                if content_length is not None and int(content_length) > max_bytes:
+                    raise HTTPException(status_code=413, detail=f"URL exceeds {config.MAX_UPLOAD_SIZE_MB} MB")
+
+                bytes_written = 0
+                with open(destination, "xb") as output:
+                    for chunk in response.iter_content(chunk_size=1024 * 1024):
+                        if not chunk:
+                            continue
+                        bytes_written += len(chunk)
+                        if bytes_written > max_bytes:
+                            raise HTTPException(status_code=413, detail=f"URL exceeds {config.MAX_UPLOAD_SIZE_MB} MB")
+                        output.write(chunk)
+                return destination, current_url
+            finally:
+                response.close()
+        raise HTTPException(status_code=400, detail="URL has too many redirects")
+    except HTTPException:
+        try:
+            os.remove(destination)
+        except FileNotFoundError:
+            pass
+        raise
+    except (OSError, requests.RequestException, ValueError) as exc:
+        try:
+            os.remove(destination)
+        except FileNotFoundError:
+            pass
+        raise HTTPException(status_code=400, detail="Unable to download URL") from exc
+    finally:
+        session.close()
 
 
 logger = logging.getLogger(__name__)
@@ -70,19 +126,15 @@ def get_pxt_table(table_key: str):
 def _determine_table_key(file_ext: str) -> tuple[str, str] | None:
     """Return (table_key, data_col) based on file extension, or None."""
     ext_map: dict[str, tuple[str, str]] = {
-        # Documents (native + Office via MarkdownIT)
+        # Documents supported by Pixeltable 0.7.7's DocumentType
         "pdf": ("document", "document"),
         "txt": ("document", "document"),
         "md": ("document", "document"),
         "html": ("document", "document"),
         "xml": ("document", "document"),
-        "doc": ("document", "document"),
         "docx": ("document", "document"),
-        "ppt": ("document", "document"),
         "pptx": ("document", "document"),
-        "xls": ("document", "document"),
         "xlsx": ("document", "document"),
-        "rtf": ("document", "document"),
         # Images
         "jpg": ("image", "image"),
         "jpeg": ("image", "image"),
@@ -280,7 +332,7 @@ def _import_csv(file_path: str, display_name: str, user_id: str) -> UploadRespon
 
 
 class AddUrlRequest(BaseModel):
-    url: str
+    url: str = Field(max_length=2048)
 
 
 @router.post("/add_url", response_model=AddUrlResponse)
@@ -288,7 +340,6 @@ def add_url(body: AddUrlRequest):
     """Add a URL as a data source."""
     user_id = config.DEFAULT_USER_ID
 
-    _validate_public_http_url(body.url)
     parsed = urlparse(body.url)
 
     filename = os.path.basename(parsed.path)
@@ -302,6 +353,15 @@ def add_url(body: AddUrlRequest):
         )
 
     table_key, data_col = mapping
+    file_path, resolved_url = _download_public_url(body.url, filename)
+    resolved_filename = os.path.basename(urlparse(resolved_url).path)
+    resolved_ext = resolved_filename.rsplit(".", 1)[-1].lower() if "." in resolved_filename else ""
+    if _determine_table_key(resolved_ext) != mapping:
+        try:
+            os.remove(file_path)
+        except FileNotFoundError:
+            pass
+        raise HTTPException(status_code=400, detail="URL redirect changed the file type")
 
     try:
         file_uuid = str(uuid.uuid4())
@@ -309,7 +369,7 @@ def add_url(body: AddUrlRequest):
 
         table = get_pxt_table(table_key)
         RowModel = MEDIA_ROW_MODELS[table_key]
-        row = RowModel(**{data_col: body.url, "uuid": file_uuid, "timestamp": current_timestamp, "user_id": user_id})
+        row = RowModel(**{data_col: file_path, "uuid": file_uuid, "timestamp": current_timestamp, "user_id": user_id})
         status = table.insert([row], return_rows=True)
         if status.errors:
             raise RuntimeError(f"Insert failed: {status.errors}")

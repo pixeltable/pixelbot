@@ -38,7 +38,7 @@ uv run --env-file .env pxt schema update pixelbot/app.py pixelbot_v3 -f
 uv run --env-file .env pxt service update pixelbot/app.py pixelbot_v3 app --port 8000 -f
 ```
 
-Debug with `pxt service list`, `pxt service logs pixelbot_v3/app`, `pxt errors TABLE`, and `pxt recompute TABLE COLUMN --errors-only -f`. Errors-only recomputation takes exactly one column.
+Debug with `pxt service list`, the local file at `$PIXELTABLE_HOME/logs/services/pixelbot_v3/app.log`, `pxt errors TABLE`, and `pxt recompute TABLE COLUMN --errors-only -f`. The local `pxt service logs` command reports that path rather than streaming the file. Errors-only recomputation takes exactly one column.
 
 ## Required checks
 

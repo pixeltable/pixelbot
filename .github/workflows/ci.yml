@@ -21,12 +21,13 @@ jobs:
         working-directory: backend
       - run: uv run python -c "import pixelbot, pixeltable; assert pixelbot.__version__ == '3.0.0'; assert pixeltable.__version__ == '0.7.7'"
         working-directory: backend
+      - run: uv run pytest -q
+        working-directory: backend
       - if: matrix.python-version == '3.11'
         run: |
           uv run ruff check pixelbot tests
           uv run ruff format --check pixelbot tests
           uv run mypy pixelbot
-          uv run pytest -q
         working-directory: backend
 
   frontend:
@@ -56,8 +57,28 @@ jobs:
           python-version: "3.11"
       - run: uv sync --locked --group dev
         working-directory: backend
+      - name: Verify fresh dependency resolution
+        working-directory: backend
+        run: |
+          uv pip compile pyproject.toml --python-version 3.11 --output-file "$RUNNER_TEMP/fresh-requirements.txt"
+          grep -Fx "pixeltable==0.7.7" "$RUNNER_TEMP/fresh-requirements.txt"
       - run: uv build
         working-directory: backend
+      - name: Verify source distribution contents
+        working-directory: backend
+        run: |
+          uv run python - <<'PY'
+          import tarfile
+          from pathlib import Path, PurePosixPath
+
+          archive = next(Path("dist").glob("pixelbot-*.tar.gz"))
+          with tarfile.open(archive) as package:
+              files = [PurePosixPath(member.name) for member in package.getmembers() if member.isfile()]
+          forbidden = {"uv-bin", "uv-cache", "dist", "static", ".venv"}
+          leaked = [path for path in files if len(path.parts) > 1 and path.parts[1] in forbidden]
+          assert not leaked, leaked[:10]
+          assert len(files) < 200, f"Unexpectedly large sdist: {len(files)} files"
+          PY
       - run: |
           uv venv wheel-test
           uv pip install --python wheel-test/bin/python dist/pixelbot-3.0.0-py3-none-any.whl --no-deps

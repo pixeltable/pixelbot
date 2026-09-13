@@ -78,7 +78,7 @@ const SCHEMA_NODES: SchemaNode[] = [
   { id: 'img_thumb', label: 'Thumbnail', type: 'udf', icon: Cpu, description: 'resize(96×96) → b64_encode → thumbnail computed column', color: '#F1AE03', group: 'processing' },
 
   // ── Video Processing ─────────────────────────────
-  { id: 'video_frames', label: 'video_frames', type: 'view', icon: Film, description: 'pixelbot_v3.video_frames — frame_iterator(keyframes_only=True)', color: '#DC2404', details: ['frame', 'frame_idx', 'frame_thumbnail (192×192)'], group: 'processing' },
+  { id: 'video_frames', label: 'video_frames', type: 'view', icon: Film, description: 'pixelbot_v3.video_frames — frame_iterator(keyframes_only=True)', color: '#DC2404', details: ['pos', 'frame', 'frame_attrs', 'frame_thumbnail (192×192)'], group: 'processing' },
   { id: 'video_audio_chunks', label: 'video_audio_chunks', type: 'view', icon: Layers, description: 'pixelbot_v3.video_audio_chunks — AudioSplitter(30s chunks) with Whisper text', color: '#DC2404', details: ['audio', 'transcription', 'text'], group: 'processing' },
   { id: 'whisper_video', label: 'Whisper', type: 'model', icon: Mic, description: 'openai.transcriptions(model=whisper-1) on video audio', color: '#DC2404', details: ['transcription.text'], group: 'processing' },
 

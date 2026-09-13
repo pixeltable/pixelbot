@@ -38,20 +38,16 @@ DEFAULT_TEMPERATURE: float = 0.7
 UPLOAD_FOLDER = "data"
 MAX_UPLOAD_SIZE_MB = 100
 ALLOWED_EXTENSIONS = {
-    # Documents (native + Office via MarkdownIT)
+    # Documents supported by Pixeltable 0.7.7's DocumentType
     "pdf",
     "txt",
     "md",
     "html",
     "xml",
-    "doc",
     "docx",
-    "ppt",
     "pptx",
-    "xls",
     "xlsx",
     "csv",
-    "rtf",
     # Images
     "jpg",
     "jpeg",
