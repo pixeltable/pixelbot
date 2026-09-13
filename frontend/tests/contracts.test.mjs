@@ -30,13 +30,17 @@ test('CSV mutations use registry UUIDs', async () => {
 })
 
 test('pipeline UI matches the deployed Gemini schema', async () => {
-  const [architecture, database] = await Promise.all([
+  const [architecture, database, developerPage] = await Promise.all([
     read('../src/components/architecture/architecture-page.tsx'),
     read('../src/components/database/database-page.tsx'),
+    read('../src/components/developer/developer-page.tsx'),
   ])
   assert.doesNotMatch(architecture, /transcript_sentences|Claude →|e5-large/)
   assert.match(architecture, /gemini\.generate_content/)
   assert.doesNotMatch(database, /transcript_sentences/)
+  assert.match(database, /path\.split\('\/'\)\.at\(-1\)/)
+  assert.doesNotMatch(database, /agents\//)
+  assert.match(developerPage, /pxt\.list_tables\("pixelbot_v3"/)
 })
 
 test('memory and persona reads use canonical Pixeltable query routes', async () => {

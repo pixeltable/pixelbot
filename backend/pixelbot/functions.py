@@ -226,13 +226,13 @@ def extract_document_text(doc: pxt.Document) -> Optional[str]:
                 pages = [page.extract_text() or "" for page in pdf.pages]
                 text = "\n".join(pages)
 
-        elif ext in (".docx", ".doc"):
+        elif ext == ".docx":
             import docx as docx_lib
 
             doc_obj = docx_lib.Document(str(path))
             text = "\n".join(p.text for p in doc_obj.paragraphs if p.text.strip())
 
-        elif ext in (".pptx", ".ppt"):
+        elif ext == ".pptx":
             from pptx import Presentation
 
             prs = Presentation(str(path))
@@ -243,7 +243,7 @@ def extract_document_text(doc: pxt.Document) -> Optional[str]:
                         slide_texts.append(shape.text.strip())
             text = "\n".join(slide_texts)
 
-        elif ext in (".xlsx", ".xls"):
+        elif ext == ".xlsx":
             import openpyxl
 
             wb = openpyxl.load_workbook(str(path), read_only=True, data_only=True)
@@ -269,7 +269,7 @@ def extract_document_text(doc: pxt.Document) -> Optional[str]:
                         break
             text = "\n".join(csv_rows)
 
-        elif ext in (".txt", ".md", ".html", ".xml", ".rtf"):
+        elif ext in (".txt", ".md", ".html", ".xml"):
             text = path.read_text(errors="ignore")
 
         else:

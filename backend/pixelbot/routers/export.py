@@ -95,7 +95,7 @@ def list_exportable_tables():
 @pxt_retry()
 def export_json(
     table_path: str,
-    limit: int = Query(default=1000, le=1000),
+    limit: int = Query(default=1000, ge=1, le=1000),
     columns: str | None = Query(default=None, description="Comma-separated column names"),
 ):
     """Export a table as a downloadable JSON file."""
@@ -119,7 +119,7 @@ def export_json(
 @pxt_retry()
 def export_csv(
     table_path: str,
-    limit: int = Query(default=1000, le=1000),
+    limit: int = Query(default=1000, ge=1, le=1000),
     columns: str | None = Query(default=None, description="Comma-separated column names"),
 ):
     """Export a table as a downloadable CSV file."""
@@ -155,7 +155,7 @@ def export_csv(
 @pxt_retry()
 def export_parquet(
     table_path: str,
-    limit: int = Query(default=1000, le=1000),
+    limit: int = Query(default=1000, ge=1, le=1000),
     columns: str | None = Query(default=None, description="Comma-separated column names"),
 ):
     """Export a table as a downloadable Parquet file."""
@@ -195,7 +195,7 @@ def export_parquet(
 def export_json_column(
     table_path: str,
     column: str = Query(..., description="Column to serialize"),
-    limit: int = Query(default=100, le=500),
+    limit: int = Query(default=100, ge=1, le=500),
 ):
     """Serialize a complex column to JSON strings using Pixeltable's json.dumps() UDF."""
     try:
@@ -232,7 +232,7 @@ def export_json_column(
 @pxt_retry()
 def preview_table(
     table_path: str,
-    limit: int = Query(default=5, le=50),
+    limit: int = Query(default=5, ge=1, le=50),
     columns: str | None = Query(default=None),
 ):
     """Return a small preview of a table for the export UI."""
@@ -249,7 +249,7 @@ def preview_table(
 def export_native(
     table_path: str,
     format: str = Query(default="csv", pattern="^(csv|json)$"),
-    limit: int = Query(default=1000, le=1000),
+    limit: int = Query(default=1000, ge=1, le=1000),
 ):
     """Export using Pixeltable 0.7.7 native export APIs (demo endpoint)."""
     try:

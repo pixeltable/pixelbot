@@ -2,12 +2,13 @@
 
 import logging
 import re
+from collections.abc import Mapping
 from datetime import datetime
-from typing import Literal, cast
+from typing import Any, Literal, cast
 
 import pixeltable as pxt
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel, Field
 
 from pixelbot import config
 from pixelbot.catalog_access import require_allowed_table
@@ -60,10 +61,21 @@ def _column_info(tbl) -> list[dict]:
     return columns
 
 
+def _index_info(name: str, metadata: Mapping[str, Any]) -> dict:
+    """Normalize Pixeltable index metadata for the pipeline response."""
+    parameters = metadata.get("parameters") or {}
+    return {
+        "name": name,
+        "columns": metadata.get("columns", []),
+        "type": metadata.get("index_type", "unknown"),
+        "embedding": str(parameters.get("embedding", ""))[:120],
+    }
+
+
 @router.get("/tables")
 @pxt_retry()
 def list_all_tables():
-    """List all tables and views in the agents namespace with schema info."""
+    """List all tables and views in the application namespace with schema info."""
     table_paths = pxt.list_tables(NAMESPACE, recursive=True)
 
     tables = []
@@ -92,7 +104,7 @@ def list_all_tables():
                     "base_table": None,
                     "columns": [],
                     "row_count": 0,
-                    "error": str(e),
+                    "error": "Unable to inspect table",
                 }
             )
 
@@ -135,11 +147,11 @@ def get_table_rows(path: str, limit: int = 50, offset: int = 0):
 
 class SampleRequest(BaseModel):
     path: str
-    n: int | None = None
-    fraction: float | None = None
+    n: int | None = Field(default=None, ge=1)
+    fraction: float | None = Field(default=None, gt=0.0, le=1.0)
     stratify_by: str | None = None
     seed: int | None = 42
-    limit: int = 100
+    limit: int = Field(default=100, ge=1, le=100)
 
 
 @router.post("/sample")
@@ -178,7 +190,7 @@ def sample_table(body: SampleRequest):
             )
         sample_kwargs["stratify_by"] = getattr(tbl, body.stratify_by)
 
-    raw_rows = query.sample(**sample_kwargs).collect()
+    raw_rows = query.sample(**sample_kwargs).limit(body.limit).collect()
 
     col_names = tbl.columns()
     rows = []
@@ -203,7 +215,7 @@ def sample_table(body: SampleRequest):
 
 @router.get("/timeline")
 @pxt_retry()
-def get_timeline(limit: int = 100):
+def get_timeline(limit: int = Query(default=100, ge=1, le=500)):
     """Unified chronological feed across all timestamped tables."""
     events: list[dict] = []
 
@@ -279,8 +291,8 @@ class JoinRequest(BaseModel):
     right_table: str
     left_column: str
     right_column: str
-    join_type: str = "inner"  # inner, left, cross
-    limit: int = 50
+    join_type: Literal["inner", "left", "cross"] = "inner"
+    limit: int = Field(default=50, ge=1, le=100)
 
 
 @router.post("/join")
@@ -306,8 +318,6 @@ def join_tables(body: JoinRequest):
     if body.right_column not in right_cols:
         raise HTTPException(status_code=400, detail=f"Column '{body.right_column}' not in {body.right_table}")
 
-    if body.join_type not in ("inner", "left", "cross"):
-        raise HTTPException(status_code=400, detail=f"Unsupported join type: {body.join_type}")
     left_col_ref = getattr(left, body.left_column)
     right_col_ref = getattr(right, body.right_column)
 
@@ -432,14 +442,14 @@ def _parse_deps(computed_with: str | None, all_cols: set[str]) -> list[str]:
 
 def _detect_iterator(columns: list[dict]) -> str | None:
     """Detect the iterator type used to create a view from its column shapes."""
-    own_cols = {c["name"] for c in columns if c.get("defined_in_self")}
-    if {"frame_idx", "pos_frame", "frame"} & own_cols:
+    iterator_cols = {c["name"] for c in columns if c.get("is_iterator_col")}
+    if {"pos", "frame_attrs", "frame"} <= iterator_cols:
         return "FrameIterator"
-    if {"audio_chunk"} & own_cols and {"start_time_sec", "end_time_sec"} & own_cols:
+    if {"audio_segment", "segment_start", "segment_end"} <= iterator_cols:
         return "AudioSplitter"
-    if {"heading", "page", "title"} & own_cols and "pos" in own_cols:
+    if {"heading", "page", "title"} & iterator_cols and "pos" in iterator_cols:
         return "DocumentSplitter"
-    if "text" in own_cols and "pos" in own_cols:
+    if {"text", "pos"} <= iterator_cols:
         return "StringSplitter"
     return None
 
@@ -501,6 +511,7 @@ def get_pipeline():
                     "computed_with": cw_str,
                     "defined_in": defined_in,
                     "defined_in_self": defined_in == short_name,
+                    "is_iterator_col": bool(info.get("is_iterator_col")),
                     "func_name": func_name,
                     "func_type": func_type,
                 }
@@ -532,16 +543,7 @@ def get_pipeline():
 
             # Indices
             raw_indexes = md.get("indexes", {})
-            indexes = []
-            for idx_name, idx_info in raw_indexes.items():
-                indexes.append(
-                    {
-                        "name": idx_name,
-                        "columns": idx_info.get("columns", []),
-                        "type": idx_info.get("index_type", "unknown"),
-                        "embedding": str(idx_info.get("parameters", {}).get("embedding", ""))[:120],
-                    }
-                )
+            indexes = [_index_info(idx_name, idx_metadata) for idx_name, idx_metadata in raw_indexes.items()]
 
             # Version history (last 10)
             try:
@@ -629,7 +631,7 @@ def get_pipeline():
                     "versions": [],
                     "computed_count": 0,
                     "insertable_count": 0,
-                    "error": str(e),
+                    "error": "Unable to inspect table",
                 }
             )
 

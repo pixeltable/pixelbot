@@ -47,13 +47,15 @@ cd backend
 export PIXELTABLE_HOME="$PWD/.pixeltable-v3"
 
 uv run pxt service list
-uv run pxt service logs pixelbot_v3/app --since 10m --tail 50
+tail -50 "$PIXELTABLE_HOME/logs/services/pixelbot_v3/app.log"
 uv run pxt errors pixelbot_v3/collection
 uv run pxt recompute pixelbot_v3/collection summary --errors-only -f
 uv run pxt service stop pixelbot_v3/app
 ```
 
 `--errors-only` accepts exactly one computed column. A computed expression cannot be migrated in place: rename the column, or drop and re-add it in separate schema changes. `--allow-destructive` does not make that migration supported.
+
+For a local service, `pxt service logs pixelbot_v3/app` reports the log file path but does not stream its contents. Read the file under `PIXELTABLE_HOME` as shown above.
 
 The Database page is an inspector for catalog rows, schemas, lineage, history, samples, joins, and computation errors. Schema and index changes are made in `pixelbot/schema.py` and applied with `pxt schema update`. CSV uploads remain editable only through their registry UUIDs in `pixelbot_scratch`.
 

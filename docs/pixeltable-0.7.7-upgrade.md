@@ -40,7 +40,7 @@ uv run pxt schema diff pixelbot/app.py pixelbot_v3 --json             # exit 0 w
 uv run pxt service update pixelbot/app.py pixelbot_v3 app --port 8000 -f
 uv run pxt service list --json
 curl --fail http://127.0.0.1:8000/api/health
-uv run pxt service logs pixelbot_v3/app --tail 50
+tail -50 "$PIXELTABLE_HOME/logs/services/pixelbot_v3/app.log"
 uv run pxt service stop pixelbot_v3/app
 ```
 
@@ -60,6 +60,20 @@ On September 12, 2026, the read API was simplified against the canonical Pixelta
 A second simplification removed unused file-wide deletion, per-entry workflow, TTS voice-list, and standalone database schema/version endpoints. Duplicate route-level exception wrappers now fall through to the application's sanitized error handler, while expected validation and missing-resource responses remain explicit. Retries remain only on read-only operations so provider calls and catalog writes cannot be repeated after partial success. Notification delivery is implemented once for both HTTP tests and Pixeltable tools, returns typed delivery status, and stores a redacted destination origin.
 
 The pytest fixture now reuses one isolated Pixeltable catalog and stops its PostgreSQL server when the session ends. Two consecutive full backend runs passed with 15 tests and left no Pixelbot test database process running.
+
+## Post-merge audit
+
+On September 13, 2026, a fresh review found and corrected release-path and runtime defects:
+
+- The source distribution now includes only the application, tests, Pixeltable configuration, and lockfile instead of local uv binaries and cache entries. The final rebuilt sdist is under 1 MB with 91 files; the wheel has 86 files and includes the SPA.
+- Slideshow generation writes its MP4 directly with PyAV. It no longer creates a runtime catalog table, passes images to a video-only aggregate, or triggers a separate Veo generation.
+- Legacy `.doc`, `.ppt`, `.xls`, and `.rtf` uploads are rejected because Pixeltable 0.7.7 supports the modern Office formats `.docx`, `.pptx`, and `.xlsx`. URL ingestion now downloads into the configured media root, checks every redirect for a public HTTP(S) destination, disables environment proxies, and enforces the upload limit while streaming.
+- Generated-speech saves apply the same configured-root and symlink containment checks as media serving.
+- Video-frame routes use the 0.7.7 iterator columns `pos` and `frame_attrs`; the removed `frame_idx` and `pos_msec` attributes had made frame listing, search, visualization, and detection fail at runtime.
+- Pipeline inspection uses `is_iterator_col` and accepts `parameters: null` on B-tree index metadata. A real service returned all 19 nodes, 38 indexes, all expected iterator labels, and no node errors. The frontend also groups `pixelbot_v3` paths correctly and its developer snippets no longer point at `agents`.
+- Local-service guidance reads the log file directly because `pxt service logs` reports its path without streaming the contents.
+
+The final local gates passed with 24 backend tests, five frontend tests, Ruff, mypy, ESLint, a production build, locked dependency validation, a fresh dependency resolution to Pixeltable 0.7.7, a clean schema diff, a clean wheel install, and a managed-service restart and shutdown. A static audit compared literal route references across 13 tables with the applied catalog and found no missing columns.
 
 Torch and Transformers remain base dependencies because the declared CLIP indexes power core image and video-frame retrieval. Making Studio detection optional would not reduce the installation until those indexes move to another embedding model; that change requires retrieval-quality evaluation and similarity-threshold retuning and is outside this behavior-preserving cleanup.
 

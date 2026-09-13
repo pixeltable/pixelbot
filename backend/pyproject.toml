@@ -6,6 +6,7 @@ requires-python = ">=3.11"
 dependencies = [
     # Web Framework
     "fastapi",
+    "pydantic",
     "uvicorn[standard]",
     "python-multipart",
     # AI and ML
@@ -22,6 +23,10 @@ dependencies = [
     "numpy",
     "umap-learn",
     "Pillow",
+    "av",
+    "pdfplumber",
+    "python-docx",
+    "python-pptx",
     "openpyxl",
     "pandas",
     "pyarrow",
@@ -45,6 +50,14 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["pixelbot"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/pixelbot",
+    "/tests",
+    "/pixeltable.toml",
+    "/uv.lock",
+]
 
 [tool.hatch.metadata]
 allow-direct-references = true

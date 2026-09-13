@@ -452,7 +452,7 @@ class NotificationRow(BaseModel):
     message: str
     status: str
     response_code: int
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=datetime.now)
     user_id: str = config.DEFAULT_USER_ID
 
 

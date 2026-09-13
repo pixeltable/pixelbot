@@ -1570,7 +1570,7 @@ function VideoWorkspace({
             <DetectionPanel
               imageUuid={videoUuid}
               source="video_frame"
-              frameIdx={analyzingFrame}
+              frameIdx={videoFrames.frames[analyzingFrame].frame_idx}
               imageSrc={videoFrames.frames[analyzingFrame].frame}
               imageWidth={640}
               imageHeight={360}
