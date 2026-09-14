@@ -4,6 +4,8 @@ Pixelbot 3.0 is a local multimodal AI application built on Pixeltable 0.7.7. One
 
 Pixelbot keeps documents, images, video, audio, memory, chat history, generation jobs, prompt experiments, notifications, and tool calls in Pixeltable. Stored computed columns run extraction, chunking, transcription, captioning, generation, retrieval, and tool invocation when rows are inserted. Provider calls require the matching keys; local schema and API checks do not call paid providers.
 
+See [`DESIGN.md`](DESIGN.md) for the product principles, Kandinsky visual language, component foundation, interaction patterns, and UI review checklist.
+
 The HTTP layer demonstrates a practical Pixeltable and FastAPI split. Table-backed reads such as `GET /api/memory`, `GET /api/memory/search`, and `GET /api/personas` are declared as `@pxt.query` functions and exposed through `FastAPIRouter`. Custom FastAPI handlers own validation-heavy writes, application defaults, and the SPA shell.
 
 ## Requirements
