@@ -9,6 +9,7 @@ import pixeltable as pxt
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
+from pixeltable.exceptions import Error as PixeltableError
 from pixeltable.serving import FastAPIRouter
 
 from pixelbot import __version__, config
@@ -95,7 +96,7 @@ pixeltableRouter.add_query_route(path="/personas", query=list_persona_rows, meth
 
 app = FastAPI(
     title="Pixelbot",
-    description="Multimodal AI Agent powered by Pixeltable",
+    description="Explore Pixeltable's multimodal tables, computed pipelines, semantic search, and HTTP serving.",
     version=__version__,
 )
 app.add_middleware(
@@ -105,6 +106,13 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(PixeltableError)
+async def pixeltable_error_handler(request: Request, exc: PixeltableError) -> JSONResponse:
+    if exc.http_status == 500:
+        return await unexpected_error_handler(request, exc)
+    return JSONResponse(status_code=exc.http_status, content={"detail": exc.to_dict()})
 
 
 @app.exception_handler(Exception)

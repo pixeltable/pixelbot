@@ -275,9 +275,9 @@ class ChatHistory(TableModel, name="chat_history", has_default_idxs=False):
 
 
 @pxt.query
-def get_recent_chat_history(user_id: str, limit: int = 4):
+def get_recent_chat_history(user_id: str, conversation_id: str | None, limit: int = 4):
     return (
-        ChatHistory.where(ChatHistory.user_id == user_id)
+        ChatHistory.where((ChatHistory.user_id == user_id) & (ChatHistory.conversation_id == conversation_id))
         .order_by(ChatHistory.timestamp, asc=False)
         .select(role=ChatHistory.role, content=ChatHistory.content)
         .limit(limit)
@@ -309,7 +309,9 @@ class ImageGenerationTasks(TableModel, name="image_generation_tasks", has_defaul
     prompt: pxt.String
     timestamp: pxt.Timestamp
     user_id: pxt.String
-    generated_image = gemini.generate_images(prompt=prompt, model=config.IMAGEN_MODEL_ID)
+    generated_image = functions.extract_generated_image(
+        gemini.generate_content(contents=prompt, model=config.IMAGE_MODEL_ID, config={"response_modalities": ["IMAGE"]})
+    )
     thumbnail = pxt_image.b64_encode(pxt_image.resize(generated_image, size=(128, 128)))
     __indexes__ = [pxt.BtreeIndex(user_id), pxt.BtreeIndex(timestamp)]
 
@@ -334,7 +336,7 @@ class VideoGenerationTasks(TableModel, name="video_generation_tasks", has_defaul
     prompt: pxt.String
     timestamp: pxt.Timestamp
     user_id: pxt.String
-    generated_video = gemini.generate_videos(prompt=prompt, model=config.VEO_MODEL_ID)
+    generated_video = functions.generate_video(prompt, model=config.VIDEO_MODEL_ID)
     __indexes__ = [pxt.BtreeIndex(user_id), pxt.BtreeIndex(timestamp)]
 
 
@@ -410,17 +412,22 @@ class ToolAgent(TableModel, name="tools", has_default_idxs=False):
     prompt: pxt.String
     timestamp: pxt.Timestamp
     user_id: pxt.String
+    conversation_id: pxt.String | None
     initial_system_prompt: pxt.String
     final_system_prompt: pxt.String
     max_tokens: pxt.Int
     temperature: pxt.Float
-    history_context = get_recent_chat_history(user_id)
+    history_context = get_recent_chat_history(user_id, conversation_id)
     tool_selection_messages = functions.build_tool_selection_messages(prompt, history_context)
     initial_response = gemini.generate_content(
         contents=tool_selection_messages,
         model=config.GEMINI_MODEL_ID,
         tools=agentToolDeclarations,
-        config={"system_instruction": initial_system_prompt, "temperature": temperature},
+        config={
+            "system_instruction": initial_system_prompt,
+            "temperature": temperature,
+            "max_output_tokens": max_tokens,
+        },
     )
     tool_output = invoke_tools(agentTools, initial_response)
     doc_context = search_documents(prompt, user_id)
@@ -444,7 +451,7 @@ class ToolAgent(TableModel, name="tools", has_default_idxs=False):
     final_response = gemini.generate_content(
         contents=final_prompt_messages,
         model=config.GEMINI_MODEL_ID,
-        config={"system_instruction": final_system_prompt, "temperature": temperature},
+        config={"system_instruction": final_system_prompt, "temperature": temperature, "max_output_tokens": max_tokens},
     )
     answer = final_response.candidates[0].content.parts[0].text
     follow_up_input_message = functions.assemble_follow_up_prompt(original_prompt=prompt, answer_text=answer)

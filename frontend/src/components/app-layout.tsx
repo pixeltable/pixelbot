@@ -15,8 +15,10 @@ import {
   Code2,
   SquarePen,
   Plug,
+  Menu,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { Dialog, DialogContent, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 
 type NavItem = { to: string; icon: typeof MessageSquare; label: string }
 type NavGroup = { label: string; items: NavItem[] }
@@ -55,22 +57,16 @@ const BOTTOM_NAV = [
 
 export function AppLayout() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
+  const [mobileOpen, setMobileOpen] = useState(false)
   const navigate = useNavigate()
 
   const handleNewChat = () => {
-    navigate('/')
-    window.dispatchEvent(new Event('new-chat'))
+    navigate(`/?c=${crypto.randomUUID()}`)
+    setMobileOpen(false)
   }
 
-  return (
-    <div className="flex h-screen overflow-hidden bg-background">
-      {/* Sidebar */}
-      <aside
-        className={cn(
-          'flex flex-col border-r border-border/60 bg-card/40 transition-all duration-200 ease-out',
-          isSidebarOpen ? 'w-[200px]' : 'w-14',
-        )}
-      >
+  const sidebarContents = (
+    <div className="flex h-full min-h-0 flex-col">
         {/* Logo + New Chat */}
         <div className={cn(
           'flex h-14 items-center px-3 shrink-0',
@@ -91,17 +87,18 @@ export function AppLayout() {
           <button
             onClick={handleNewChat}
             className={cn(
-              'flex items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground transition-colors',
+              'hidden items-center justify-center rounded-lg text-muted-foreground md:flex hover:bg-accent hover:text-foreground transition-colors',
               isSidebarOpen ? 'h-7 w-7' : 'h-6 w-6',
             )}
             title="New chat"
+            aria-label="New chat"
           >
             <SquarePen className={cn(isSidebarOpen ? 'h-4 w-4' : 'h-3.5 w-3.5')} />
           </button>
         </div>
 
         {/* Primary nav */}
-        <nav className="flex flex-1 flex-col px-2 pt-2">
+        <nav aria-label="Main navigation" className="flex min-h-0 flex-1 flex-col overflow-y-auto px-2 pt-2">
           {NAV_GROUPS.map((group, groupIdx) => (
             <div key={group.label}>
               {groupIdx > 0 && (
@@ -110,7 +107,7 @@ export function AppLayout() {
                 </div>
               )}
               {isSidebarOpen && (
-                <span className="block px-2.5 pt-1.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/40">
+                <span className="block px-2.5 pt-1.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                   {group.label}
                 </span>
               )}
@@ -119,6 +116,9 @@ export function AppLayout() {
                   <NavLink
                     key={to}
                     to={to}
+                    aria-label={label}
+                    title={label}
+                    onClick={() => setMobileOpen(false)}
                     end={to === '/'}
                     className={({ isActive }) =>
                       cn(
@@ -145,6 +145,9 @@ export function AppLayout() {
             <NavLink
               key={to}
               to={to}
+              aria-label={label}
+              title={label}
+              onClick={() => setMobileOpen(false)}
               className={({ isActive }) =>
                 cn(
                   'flex items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-[13px] font-medium transition-colors',
@@ -162,9 +165,10 @@ export function AppLayout() {
 
           <button
             className={cn(
-              'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-[13px] font-medium text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground',
+              'hidden w-full items-center gap-2.5 rounded-lg px-2.5 py-[7px] md:flex text-[13px] font-medium text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground',
               isSidebarOpen ? '' : 'justify-center',
             )}
+            aria-label={isSidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
           >
             {isSidebarOpen ? (
@@ -185,10 +189,11 @@ export function AppLayout() {
               'flex items-center gap-2 pt-2 pb-1 transition-opacity hover:opacity-80',
               isSidebarOpen ? 'px-2.5' : 'justify-center px-1',
             )}
+            aria-label="Powered by Pixeltable — View on GitHub"
             title="Powered by Pixeltable — View on GitHub"
           >
             <div className="flex h-4 w-4 shrink-0 items-center justify-center rounded-sm bg-muted-foreground/20">
-              <svg viewBox="0 0 16 16" fill="none" className="h-2.5 w-2.5">
+              <svg aria-hidden="true" viewBox="0 0 16 16" fill="none" className="h-2.5 w-2.5">
                 <rect x="1" y="1" width="6" height="6" rx="1" fill="white" fillOpacity="0.9" />
                 <rect x="9" y="1" width="6" height="6" rx="1" fill="white" fillOpacity="0.6" />
                 <rect x="1" y="9" width="6" height="6" rx="1" fill="white" fillOpacity="0.6" />
@@ -196,17 +201,36 @@ export function AppLayout() {
               </svg>
             </div>
             {isSidebarOpen && (
-              <span className="text-[10px] text-muted-foreground/50 hover:text-muted-foreground/70 transition-colors">
+              <span className="text-[10px] text-muted-foreground hover:text-foreground transition-colors">
                 powered by Pixeltable
               </span>
             )}
           </a>
         </div>
-      </aside>
+    </div>
+  )
 
-      {/* Main content area (no top bar) */}
-      <main className="flex flex-1 flex-col overflow-hidden">
-        <div className="flex-1 overflow-auto">
+  return (
+    <div className="flex h-dvh overflow-hidden bg-background">
+      <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:bg-background focus:p-3">Skip to content</a>
+      <aside className={cn('hidden shrink-0 flex-col border-r border-border/60 bg-card/40 md:flex', isSidebarOpen ? 'w-[200px]' : 'w-14')}>
+        {sidebarContents}
+      </aside>
+      <main id="main-content" className="flex min-w-0 flex-1 flex-col overflow-hidden" tabIndex={-1}>
+        <div className="flex h-12 shrink-0 items-center gap-3 border-b border-border px-3 md:hidden">
+          <Dialog open={mobileOpen} onOpenChange={(open) => { setMobileOpen(open); if (open) setIsSidebarOpen(true) }}>
+            <DialogTrigger asChild>
+              <button aria-label="Open navigation" className="flex h-10 w-10 items-center justify-center rounded-lg hover:bg-accent"><Menu className="h-5 w-5" /></button>
+            </DialogTrigger>
+            <DialogContent aria-describedby={undefined} className="fixed left-0 top-0 flex h-dvh max-h-dvh w-72 max-w-[85vw] flex-col rounded-none p-0">
+              <DialogTitle className="sr-only">Navigation</DialogTitle>
+              {sidebarContents}
+            </DialogContent>
+          </Dialog>
+          <span className="text-sm font-semibold">Pixelbot</span>
+          <button onClick={handleNewChat} aria-label="New chat" className="ml-auto flex h-10 w-10 items-center justify-center rounded-lg hover:bg-accent"><SquarePen className="h-4 w-4" /></button>
+        </div>
+        <div className="min-h-0 flex-1 overflow-auto">
           <Outlet />
         </div>
       </main>

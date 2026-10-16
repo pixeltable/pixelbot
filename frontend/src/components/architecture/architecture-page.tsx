@@ -40,7 +40,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-// ── Schema definition (mirrors pixelbot/schema.py) ──────────────────────────
+// ── Conceptual pipeline map (Database shows the complete live schema) ──────────────────────────
 
 interface SchemaNode {
   id: string
@@ -72,7 +72,7 @@ const SCHEMA_NODES: SchemaNode[] = [
   // ── Document Processing ──────────────────────────
   { id: 'chunks', label: 'chunks', type: 'view', icon: Layers, description: 'pixelbot_v3.chunks — document_splitter(page, sentence) with metadata', color: '#7DA8EF', details: ['text', 'title', 'heading', 'page'], group: 'processing' },
   { id: 'extract_text', label: 'extract_document_text', type: 'udf', icon: Cpu, description: 'UDF: pdfplumber / docx / pptx / openpyxl → full text (max 15k chars)', color: '#7DA8EF', details: ['document → document_text'], group: 'processing' },
-  { id: 'gemini_summary', label: 'Gemini Summary', type: 'model', icon: Sparkles, description: 'gemini-2.5-flash → structured JSON {title, summary, key_topics}', color: '#7DA8EF', details: ['response_mime_type: application/json'], group: 'processing' },
+  { id: 'gemini_summary', label: 'Gemini Summary', type: 'model', icon: Sparkles, description: 'gemini-3.8-flash → structured JSON {title, summary, key_topics}', color: '#7DA8EF', details: ['response_mime_type: application/json'], group: 'processing' },
 
   // ── Image Processing ─────────────────────────────
   { id: 'img_thumb', label: 'Thumbnail', type: 'udf', icon: Cpu, description: 'resize(96×96) → b64_encode → thumbnail computed column', color: '#F1AE03', group: 'processing' },
@@ -106,19 +106,19 @@ const SCHEMA_NODES: SchemaNode[] = [
   { id: 'ext_apis', label: 'External APIs', type: 'external', icon: Globe, description: 'NewsAPI, DuckDuckGo News, Yahoo Finance (yfinance)', color: '#38bdf8', details: ['get_latest_news', 'search_news (DDG)', 'fetch_financial_data'], group: 'external' },
 
   // ── Agent Pipeline (pixelbot_v3.tools) ────────────────
-  { id: 'agent', label: 'Agent Table', type: 'table', icon: Bot, description: 'pixelbot_v3.tools — 11 computed columns, prompt → answer', color: '#fb923c', details: ['prompt', 'initial_system_prompt', 'final_system_prompt', 'max_tokens', 'temperature'], group: 'agent' },
+  { id: 'agent', label: 'Agent Table', type: 'table', icon: Bot, description: 'pixelbot_v3.tools — computed pipeline, prompt → answer', color: '#fb923c', details: ['prompt', 'initial_system_prompt', 'final_system_prompt', 'max_tokens', 'temperature'], group: 'agent' },
   { id: 'gemini_tools', label: 'Gemini → Tools', type: 'model', icon: Bot, description: 'Step 1-2: Gemini selects tools → invoke_tools() executes', color: '#fb923c', details: ['gemini.generate_content(tools=...)', 'invoke_tools(tools, response)'], group: 'agent' },
   { id: 'assemble_context', label: 'assemble_context', type: 'udf', icon: GitBranch, description: 'Step 5: Merge tool_output + doc_context + memory + chat_memory into text', color: '#fb923c', details: ['assemble_multimodal_context()'], group: 'agent' },
   { id: 'assemble_messages', label: 'assemble_messages', type: 'udf', icon: GitBranch, description: 'Step 6: Build multimodal messages with history + images + video frames', color: '#fb923c', details: ['assemble_final_messages()', 'base64 images for Gemini'], group: 'agent' },
   { id: 'gemini_answer', label: 'Gemini → Answer', type: 'model', icon: Bot, description: 'Step 7-8: Gemini generates the final answer from full context', color: '#fb923c', details: ['gemini.generate_content()', 'answer = response.candidates[0].content.parts[0].text'], group: 'agent' },
-  { id: 'gemini_followup', label: 'Gemini → Follow-ups', type: 'model', icon: Sparkles, description: 'Step 9-11: gemini-2.5-flash generates 3 follow-up questions (JSON)', color: '#fb923c', details: ['assemble_follow_up_prompt()', 'generate_content(JSON)'], group: 'agent' },
+  { id: 'gemini_followup', label: 'Gemini → Follow-ups', type: 'model', icon: Sparkles, description: 'Step 9-11: gemini-3.8-flash generates 3 follow-up questions (JSON)', color: '#fb923c', details: ['assemble_follow_up_prompt()', 'generate_content(JSON)'], group: 'agent' },
   { id: 'answer', label: 'Answer + Follow-ups', type: 'output', icon: ArrowRight, description: 'Final answer text + 3 follow-up suggestions. Q&A pair written back to Chat History.', color: '#fb923c', group: 'agent' },
 
   // ── Generation ───────────────────────────────────
-  { id: 'img_gen', label: 'Image Gen', type: 'table', icon: Wand2, description: 'pixelbot_v3.image_generation_tasks — prompt table (Studio UI)', color: '#f472b6', details: ['prompt', 'timestamp', 'user_id'], group: 'generation' },
-  { id: 'imagen', label: 'Imagen / DALL-E', type: 'model', icon: Sparkles, description: 'Gemini Imagen 4.0 or OpenAI DALL-E 3. Can be saved to Images collection for CLIP + RAG.', color: '#f472b6', details: ['generated_image (computed)', 'thumbnail 128×128', 'Save to Collection → pixelbot_v3.images'], group: 'generation' },
-  { id: 'vid_gen', label: 'Video Gen', type: 'table', icon: Wand2, description: 'pixelbot_v3.video_generation_tasks — prompt table (Studio UI)', color: '#f472b6', details: ['prompt', 'timestamp', 'user_id'], group: 'generation' },
-  { id: 'veo', label: 'Veo 3.0', type: 'model', icon: Sparkles, description: 'Gemini Veo 3.0 video generation. Can be saved to Videos collection for keyframes + transcription + RAG.', color: '#f472b6', details: ['generated_video (computed)', 'Save to Collection → pixelbot_v3.videos'], group: 'generation' },
+  { id: 'img_gen', label: 'Image Gen', type: 'table', icon: Wand2, description: 'pixelbot_v3.image_generation_tasks — prompt table (Media Library)', color: '#f472b6', details: ['prompt', 'timestamp', 'user_id'], group: 'generation' },
+  { id: 'imagen', label: 'Gemini image', type: 'model', icon: Sparkles, description: 'Gemini Nano Banana image generation. Can be saved to Images collection for CLIP + RAG.', color: '#f472b6', details: ['generated_image (computed)', 'thumbnail 128×128', 'Save to Collection → pixelbot_v3.images'], group: 'generation' },
+  { id: 'vid_gen', label: 'Video Gen', type: 'table', icon: Wand2, description: 'pixelbot_v3.video_generation_tasks — prompt table (Media Library)', color: '#f472b6', details: ['prompt', 'timestamp', 'user_id'], group: 'generation' },
+  { id: 'veo', label: 'Gemini video', type: 'model', icon: Sparkles, description: 'Gemini Omni video generation through a Pixeltable UDF. Can be saved to Videos collection for keyframes + transcription + RAG.', color: '#f472b6', details: ['generated_video (computed)', 'Save to Collection → pixelbot_v3.videos'], group: 'generation' },
   { id: 'speech_tasks', label: 'Speech Tasks', type: 'table', icon: Mic, description: 'pixelbot_v3.speech_tasks — TTS input text + voice selection', color: '#f472b6', details: ['input_text', 'voice', 'timestamp', 'user_id'], group: 'generation' },
   { id: 'tts_model', label: 'OpenAI TTS', type: 'model', icon: Mic, description: 'openai.speech(tts-1) — 6 voices: alloy, echo, fable, onyx, nova, shimmer', color: '#f472b6', details: ['audio (computed)', 'model=tts-1'], group: 'generation' },
 
@@ -161,7 +161,6 @@ const SCHEMA_EDGES: SchemaEdge[] = [
   // ── Agent Step 1-2: Gemini tool selection + external API calls ─
   { source: 'agent', target: 'gemini_tools', label: 'step 1' },
   { source: 'ext_apis', target: 'gemini_tools', label: 'tools' },
-  { source: 'csv_registry', target: 'gemini_tools', label: 'query_csv_table' },
   { source: 'vid_text_embed', target: 'gemini_tools', label: 'search_video_transcripts' },
   { source: 'audio_text_embed', target: 'gemini_tools', label: 'search_audio_transcripts' },
 

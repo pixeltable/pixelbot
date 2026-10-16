@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useMemo } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useMountEffect } from '@/hooks/use-mount-effect'
 import {
   Send,
@@ -66,6 +66,9 @@ const SOURCE_CONFIG = {
   memory: { icon: Brain, label: 'Memory', iconClass: 'text-emerald-400', pillClass: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
 } as const
 
+type ChatMode = 'chat' | 'image' | 'flux' | 'video' | 'voice'
+type PendingMessage = { text: string; mode: ChatMode; persona: string | null }
+
 type WelcomeChip = {
   icon: typeof ImageIcon
   label: string
@@ -92,26 +95,33 @@ function getGreeting(): string {
 
 export function ChatPage() {
   const [searchParams] = useSearchParams()
-  const c = searchParams.get('c') || 'new'
-  return <ChatPageContent key={c} conversationId={c === 'new' ? null : c} />
+  const [draftId] = useState(() => crypto.randomUUID())
+  const conversationId = searchParams.get('c')
+  // Pinning the draft URL must preserve the component and its pending request.
+  return <ChatPageContent key={conversationId || draftId} conversationId={conversationId} draftId={draftId} />
 }
 
-function ChatPageContent({ conversationId }: { conversationId: string | null }) {
+function ChatPageContent({ conversationId, draftId }: { conversationId: string | null; draftId: string }) {
   const { addToast } = useToast()
   const [searchParams, setSearchParams] = useSearchParams()
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  const [mode, setMode] = useState<'chat' | 'image' | 'flux' | 'video' | 'voice'>('chat')
+  const [isLoadingHistory, setIsLoadingHistory] = useState(!!conversationId)
+  const [mode, setMode] = useState<ChatMode>('chat')
+  const [activeMode, setActiveMode] = useState<ChatMode>('chat')
+  const [requestError, setRequestError] = useState<string | null>(null)
   const [personas, setPersonas] = useState<Persona[]>([])
   const [selectedPersona, setSelectedPersona] = useState<string | null>(null)
   const [userName, setUserName] = useState<string | null>(null)
-  const conversationIdRef = useRef<string>(conversationId || crypto.randomUUID())
+  const conversationIdRef = useRef<string>(conversationId || draftId)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   // ── Message Queue ────────────────────────────────────────────────────────
-  const [queue, setQueue] = useState<string[]>([])
+  const [queue, setQueue] = useState<PendingMessage[]>([])
+  const queueRef = useRef<PendingMessage[]>([])
   const isProcessingRef = useRef(false)
+  const mountedRef = useRef(true)
 
   // ── Dictation (Web Speech API) ──────────────────────────────────────────
   const [isListening, setIsListening] = useState(false)
@@ -165,7 +175,9 @@ function ChatPageContent({ conversationId }: { conversationId: string | null }) 
 
   // Stop dictation when component unmounts
   useMountEffect(() => {
+    mountedRef.current = true
     return () => {
+      mountedRef.current = false
       recognitionRef.current?.stop()
     }
   })
@@ -182,30 +194,32 @@ function ChatPageContent({ conversationId }: { conversationId: string | null }) 
 
     // Load existing conversation on mount
     if (conversationId) {
-      const loadConvo = (id: string, retries = 2) => {
+      const loadConvo = (id: string) => {
         api.getConversation(id)
           .then((data) => {
+            if (!mountedRef.current) return
             setMessages(data.messages.map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content })))
             scrollToBottom()
           })
           .catch(() => {
-            if (retries > 0) setTimeout(() => loadConvo(id, retries - 1), 1000)
+            if (mountedRef.current) setRequestError('Could not load this conversation. Reload the page to try again.')
           })
+          .finally(() => { if (mountedRef.current) setIsLoadingHistory(false) })
       }
       loadConvo(conversationId)
     }
-
-    // "New chat" event from sidebar
-    const handler = () => {
-      setSearchParams({}, { replace: true })
-    }
-    window.addEventListener('new-chat', handler)
-    return () => window.removeEventListener('new-chat', handler)
   })
 
-  async function processMessage(text: string) {
-    isProcessingRef.current = true
-    setIsLoading(true)
+  async function performMessage(job: PendingMessage) {
+    if (!mountedRef.current) return
+    const { text, mode: jobMode, persona } = job
+    const reportFailure = (err: unknown, fallback: string) => {
+      if (!mountedRef.current) return
+      setRequestError(err instanceof Error ? err.message : fallback)
+      setInput((current) => current || text)
+    }
+    setRequestError(null)
+    setActiveMode(jobMode)
     setMessages((prev) => {
       const newMessages = [...prev, { role: 'user' as const, content: text }]
       scrollToBottom()
@@ -219,7 +233,7 @@ function ChatPageContent({ conversationId }: { conversationId: string | null }) 
 
     const t0 = performance.now()
 
-    if (mode === 'image') {
+    if (jobMode === 'image') {
       try {
         const result = await api.generateImage(text)
         const processing_ms = Math.round(performance.now() - t0)
@@ -236,9 +250,9 @@ function ChatPageContent({ conversationId }: { conversationId: string | null }) 
           return newMessages
         })
       } catch (err) {
-        addToast(err instanceof Error ? err.message : 'Image generation failed', 'error')
+        reportFailure(err, 'Image generation failed')
       }
-    } else if (mode === 'flux') {
+    } else if (jobMode === 'flux') {
       try {
         const result = await api.generateFluxImage(text)
         const processing_ms = Math.round(performance.now() - t0)
@@ -255,9 +269,9 @@ function ChatPageContent({ conversationId }: { conversationId: string | null }) 
           return newMessages
         })
       } catch (err) {
-        addToast(err instanceof Error ? err.message : 'FLUX generation failed', 'error')
+        reportFailure(err, 'FLUX generation failed')
       }
-    } else if (mode === 'video') {
+    } else if (jobMode === 'video') {
       try {
         const result = await api.generateVideo(text)
         const videoUrl = api.getVideoUrl(result.video_path)
@@ -276,9 +290,9 @@ function ChatPageContent({ conversationId }: { conversationId: string | null }) 
           return newMessages
         })
       } catch (err) {
-        addToast(err instanceof Error ? err.message : 'Video generation failed', 'error')
+        reportFailure(err, 'Video generation failed')
       }
-    } else if (mode === 'voice') {
+    } else if (jobMode === 'voice') {
       try {
         const result = await api.generateSpeech(text)
         const processing_ms = Math.round(performance.now() - t0)
@@ -297,11 +311,11 @@ function ChatPageContent({ conversationId }: { conversationId: string | null }) 
           return newMessages
         })
       } catch (err) {
-        addToast(err instanceof Error ? err.message : 'Speech generation failed', 'error')
+        reportFailure(err, 'Speech generation failed')
       }
     } else {
       try {
-        const response = await api.sendQuery(text, selectedPersona, conversationIdRef.current)
+        const response = await api.sendQuery(text, persona, conversationIdRef.current)
         const processing_ms = Math.round(performance.now() - t0)
         const assistantMsg: ChatMessage = {
           role: 'assistant',
@@ -318,28 +332,28 @@ function ChatPageContent({ conversationId }: { conversationId: string | null }) 
           return newMessages
         })
       } catch (err) {
-        addToast(err instanceof Error ? err.message : 'Query failed', 'error')
+        reportFailure(err, 'Query failed')
       }
     }
+  }
 
-    setIsLoading(false)
+  async function processMessage(firstJob: PendingMessage) {
+    isProcessingRef.current = true
+    setIsLoading(true)
+    let job: PendingMessage | undefined = firstJob
+    while (job && mountedRef.current) {
+      await performMessage(job)
+      window.dispatchEvent(new Event('conversations-changed'))
+      job = mountedRef.current ? queueRef.current.shift() : undefined
+      if (mountedRef.current) setQueue([...queueRef.current])
+    }
+    if (mountedRef.current) setIsLoading(false)
     isProcessingRef.current = false
-    window.dispatchEvent(new Event('conversations-changed'))
-
-    // Drain the queue inline instead of effect
-    setQueue((currentQueue) => {
-      if (currentQueue.length > 0) {
-        const [next, ...rest] = currentQueue
-        setTimeout(() => processMessage(next), 0)
-        return rest
-      }
-      return currentQueue
-    })
   }
 
   function handleSend() {
     const text = input.trim()
-    if (!text) return
+    if (!text || isLoadingHistory) return
 
     // Stop dictation if active
     recognitionRef.current?.stop()
@@ -347,11 +361,12 @@ function ChatPageContent({ conversationId }: { conversationId: string | null }) 
     setInput('')
 
     if (isProcessingRef.current) {
-      setQueue((prev) => [...prev, text])
+      queueRef.current.push({ text, mode, persona: selectedPersona })
+      setQueue([...queueRef.current])
       return
     }
 
-    processMessage(text)
+    void processMessage({ text, mode, persona: selectedPersona })
   }
 
   const handleFollowUp = useCallback((question: string) => {
@@ -377,15 +392,20 @@ function ChatPageContent({ conversationId }: { conversationId: string | null }) 
         addToast('Audio saved to library — transcription & RAG indexing will run', 'success')
       } catch (err) {
         addToast(err instanceof Error ? err.message : 'Failed to save audio', 'error')
+        throw err
       }
     },
     [addToast],
   )
 
   const handleCopy = useCallback(
-    (content: string) => {
-      navigator.clipboard.writeText(content)
-      addToast('Copied to clipboard', 'success')
+    async (content: string) => {
+      try {
+        await navigator.clipboard.writeText(content)
+        addToast('Copied to clipboard', 'success')
+      } catch {
+        addToast('Could not copy. Select the text and copy it manually.', 'error')
+      }
     },
     [addToast],
   )
@@ -396,20 +416,24 @@ function ChatPageContent({ conversationId }: { conversationId: string | null }) 
       <ScrollArea className="flex-1">
         <div className="max-w-3xl mx-auto px-4 py-6 space-y-1">
           {/* Welcome screen */}
-          {messages.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-28 text-center animate-fade-in">
+          {isLoadingHistory && <p role="status" className="py-6 text-sm text-muted-foreground">Loading conversation…</p>}
+          {messages.length === 0 && !isLoadingHistory && (
+            <div className="flex flex-col items-center justify-center py-12 sm:py-24 text-center animate-fade-in">
               {userName && (
                 <p className="text-sm text-k-yellow font-medium mb-1">
                   {getGreeting()}, {userName}
                 </p>
               )}
               <h1 className="text-3xl font-semibold tracking-tight text-foreground">
-                What can I help with?
+                Explore your data with AI
               </h1>
               <p className="text-sm text-muted-foreground mt-2 max-w-md">
-                Ask about your documents, images, videos, or search the web.
+                A multimodal AI showcase built with Pixeltable. Upload a file, ask questions, create media, and inspect how it all works.
               </p>
-              <div className="flex flex-wrap gap-2 mt-8 justify-center">
+              <p className="mt-4 text-sm text-muted-foreground">
+                Start in <Link to="/studio" className="underline underline-offset-4">Studio</Link>, then explore your tables and pipelines in <Link to="/database" className="underline underline-offset-4">Database</Link>.
+              </p>
+              <div className="flex flex-wrap gap-2 mt-6 justify-center">
                 {WELCOME_CHIPS.map((chip) => {
                   const Icon = chip.icon
                   return (
@@ -420,7 +444,7 @@ function ChatPageContent({ conversationId }: { conversationId: string | null }) 
                         chip.activeClass ?? 'border-border/60 text-muted-foreground hover:bg-accent hover:text-foreground hover:border-border',
                       )}
                       onClick={() => {
-                        if (chip.mode) setMode(chip.mode)
+                        setMode(chip.mode ?? 'chat')
                         setInput(chip.prompt)
                       }}
                     >
@@ -448,8 +472,8 @@ function ChatPageContent({ conversationId }: { conversationId: string | null }) 
             />
           ))}
 
-          {/* Thinking indicator with pipeline stages */}
-          {isLoading && <ThinkingIndicator />}
+          {/* Operation and elapsed time */}
+          {isLoading && <ThinkingIndicator mode={activeMode} />}
 
           {/* Queued messages */}
           {queue.length > 0 && (
@@ -464,11 +488,15 @@ function ChatPageContent({ conversationId }: { conversationId: string | null }) 
                   className="flex items-center gap-2 rounded-lg bg-accent/20 border border-border/30 px-3 py-1.5 text-xs text-muted-foreground/70 group"
                 >
                   <span className="text-[10px] text-muted-foreground/40 tabular-nums w-4">{idx + 1}</span>
-                  <span className="truncate flex-1">{q}</span>
+                  <span className="truncate flex-1">{q.text}</span>
                   <button
-                    className="opacity-0 group-hover:opacity-100 text-muted-foreground/40 hover:text-red-400 transition-all shrink-0"
-                    onClick={() => setQueue((prev) => prev.filter((_, i) => i !== idx))}
+                    className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 text-muted-foreground/60 hover:text-red-400 transition-all shrink-0"
+                    onClick={() => {
+                      queueRef.current = queueRef.current.filter((_, i) => i !== idx)
+                      setQueue([...queueRef.current])
+                    }}
                     title="Remove from queue"
+                    aria-label={`Remove queued message ${idx + 1}`}
                   >
                     <X className="h-3 w-3" />
                   </button>
@@ -484,9 +512,12 @@ function ChatPageContent({ conversationId }: { conversationId: string | null }) 
       {/* Input area */}
       <div className="p-4 pb-5">
         <div className="max-w-3xl mx-auto">
+          {requestError && <p role="alert" className="mb-3 text-sm text-destructive">{requestError} {input && 'You can edit your prompt below and try again.'}</p>}
           <div className="rounded-2xl border border-border/60 bg-card/50 shadow-sm focus-within:border-border focus-within:shadow-md transition-all">
             <div className="px-4 pt-3 pb-1">
               <Textarea
+                aria-label="Message"
+                disabled={isLoadingHistory}
                 placeholder={
                   mode === 'image'
                     ? 'Describe the image you want to generate...'
@@ -499,20 +530,21 @@ function ChatPageContent({ conversationId }: { conversationId: string | null }) 
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
+                  if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
                     e.preventDefault()
                     handleSend()
                   }
                 }}
                 rows={1}
-                className="min-h-[36px] max-h-[120px] resize-none border-0 bg-transparent p-0 text-sm focus-visible:ring-0 focus-visible:outline-none placeholder:text-muted-foreground/50"
+                className="min-h-[36px] max-h-[120px] resize-none border-0 bg-transparent p-0 text-base sm:text-sm focus-visible:ring-0 focus-visible:outline-none placeholder:text-muted-foreground/50"
               />
             </div>
 
-            <div className="flex items-center justify-between px-3 py-2">
-              <div className="flex items-center gap-1">
+            <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
+              <div className="flex flex-wrap items-center gap-1">
                 <div className="relative">
                   <select
+                    aria-label="Persona"
                     value={selectedPersona ?? ''}
                     onChange={(e) => setSelectedPersona(e.target.value || null)}
                     className="appearance-none h-7 rounded-lg bg-transparent pl-2.5 pr-6 text-[11px] font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors cursor-pointer focus:outline-none"
@@ -535,9 +567,10 @@ function ChatPageContent({ conversationId }: { conversationId: string | null }) 
                       : 'text-muted-foreground hover:bg-accent hover:text-foreground',
                   )}
                   onClick={() => setMode(mode === 'image' ? 'chat' : 'image')}
+                  aria-pressed={mode === 'image'}
                 >
                   <ImageIcon className="h-3 w-3" />
-                  {mode === 'image' ? 'Imagen' : 'Imagen'}
+                  Gemini image
                 </button>
 
                 <button
@@ -548,6 +581,7 @@ function ChatPageContent({ conversationId }: { conversationId: string | null }) 
                       : 'text-muted-foreground hover:bg-accent hover:text-foreground',
                   )}
                   onClick={() => setMode(mode === 'flux' ? 'chat' : 'flux')}
+                  aria-pressed={mode === 'flux'}
                 >
                   <Hexagon className="h-3 w-3" />
                   {mode === 'flux' ? 'FLUX mode' : 'FLUX'}
@@ -561,6 +595,7 @@ function ChatPageContent({ conversationId }: { conversationId: string | null }) 
                       : 'text-muted-foreground hover:bg-accent hover:text-foreground',
                   )}
                   onClick={() => setMode(mode === 'video' ? 'chat' : 'video')}
+                  aria-pressed={mode === 'video'}
                 >
                   <Film className="h-3 w-3" />
                   {mode === 'video' ? 'Video mode' : 'Video'}
@@ -573,6 +608,7 @@ function ChatPageContent({ conversationId }: { conversationId: string | null }) 
                       : 'text-muted-foreground hover:bg-accent hover:text-foreground',
                   )}
                   onClick={() => setMode(mode === 'voice' ? 'chat' : 'voice')}
+                  aria-pressed={mode === 'voice'}
                 >
                   <Volume2 className="h-3 w-3" />
                   {mode === 'voice' ? 'Voice mode' : 'Voice'}
@@ -590,6 +626,7 @@ function ChatPageContent({ conversationId }: { conversationId: string | null }) 
                         : 'text-muted-foreground/50 hover:text-foreground hover:bg-accent',
                     )}
                     title={isListening ? 'Stop dictation' : 'Start dictation'}
+                    aria-label={isListening ? 'Stop dictation' : 'Start dictation'}
                   >
                     {isListening ? (
                       <MicOff className="h-3.5 w-3.5" />
@@ -606,7 +643,8 @@ function ChatPageContent({ conversationId }: { conversationId: string | null }) 
                 )}
                 <button
                   onClick={handleSend}
-                  disabled={!input.trim()}
+                  aria-label={isLoading ? "Queue message" : "Send message"}
+                  disabled={!input.trim() || isLoadingHistory}
                   className={cn(
                     'flex h-8 w-8 items-center justify-center rounded-lg transition-all',
                     input.trim()
@@ -633,7 +671,7 @@ function ChatPageContent({ conversationId }: { conversationId: string | null }) 
 
 // ── Save to Library Button ──────────────────────────────────────────────────
 
-function SaveToLibraryButton({ audioPath, onSave }: { audioPath: string; onSave: (path: string) => void }) {
+function SaveToLibraryButton({ audioPath, onSave }: { audioPath: string; onSave: (path: string) => Promise<void> }) {
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
 
   const handleClick = async () => {
@@ -680,7 +718,7 @@ function ThinkingSummary({ message }: { message: ChatMessage }) {
     <div className="mb-1">
       <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground/50">
         <Clock className="h-3 w-3" />
-        Thought for {durationSec}s
+        Completed in {durationSec}s
       </span>
     </div>
   )
@@ -698,7 +736,7 @@ function MessageBubble({
   message: ChatMessage
   onCopy: (content: string) => void
   onSave: (content: string) => void
-  onSaveAudio?: (audioPath: string) => void
+  onSaveAudio?: (audioPath: string) => Promise<void>
   onFollowUp: (question: string) => void
 }) {
   const isUser = message.role === 'user'
@@ -739,7 +777,7 @@ function MessageBubble({
       <div className="flex gap-3 justify-end py-2 animate-fade-in">
         <div className="max-w-[75%] rounded-2xl bg-accent text-foreground px-4 py-3">
           <div className="relative">
-            <p className="text-sm whitespace-pre-wrap">
+            <p className="text-sm whitespace-pre-wrap break-words">
               {displayContent}
               {isLongUserMessage && !isExpanded && '…'}
             </p>
@@ -781,6 +819,9 @@ function MessageBubble({
         {message.processing_ms != null && <ThinkingSummary message={message} />}
 
         {/* Main answer */}
+        {message.metadata?.history_saved === false && (
+          <p role="status" className="text-sm text-destructive">This answer could not be saved to History. Copy it before leaving this chat.</p>
+        )}
         {isAudio ? (
           <div className="space-y-2">
             <p className="text-sm text-muted-foreground">{message.content}</p>
@@ -879,7 +920,7 @@ function MessageBubble({
         )}
 
         {/* Actions */}
-        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="flex items-center gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
           {!isImage && !isVideo && (
             <>
               <button

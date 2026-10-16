@@ -120,7 +120,7 @@ const API_GROUPS: ApiGroup[] = [
         description: 'Run a prompt against multiple models in parallel',
         curl: `curl -X POST http://localhost:8000/api/experiments/run \\
   -H "Content-Type: application/json" \\
-  -d '{"user_prompt": "Explain quantum computing", "models": [{"model_id": "claude-sonnet-4-20250514"}, {"model_id": "gpt-4o"}], "temperature": 0.7}'`,
+  -d '{"user_prompt": "Explain quantum computing", "models": [{"model_id": "claude-sonnet-5-5"}, {"model_id": "gpt-4o"}], "temperature": 0.7}'`,
       },
       {
         method: 'GET', path: '/api/experiments/history',
@@ -245,7 +245,7 @@ for row in recent:
 
 chunks = pxt.get_table("pixelbot_v3.chunks")
 
-# Semantic search — Gemini embed_content index (Pixeltable 0.7.7)
+# Semantic search — Gemini embed_content index (Pixeltable 0.7.18)
 sim = chunks.text.similarity(string="machine learning best practices")
 results = (
     chunks.where(sim > 0.5)
@@ -621,7 +621,9 @@ export function DeveloperPage() {
                 </div>
                 <div className="p-5 space-y-3">
                   <CodeBlock
-                    code={`pip install "pixeltable[serve]==0.7.7"
+                    code={`pip install "pixeltable[serve]==0.7.18"
+
+export PIXELTABLE_HOME="$PWD/.pixeltable-v3"  # run from backend/
 
 # Then in Python:
 import pixeltable as pxt
@@ -633,7 +635,7 @@ print(t.select(t.role, t.content).limit(5).collect())`}
                     onCopy={copyToClipboard}
                   />
                   <p className="text-[11px] text-muted-foreground/50">
-                    Pixeltable stores everything at <code className="bg-accent px-1 py-0.5 rounded text-[10px] font-mono">~/.pixeltable/</code>. Any script on the same machine can read/write the same tables.
+                    This app uses <code className="bg-accent px-1 py-0.5 rounded text-[10px] font-mono">backend/.pixeltable-v3/</code>. Set the same PIXELTABLE_HOME before importing Pixeltable to inspect these tables.
                   </p>
                 </div>
               </div>

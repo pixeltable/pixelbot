@@ -190,7 +190,7 @@ def sample_table(body: SampleRequest):
             )
         sample_kwargs["stratify_by"] = getattr(tbl, body.stratify_by)
 
-    raw_rows = query.sample(**sample_kwargs).limit(body.limit).collect()
+    raw_rows = [] if total == 0 else query.sample(**sample_kwargs).limit(body.limit).collect()
 
     col_names = tbl.columns()
     rows = []

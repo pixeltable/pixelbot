@@ -13,9 +13,7 @@ import pixeltable as pxt
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from PIL import Image, ImageEnhance, ImageFilter, ImageOps
-from pixeltable.functions import gemini
 from pixeltable.functions import video as pxt_video
-from pixeltable.functions.huggingface import clip
 from pydantic import BaseModel, Field
 from umap import UMAP
 
@@ -641,7 +639,7 @@ def _build_row_where(tbl, col_names: list[str], row_values: dict):
 def _sync_registry_row_count(table_name: str, user_id: str):
     """Recount actual rows and update the registry."""
     tbl = pxt.get_table(table_name)
-    actual_count = len(list(tbl.select().collect()))
+    actual_count = tbl.count()
     registry = pxt.get_table("pixelbot_v3.csv_registry")
     registry.update(
         {"row_count": actual_count},
@@ -1046,16 +1044,6 @@ def _normalize_thumbnail(raw_thumb) -> str | None:
 
 # ── Embedding Visualization ──────────────────────────────────────────────────
 
-EMBED_TEXT_FN = gemini.embed_content.using(model=config.GEMINI_EMBEDDING_MODEL_ID)
-_embed_clip_fn = None
-
-
-def _get_embed_clip_fn():
-    global _embed_clip_fn
-    if _embed_clip_fn is None:
-        _embed_clip_fn = clip.using(model_id=config.CLIP_MODEL_ID)
-    return _embed_clip_fn
-
 
 @router.get("/embeddings")
 def get_embeddings(space: str = "text", limit: int = Query(default=200, ge=2, le=500)):
@@ -1076,8 +1064,10 @@ def get_embeddings(space: str = "text", limit: int = Query(default=200, ge=2, le
     else:
         raise HTTPException(status_code=400, detail="space must be 'text' or 'visual'")
 
-    if len(vectors) < 2:
-        return {"space": space, "points": items, "count": len(items)}
+    items = items[:limit]
+    vectors = vectors[:limit]
+    if not vectors:
+        return {"space": space, "points": [], "count": 0}
 
     matrix = np.array(vectors, dtype=np.float32)
 
@@ -1087,25 +1077,35 @@ def get_embeddings(space: str = "text", limit: int = Query(default=200, ge=2, le
         matrix = matrix[valid_mask]
         valid_flags = cast(list[bool], np.asarray(valid_mask).tolist())
         items = [item for item, ok in zip(items, valid_flags) if ok]
-        if len(matrix) < 2:
-            return {"space": space, "points": items, "count": len(items)}
+    if len(matrix) == 0:
+        return {"space": space, "points": [], "count": 0}
 
     # Project to 2-D with UMAP (preserves global + local structure)
-    n_neighbors = max(2, min(15, len(matrix) - 1))
-    coords = UMAP(
-        n_components=2,
-        n_neighbors=n_neighbors,
-        min_dist=0.1,
-        metric="cosine",
-        random_state=42,
-    ).fit_transform(matrix)
+    if len(matrix) < 4:
+        # UMAP's neighborhood graph needs more points. Center a single point;
+        # project two or three with SVD instead of failing on a new collection.
+        coords = np.zeros((len(matrix), 2), dtype=np.float32)
+        if len(matrix) > 1:
+            centered = matrix - matrix.mean(axis=0)
+            u, singular_values, _ = np.linalg.svd(centered, full_matrices=False)
+            dimensions = min(2, len(singular_values))
+            coords[:, :dimensions] = u[:, :dimensions] * singular_values[:dimensions]
+    else:
+        coords = UMAP(
+            n_components=2,
+            n_neighbors=min(15, len(matrix) - 1),
+            min_dist=0.1,
+            metric="cosine",
+            init="random",
+            random_state=42,
+        ).fit_transform(matrix)
 
     # Normalize to 0-1 range
     mins = coords.min(axis=0)
     maxs = coords.max(axis=0)
     span = maxs - mins
-    span[span == 0] = 1
-    normed = (coords - mins) / span
+    nonzero_span = np.where(span == 0, 1, span)
+    normed = np.where(span == 0, 0.5, (coords - mins) / nonzero_span)
 
     for i, item in enumerate(items):
         item["x"] = round(float(normed[i, 0]), 4)
@@ -1121,7 +1121,7 @@ def _collect_text_embeddings(
     vectors: list[np.ndarray],
 ):
     """Collect text embeddings from document chunks and transcript sentences."""
-    per_type_limit = max(10, limit // 3)
+    per_type_limit = max(1, limit // 3)
 
     # Document chunks
     try:
@@ -1131,7 +1131,7 @@ def _collect_text_embeddings(
             .select(
                 text=chunks_view.text,
                 uuid_col=chunks_view.uuid,
-                emb=EMBED_TEXT_FN(chunks_view.text),
+                emb=chunks_view.text.embedding(),
                 heading=chunks_view.heading,
             )
             .limit(per_type_limit)
@@ -1158,7 +1158,7 @@ def _collect_text_embeddings(
             .select(
                 text=vt_view.text,
                 uuid_col=vt_view.uuid,
-                emb=EMBED_TEXT_FN(vt_view.text),
+                emb=vt_view.text.embedding(),
             )
             .limit(per_type_limit)
             .collect()
@@ -1184,7 +1184,7 @@ def _collect_text_embeddings(
             .select(
                 text=at_view.text,
                 uuid_col=at_view.uuid,
-                emb=EMBED_TEXT_FN(at_view.text),
+                emb=at_view.text.embedding(),
             )
             .limit(per_type_limit)
             .collect()
@@ -1210,7 +1210,7 @@ def _collect_visual_embeddings(
     vectors: list[np.ndarray],
 ):
     """Collect CLIP embeddings from images and video frames."""
-    per_type_limit = max(10, limit // 2)
+    per_type_limit = max(1, limit // 2)
 
     # Images
     try:
@@ -1220,7 +1220,7 @@ def _collect_visual_embeddings(
             .select(
                 uuid_col=img_table.uuid,
                 thumb=img_table.thumbnail,
-                emb=_get_embed_clip_fn()(img_table.image),
+                emb=img_table.image.embedding(),
             )
             .limit(per_type_limit)
             .collect()
@@ -1249,7 +1249,7 @@ def _collect_visual_embeddings(
                 uuid_col=frames_view.uuid,
                 frame=frames_view.frame,
                 frame_attrs=frames_view.frame_attrs,
-                emb=_get_embed_clip_fn()(frames_view.frame),
+                emb=frames_view.frame.embedding(),
             )
             .limit(per_type_limit)
             .collect()
@@ -1837,11 +1837,8 @@ def transform_video(body: TransformRequest):
     elif body.operation == "resize_video":
         w = int(body.params.get("width", 640))
         h = int(body.params.get("height", 480))
-        # pxt_video.resize uses 'size=(w, h)' per typical PIL/Pixeltable patterns or 'width=w, height=h'
-        # Based on Pixeltable PR #1210 and image.resize, we will use size=(w,h) or w,h.
-        # However some functions use kwargs `width=w, height=h`. Let's try size=[w, h] or let's use kwargs directly based on `image.resize`
         rows = match.select(
-            resized=pxt_video.resize(vid_table.video, size=[w, h]),
+            resized=pxt_video.resize(vid_table.video, width=w, height=h),
         ).collect()
         if not rows:
             raise HTTPException(status_code=404, detail="Video not found")

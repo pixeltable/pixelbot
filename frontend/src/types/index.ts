@@ -8,6 +8,7 @@ export interface QueryMetadata {
   has_history_context: boolean
   has_memory_context: boolean
   has_chat_memory_context: boolean
+  history_saved?: boolean
 }
 
 export interface ImageContext {

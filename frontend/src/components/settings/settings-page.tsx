@@ -107,9 +107,9 @@ export function SettingsPage() {
   )
 
   return (
-    <div className="flex h-full">
+    <div className="flex h-full min-h-0 flex-col md:flex-row">
       {/* Persona List */}
-      <div className="w-60 border-r border-border flex flex-col bg-card/30">
+      <div className="h-44 w-full shrink-0 border-b border-border flex flex-col bg-card/30 md:h-auto md:w-60 md:border-b-0 md:border-r">
         <div className="px-3 py-3 border-b border-border">
           <div className="flex items-center gap-2 mb-3">
             <Settings className="h-4 w-4 text-muted-foreground" />

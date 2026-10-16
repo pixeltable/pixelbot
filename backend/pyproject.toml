@@ -10,13 +10,15 @@ dependencies = [
     "uvicorn[standard]",
     "python-multipart",
     # AI and ML
-    "pixeltable[serve]>=0.7.7,<0.8",
-    "google-genai",
+    "pixeltable[serve]==0.7.18",
+    "google-genai>=2.31.0",
     "anthropic",
     "openai",
     "mistralai",
     # Required by the core CLIP image/video indexes as well as Studio detection.
     "torch",
+    "torchvision>=0.29.1",
+    "timm>=1.0.30",
     "transformers",
     "spacy",
     "en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl",
@@ -24,6 +26,7 @@ dependencies = [
     "umap-learn",
     "Pillow",
     "av",
+    "scenedetect>=0.7.2",
     "pdfplumber",
     "python-docx",
     "python-pptx",
@@ -77,7 +80,7 @@ python_version = "3.11"
 plugins = ["pydantic.mypy", "pixeltable.mypy"]
 check_untyped_defs = true
 ignore_missing_imports = true
-# TableModel attributes are bound by Pixeltable at runtime. The 0.7.7 mypy
+# TableModel attributes are bound by Pixeltable at runtime. The Pixeltable mypy
 # plugin currently exposes those attributes as ``Table | None``.
 disable_error_code = ["union-attr"]
 

@@ -108,7 +108,7 @@ The narrow conversation measure is a major part of the interface quality. Do not
 
 Navigation rows use a compact icon-label pattern. The active item gets one quiet accent surface; inactive items gain contrast on hover. Group labels and separators make a capable application scannable without oversized navigation.
 
-The shell is desktop-first. It supports a manually collapsed rail but does not yet provide a small-screen drawer or mobile navigation. Treat responsive navigation as an explicit future design task rather than assuming the current shell is mobile-ready.
+The shell uses a collapsible rail on desktop and a labeled navigation drawer on smaller screens. The drawer uses Radix focus management and closes after navigation. Studio, Database, Settings, and Prompt Lab stack their panels at compact widths; keep their lists and details independently scrollable.
 
 ## Conversation experience
 
@@ -116,7 +116,7 @@ The shell is desktop-first. It supports a manually collapsed rail but does not y
 
 ### Empty state
 
-The empty state uses a personalized time-of-day greeting, one direct heading, one sentence of guidance, and six action chips. The chips reduce blank-page anxiety while keeping the textbox as the clear primary action.
+The empty state identifies Pixelbot as a Pixeltable showcase, links to Studio and Database, and provides six action chips. An optional configured name enables the time-of-day greeting. The chips reduce blank-page anxiety while keeping the textbox as the clear primary action.
 
 ### Composer
 
@@ -133,9 +133,9 @@ The composer remains pinned at the bottom and centered to the same width as the 
 
 ### Waiting and feedback
 
-`frontend/src/components/chat/thinking-indicator.tsx` turns waiting into understandable progress. It advances through eight named stages, shows elapsed time, retains completed stages, and uses a segmented progress track. The post-response “Thought for …” line closes that loop without preserving the full animation.
+`frontend/src/components/chat/thinking-indicator.tsx` shows the requested operation and elapsed time. It does not infer completed stages or percentages from a timer. The response confirms completion and reports total request duration. Failed requests keep the prompt available for correction and retry.
 
-The stage names describe the pipeline users can understand: question analysis, tool selection, document and media retrieval, memory, context assembly, answer generation, and follow-ups. If the backend pipeline changes, update this copy so it remains truthful.
+Pipeline lineage and computed results are inspectable in Database after execution. Keep background waiting copy separate from that observed evidence.
 
 Animation is restrained:
 
@@ -144,7 +144,7 @@ Animation is restrained:
 - Progress transitions: about 500ms
 - Pulsing is reserved for active work or recording
 
-A reduced-motion media query is not currently implemented. Add one before expanding motion beyond these small state transitions.
+A reduced-motion media query disables nonessential animation, transitions, and smooth scrolling. Keep visible keyboard focus and accessible names on icon controls across all routes.
 
 ## Workspace and developer views
 

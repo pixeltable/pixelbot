@@ -1,15 +1,48 @@
 # functions.py - User-Defined Functions (UDFs) for the Pixeltable Agent
+import base64
 import os
 import traceback
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List, Optional
+from uuid import uuid4
 
 import pixeltable as pxt
 import requests
 import yfinance as yf
 from duckduckgo_search import DDGS
+from PIL import Image
 
+from pixelbot import config
 from pixelbot.notifications import deliver_notification
+
+
+@pxt.udf
+def extract_generated_image(response: dict) -> pxt.Image:
+    """Extract the generated image, ignoring any text or thought parts."""
+    for candidate in response.get("candidates", []):
+        for part in (candidate.get("content") or {}).get("parts", []):
+            image = (part.get("inline_data") or {}).get("data")
+            if not part.get("thought") and isinstance(image, Image.Image):
+                return image
+    raise ValueError("The image model returned no image. Try a different prompt.")
+
+
+@pxt.udf(is_deterministic=False)
+def generate_video(prompt: str, model: str) -> pxt.Video:
+    """Generate a video through Gemini's Interactions API as a stored computed column."""
+    from google import genai
+
+    api_key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
+    with genai.Client(api_key=api_key) as client:
+        interaction = client.interactions.create(model=model, input=prompt)
+    video = interaction.output_video
+    if video is None or not video.data:
+        raise ValueError("The video model returned no video. Try a different prompt.")
+    destination = Path(config.UPLOAD_FOLDER) / f"{uuid4()}.mp4"
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_bytes(base64.b64decode(video.data, validate=True))
+    return str(destination.resolve())
 
 
 @pxt.udf

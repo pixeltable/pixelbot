@@ -1,6 +1,6 @@
 # Pixelbot 3.0 / Pixeltable 0.7.7 upgrade evidence
 
-Retrieved 2026-09-11.
+Historical evidence, retrieved 2026-09-11. For current setup, migration behavior, and verification, see [the Pixeltable 0.7.18 review](pixeltable-0.7.18-review.md) and [development guide](development.md).
 
 | Item | Evidence |
 |---|---|

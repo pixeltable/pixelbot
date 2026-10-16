@@ -9,7 +9,7 @@ from typing import cast
 
 import pixeltable as pxt
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from pixelbot import config
 from pixelbot.models import (
@@ -44,10 +44,9 @@ def _provider_available(provider: str) -> bool:
 
 
 SUPPORTED_MODELS = [
-    {"id": "claude-sonnet-4-20250514", "name": "Claude Sonnet 4", "provider": "anthropic"},
-    {"id": "claude-haiku-4-20250514", "name": "Claude Haiku 4", "provider": "anthropic"},
-    {"id": "gemini-2.5-flash", "name": "Gemini 2.5 Flash", "provider": "google"},
-    {"id": "gemini-2.5-pro", "name": "Gemini 2.5 Pro", "provider": "google"},
+    {"id": config.CLAUDE_MODEL_ID, "name": "Claude Sonnet", "provider": "anthropic"},
+    {"id": "claude-haiku-5-5", "name": "Claude Haiku", "provider": "anthropic"},
+    {"id": config.GEMINI_MODEL_ID, "name": "Gemini Flash", "provider": "google"},
     {"id": "mistral-small-latest", "name": "Mistral Small", "provider": "mistral"},
     {"id": "mistral-large-latest", "name": "Mistral Large", "provider": "mistral"},
     {"id": "gpt-4o", "name": "GPT-4o", "provider": "openai"},
@@ -81,9 +80,9 @@ class RunExperimentRequest(BaseModel):
     task: str = ""
     system_prompt: str = "You are a helpful assistant."
     user_prompt: str
-    models: list[ModelConfig]
-    temperature: float = 0.7
-    max_tokens: int = 1024
+    models: list[ModelConfig] = Field(min_length=1, max_length=8)
+    temperature: float = Field(default=0.7, ge=0, le=2)
+    max_tokens: int = Field(default=1024, ge=1, le=32768)
 
 
 # ── Pixeltable Table ─────────────────────────────────────────────────────────
@@ -140,7 +139,7 @@ def _call_anthropic(model_id: str, system_prompt: str, user_prompt: str, tempera
     response = client.messages.create(
         model=model_id,
         max_tokens=max_tokens,
-        temperature=temperature,
+        # Current Claude models require their default sampling parameters.
         system=system_prompt,
         messages=[{"role": "user", "content": user_prompt}],
     )
@@ -151,7 +150,8 @@ def _call_gemini(model_id: str, system_prompt: str, user_prompt: str, temperatur
     from google import genai
     from google.genai import types
 
-    client = genai.Client()
+    api_key = next((os.environ[key] for key in _PROVIDER_ENV_KEYS["google"] if os.environ.get(key)), None)
+    client = genai.Client(api_key=api_key)
     response = client.models.generate_content(
         model=model_id,
         contents=user_prompt,

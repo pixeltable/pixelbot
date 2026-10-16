@@ -19,7 +19,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - run: uv sync --locked --group dev
         working-directory: backend
-      - run: uv run python -c "import pixelbot, pixeltable; assert pixelbot.__version__ == '3.0.0'; assert pixeltable.__version__ == '0.7.7'"
+      - run: uv run python -c "import pixelbot, pixeltable; assert pixelbot.__version__ == '3.0.0'; assert pixeltable.__version__ == '0.7.18'"
         working-directory: backend
       - run: uv run pytest -q
         working-directory: backend
@@ -61,7 +61,7 @@ jobs:
         working-directory: backend
         run: |
           uv pip compile pyproject.toml --python-version 3.11 --output-file "$RUNNER_TEMP/fresh-requirements.txt"
-          grep -Fx "pixeltable==0.7.7" "$RUNNER_TEMP/fresh-requirements.txt"
+          grep -Fx "pixeltable==0.7.18" "$RUNNER_TEMP/fresh-requirements.txt"
       - run: uv build
         working-directory: backend
       - name: Verify source distribution contents

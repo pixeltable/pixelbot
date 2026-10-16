@@ -18,6 +18,7 @@ class ToolAgentRow(BaseModel):
     prompt: str
     timestamp: datetime
     user_id: str
+    conversation_id: str = "default"
     initial_system_prompt: str = config.INITIAL_SYSTEM_PROMPT
     final_system_prompt: str = config.FINAL_SYSTEM_PROMPT
     max_tokens: int = config.DEFAULT_MAX_TOKENS
@@ -237,6 +238,7 @@ class QueryMetadata(BaseModel):
     has_history_context: bool
     has_memory_context: bool
     has_chat_memory_context: bool
+    history_saved: bool = True
 
 
 class QueryResponse(BaseModel):
