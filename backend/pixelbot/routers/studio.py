@@ -1,6 +1,7 @@
 import base64
 import io
 import logging
+import math
 import os
 import re
 import uuid as uuid_mod
@@ -664,19 +665,30 @@ def _coerce_value(val, col_name: str, schema: dict[str, str]):
         return None
     type_name = schema.get(col_name, "")
     if "Int" in type_name:
+        if isinstance(val, bool) or (isinstance(val, float) and not val.is_integer()):
+            raise HTTPException(status_code=400, detail=f"Column '{col_name}' requires a whole number")
         try:
             return int(val)
         except (ValueError, TypeError):
             return val
     if "Float" in type_name:
         try:
-            return float(val)
+            number = float(val)
         except (ValueError, TypeError):
             return val
+        if not math.isfinite(number):
+            raise HTTPException(status_code=400, detail=f"Column '{col_name}' requires a finite number")
+        return number
     if "Bool" in type_name:
         if isinstance(val, str):
-            return val.lower() in ("true", "1", "yes")
-        return bool(val)
+            normalized = val.strip().lower()
+            if normalized in ("true", "1", "yes"):
+                return True
+            if normalized in ("false", "0", "no"):
+                return False
+        elif isinstance(val, (bool, int, float)) and val in (0, 1):
+            return bool(val)
+        raise HTTPException(status_code=400, detail=f"Column '{col_name}' requires true or false")
     return str(val) if not isinstance(val, str) else val
 
 

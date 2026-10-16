@@ -28,7 +28,7 @@ Reviewed October 16, 2026. Baseline: `28bb68523a9eee072a94ca64fdef02c324a09e21` 
 | P2 | Frontend installation reported 20 dependency advisories | Compatible dependency updates; `npm audit` reports zero known vulnerabilities |
 | P3 | README and product copy assumed contributor knowledge, a personal name, unavailable DALL-E support, and a nonexistent CSV agent tool | User-oriented tour and setup; configurable greeting; corrected capability claims and links to more examples |
 
-The default final prompt now asks for useful, grounded answers instead of “just a few words.” Chat history writes both sides of a turn together and reports a save failure without discarding the answer. Empty-table sampling returns an empty result. CSV counts use `count()` instead of loading every row.
+The default final prompt now asks for useful, grounded answers instead of “just a few words.” Chat history writes both sides of a turn together and reports a save failure without discarding the answer. Empty-table sampling returns an empty result. CSV counts use `count()` instead of loading every row. Invalid boolean values, fractional integer edits, and non-finite numbers are rejected before they can silently change stored data.
 
 ## Compatibility and migration
 
@@ -43,7 +43,7 @@ This checks application-schema reconciliation. It does not independently exercis
 Local environment: macOS arm64, Python 3.14.7, Pixeltable 0.7.18.
 
 - Ruff lint/format and mypy pass.
-- Backend: 51 tests pass, including eight real local video operations: metadata, frame extraction, clipping, overlay, crop, resize, scene detection, and concatenation.
+- Backend: 55 tests pass, including eight real local video operations: metadata, frame extraction, clipping, overlay, crop, resize, scene detection, and concatenation.
 - Frontend: five contract tests and seven interaction/API tests pass; ESLint and TypeScript/Vite build pass. Initial production chunk is about 310 kB, below Vite's 500 kB warning threshold.
 - Locked dependency sync and a fresh Python 3.11 dependency resolution pass. Component tests use a jsdom release compatible with the documented Node 22.12 minimum.
 - Source and wheel distributions build; package contents and wheel import are checked separately.

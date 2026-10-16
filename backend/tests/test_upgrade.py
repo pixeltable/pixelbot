@@ -213,3 +213,14 @@ def test_embedding_map_reads_stored_index_vectors() -> None:
     studio._collect_text_embeddings(config.DEFAULT_USER_ID, 10, items, vectors)
     assert len(items) == 1
     np.testing.assert_allclose(vectors[0], [1, 2, 6])
+
+
+@pytest.mark.parametrize("value,type_name", [("not a boolean", "Bool"), (2, "Bool"), (1.5, "Int"), ("NaN", "Float")])
+def test_csv_values_do_not_silently_change_meaning(value: object, type_name: str) -> None:
+    from fastapi import HTTPException
+
+    with pytest.raises(HTTPException) as error:
+        studio._coerce_value(value, "value", {"value": type_name})
+    assert error.value.status_code == 400
+    assert studio._coerce_value("false", "enabled", {"enabled": "Bool"}) is False
+    assert studio._coerce_value("true", "enabled", {"enabled": "Bool"}) is True
