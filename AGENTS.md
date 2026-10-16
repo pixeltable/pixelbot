@@ -1,6 +1,6 @@
 # Pixelbot contributor guide
 
-Pixelbot 3.0 is an app-first Pixeltable 0.7.7 project. Python 3.11+ and Node 22.12+ are required.
+Pixelbot 3.0 is an app-first Pixeltable 0.7.18 project. Python 3.11+ and Node 22.12+ are required.
 
 ## Architecture
 
@@ -24,7 +24,7 @@ Use `@pxt.query` plus `FastAPIRouter.add_query_route()` for table-backed read en
 
 Let the application exception handler log and sanitize unexpected route failures. Convert only expected validation and missing-resource failures to `HTTPException`. Apply `pxt_retry()` only to read-only operations; retrying writes, provider calls, or notifications can duplicate side effects.
 
-A changed computed expression is unsupported by schema migration. Rename the column, or drop and re-add it in separate schema updates. `--allow-destructive` does not change that restriction.
+Pixeltable 0.7.18 supports updating computed expressions through schema migration while preserving stored values. Recompute only intentionally; it can repeat inference and tool side effects. Column type changes and stored/computed conversions remain unsupported. `--allow-destructive` does not change that restriction.
 
 ## Workflow
 
@@ -51,6 +51,7 @@ uv run pytest
 uv build
 
 cd ../frontend
+npm test
 npm run lint
 npm run build
 ```

@@ -354,9 +354,9 @@ export function DatabasePage() {
         <PipelineInspector />
       ) : (
 
-    <div className="flex flex-1 overflow-hidden">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
       {/* Left panel: grouped table list */}
-      <div className="w-72 shrink-0 border-r border-border/60 flex flex-col bg-card/20">
+      <div className="h-56 w-full shrink-0 border-b border-border/60 flex flex-col bg-card/20 lg:h-auto lg:w-72 lg:border-b-0 lg:border-r">
         <div className="px-4 pt-2 pb-3">
           <p className="text-[10px] text-muted-foreground">
             {tables.length} objects &middot; {totalRows.toLocaleString()} total rows

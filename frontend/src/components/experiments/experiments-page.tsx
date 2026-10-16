@@ -193,9 +193,9 @@ export function ExperimentsPage() {
   }, [currentRun])
 
   return (
-    <div className="flex h-full">
+    <div className="flex h-full min-h-0 flex-col lg:flex-row">
       {/* Left panel: Setup */}
-      <div className="w-[360px] shrink-0 border-r border-border/60 flex flex-col overflow-y-auto bg-card/20">
+      <div className="max-h-[50%] w-full shrink-0 border-b border-border/60 flex flex-col overflow-y-auto bg-card/20 lg:max-h-none lg:w-[360px] lg:border-b-0 lg:border-r">
         {/* Header */}
         <div className="px-5 pt-5 pb-4 border-b border-border/40">
           <div className="flex items-center gap-2.5">
@@ -424,6 +424,7 @@ export function ExperimentsPage() {
                 max={1}
                 step={0.1}
               />
+              <p className="text-xs text-muted-foreground">Current Claude models use fixed sampling.</p>
             </div>
 
             <div className="space-y-1.5">

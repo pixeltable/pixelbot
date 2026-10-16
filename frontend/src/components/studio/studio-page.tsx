@@ -680,9 +680,9 @@ export function StudioPage() {
   }
 
   return (
-    <div className="flex h-full overflow-hidden">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden lg:flex-row">
       {/* ── Left Panel: File Browser ─────────────────────────────────── */}
-      <div className="w-72 border-r border-border flex flex-col bg-card/30">
+      <div className="h-64 w-full shrink-0 border-b border-border flex flex-col bg-card/30 lg:h-auto lg:w-72 lg:border-b-0 lg:border-r">
         {/* Header */}
         <div className="px-4 pt-4 pb-2">
           <h2 className="text-sm font-semibold tracking-tight">Studio</h2>
@@ -969,6 +969,7 @@ export function StudioPage() {
               <button
                 className="h-7 w-7 rounded-md flex items-center justify-center hover:bg-accent transition-colors"
                 onClick={handleDeselectFile}
+                aria-label="Back to files"
               >
                 <ArrowLeft className="h-3.5 w-3.5 text-muted-foreground" />
               </button>
@@ -1233,7 +1234,7 @@ function EmptyWorkspace() {
       </div>
       <h3 className="text-sm font-semibold mb-1">Select a file to get started</h3>
       <p className="text-xs text-muted-foreground max-w-sm">
-        Choose a file from the left panel to explore its contents, apply transforms, view
+        Choose a file from the file list to explore its contents, apply transforms, view
         extracted chunks, transcriptions, and more. Operations are powered by Pixeltable UDFs.
       </p>
     </div>
@@ -1274,7 +1275,7 @@ function ImageWorkspace({
   const hasResult = !!transformResult
 
   return (
-    <div className={cn('grid gap-5', hasResult ? 'grid-cols-2' : 'grid-cols-1 max-w-lg mx-auto')}>
+    <div className={cn('grid gap-5', hasResult ? 'grid-cols-1 xl:grid-cols-2' : 'grid-cols-1 max-w-lg mx-auto')}>
       {/* Original */}
       <div className="space-y-2">
         <div className="flex items-center gap-2">
@@ -2078,6 +2079,7 @@ function CsvWorkspace({
               className="h-6 w-6 rounded flex items-center justify-center hover:bg-accent disabled:opacity-30 transition-colors"
               onClick={() => onPageChange(Math.max(0, offset - limit))}
               disabled={!hasPrev || isLoading}
+              aria-label="Previous page"
             >
               <ChevronLeft className="h-3.5 w-3.5" />
             </button>
@@ -2088,6 +2090,7 @@ function CsvWorkspace({
               className="h-6 w-6 rounded flex items-center justify-center hover:bg-accent disabled:opacity-30 transition-colors"
               onClick={() => onPageChange(offset + limit)}
               disabled={!hasNext || isLoading}
+              aria-label="Next page"
             >
               <ChevronRight className="h-3.5 w-3.5" />
             </button>

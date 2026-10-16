@@ -23,7 +23,7 @@ def query(body: QueryRequest):
     """Process a user query through the Pixeltable agent workflow."""
     user_id = config.DEFAULT_USER_ID
 
-    if not body.query:
+    if not body.query.strip():
         raise HTTPException(status_code=400, detail="Query text is required")
     tool_agent = pxt.get_table("pixelbot_v3.tools")
 
@@ -64,6 +64,7 @@ def query(body: QueryRequest):
         prompt=body.query,
         timestamp=current_timestamp,
         user_id=user_id,
+        conversation_id=body.conversation_id or "default",
         initial_system_prompt=selected_initial_prompt,
         final_system_prompt=selected_final_prompt,
         max_tokens=selected_max_tokens,
@@ -105,8 +106,13 @@ def query(body: QueryRequest):
                         }
                     )
 
-    # Insert into chat history using validated Pydantic models
+    answer = result_data.get("answer")
+    if not isinstance(answer, str) or not answer.strip():
+        raise HTTPException(status_code=502, detail="The model returned no answer. Try rephrasing your question.")
+
+    # Store the pair together so a failed history write cannot leave half a turn.
     conversation_id = body.conversation_id or "default"
+    history_saved = True
     try:
         chat_history_table = pxt.get_table("pixelbot_v3.chat_history")
         chat_history_table.insert(
@@ -117,37 +123,33 @@ def query(body: QueryRequest):
                     conversation_id=conversation_id,
                     timestamp=current_timestamp,
                     user_id=user_id,
-                )
+                ),
+                ChatHistoryRow(
+                    role="assistant",
+                    content=answer,
+                    conversation_id=conversation_id,
+                    timestamp=datetime.now(),
+                    user_id=user_id,
+                ),
             ]
         )
-        answer = result_data.get("answer", "Error: Answer not generated.")
-        if answer and not answer.startswith("Error:"):
-            chat_history_table.insert(
-                [
-                    ChatHistoryRow(
-                        role="assistant",
-                        content=answer,
-                        conversation_id=conversation_id,
-                        timestamp=datetime.now(),
-                        user_id=user_id,
-                    )
-                ]
-            )
     except Exception as history_err:
+        history_saved = False
         logger.error(f"Error inserting into chat history: {history_err}")
 
     metadata = QueryMetadata(
         timestamp=current_timestamp.isoformat(),
         has_doc_context=bool(result_data.get("doc_context")),
         has_image_context=bool(result_data.get("image_context")),
-        has_tool_output=bool(result_data.get("tool_output")),
+        has_tool_output=any((result_data.get("tool_output") or {}).values()),
         has_history_context=bool(result_data.get("history_context")),
         has_memory_context=bool(result_data.get("memory_context")),
         has_chat_memory_context=bool(result_data.get("chat_memory_context")),
+        history_saved=history_saved,
     )
 
     return QueryResponse(
-        answer=result_data.get("answer", "Error: Answer not generated."),
+        answer=answer,
         metadata=metadata,
         image_context=processed_image_context,
         video_frame_context=processed_video_frame_context,

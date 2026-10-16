@@ -4,13 +4,14 @@ import logging
 import os
 import uuid
 from datetime import datetime
+from typing import Annotated, Literal
 
 import av
 import pixeltable as pxt
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 from PIL import Image
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, StringConstraints
 
 from pixelbot import config
 from pixelbot.models import (
@@ -34,6 +35,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["images"])
 
 THUMB_SIZE = (128, 128)
+PromptText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=10000)]
 
 
 # ── Provider Info ────────────────────────────────────────────────────────────
@@ -44,11 +46,11 @@ def get_generation_config():
     """Return the active image/video generation providers and model IDs."""
     return {
         "image_provider": "gemini",
-        "image_model": config.IMAGEN_MODEL_ID,
+        "image_model": config.IMAGE_MODEL_ID,
         "flux_provider": "bfl",
         "flux_model": config.FLUX_MODEL_ID,
         "video_provider": "gemini",
-        "video_model": config.VEO_MODEL_ID,
+        "video_model": config.VIDEO_MODEL_ID,
     }
 
 
@@ -56,12 +58,12 @@ def get_generation_config():
 
 
 class GenerateImageRequest(BaseModel):
-    prompt: str
+    prompt: PromptText
 
 
 @router.post("/generate_image", response_model=GenerateImageResponse)
 def generate_image(body: GenerateImageRequest):
-    """Generate an image using the configured provider (Gemini Imagen or OpenAI DALL-E).
+    """Generate an image using Gemini's image generation model.
 
     Pixeltable's insert() is synchronous - it blocks until all computed columns
     (including the generated_image) finish, so no polling is needed.
@@ -188,9 +190,9 @@ class SaveToCollectionRequest(BaseModel):
 
 
 class GenerateFluxImageRequest(BaseModel):
-    prompt: str
-    width: int = 1024
-    height: int = 1024
+    prompt: PromptText
+    width: int = Field(default=1024, ge=64, le=2048)
+    height: int = Field(default=1024, ge=64, le=2048)
 
 
 @router.post("/generate_flux_image", response_model=GenerateImageResponse)
@@ -349,7 +351,7 @@ def save_flux_image_to_collection(body: SaveToCollectionRequest):
 
 
 class GenerateVideoRequest(BaseModel):
-    prompt: str
+    prompt: PromptText
 
 
 @router.post("/generate_video")
@@ -657,8 +659,8 @@ TTS_VOICES = ["alloy", "echo", "fable", "onyx", "nova", "shimmer"]
 
 
 class GenerateSpeechRequest(BaseModel):
-    text: str
-    voice: str = "alloy"
+    text: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=4096)]
+    voice: Literal["alloy", "echo", "fable", "onyx", "nova", "shimmer"] = "alloy"
 
 
 @router.post("/generate_speech", response_model=GenerateSpeechResponse)

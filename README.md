@@ -1,89 +1,58 @@
 # Pixelbot
 
-Pixelbot 3.0 is a local multimodal AI application built on Pixeltable 0.7.7. One application module, `backend/pixelbot/app.py`, exposes the declarative `TableModel` schema, Pixeltable query routes, the custom FastAPI API, and the bundled React interface.
+**See what you can build with [Pixeltable](https://github.com/pixeltable/pixeltable).**
 
-Pixelbot keeps documents, images, video, audio, memory, chat history, generation jobs, prompt experiments, notifications, and tool calls in Pixeltable. Stored computed columns run extraction, chunking, transcription, captioning, generation, retrieval, and tool invocation when rows are inserted. Provider calls require the matching keys; local schema and API checks do not call paid providers.
+Pixelbot is a local, open-source AI workbench: chat with documents and media, generate images and video, compare models, and explore the data behind every result. It demonstrates Pixeltable's multimodal tables, computed columns, iterator views, embedding indexes, tool calling, and HTTP serving in one runnable application.
 
-See [`DESIGN.md`](DESIGN.md) for the product principles, Kandinsky visual language, component foundation, interaction patterns, and UI review checklist.
+![Pixelbot: chat, media tools, and an inspectable Pixeltable backend](docs/images/pixelbot.jpg)
 
-The HTTP layer demonstrates a practical Pixeltable and FastAPI split. Table-backed reads such as `GET /api/memory`, `GET /api/memory/search`, and `GET /api/personas` are declared as `@pxt.query` functions and exposed through `FastAPIRouter`. Custom FastAPI handlers own validation-heavy writes, application defaults, and the SPA shell.
+## Explore the showcase
 
-## Requirements
+| Try this | See Pixeltable at work |
+| --- | --- |
+| Upload a PDF, image, video, or audio file in **Studio** | Native media columns; automatic summaries, captions, chunks, keyframes, and transcripts |
+| Ask questions in **Chat** | Semantic retrieval, multimodal context, tool invocation, and searchable conversation history |
+| Create media in **Media Library** | Image, video, and speech generation as stored computed columns |
+| Save an answer to **Memory** | Persistent, searchable context for later questions |
+| Import a CSV in **Studio** | Tables you can edit, query, export, and undo with version history |
+| Open **Database** | Real schemas, rows, indexes, computation errors, joins, sampling, and pipeline lineage |
+| Compare prompts in **Prompt Lab** | Provider SDK comparisons with inputs, outputs, timing, and errors stored in Pixeltable |
 
-- Python 3.11–3.14
-- Node.js 22.12 or newer
-- `uv`
-- Local media tools required by Pixeltable for the media pipelines
+Pixeltable manages the data and computed pipeline; model providers perform the inference. Pixelbot uses FastAPI and React for the interface, without a separate vector database or agent orchestration framework. **Architecture** explains the design; **Database** shows the running catalog.
 
-Pixelbot 3.0 uses a fresh local catalog. Set `PIXELTABLE_HOME` to `backend/.pixeltable-v3`. The application target is `pixelbot_v3`; CSV workspaces use the separate `pixelbot_scratch` namespace. The former `agents` catalog is never opened or migrated by this workflow.
+## Quick start
 
-## Install and run
+Requires Python 3.11+, Node.js 22.12+, [uv](https://docs.astral.sh/uv/), and [FFmpeg](https://ffmpeg.org/download.html) for video editing. The backend is pinned to **Pixeltable 0.7.18**. Local CLIP and detection models download on first use and can require substantial disk space.
 
 ```bash
+git clone https://github.com/pixeltable/pixelbot.git
+cd pixelbot
 cp .env.example backend/.env
-cd backend
+```
+
+Set `GEMINI_API_KEY` in `backend/.env` for chat, document processing, embeddings, and Gemini image/video generation. Add `OPENAI_API_KEY` for audio/video transcription and speech, or `BFL_API_KEY` for FLUX. Prompt Lab and notification integrations have optional keys in the same file. Provider usage may incur charges. CSV editing and catalog inspection work without provider keys.
+
+```bash
+# Build the interface first.
+cd frontend
+npm ci
+npm run build
+
+cd ../backend
 uv sync --locked --group dev
 export PIXELTABLE_HOME="$PWD/.pixeltable-v3"
-
-uv run --env-file .env pxt schema check pixelbot/app.py
-uv run --env-file .env pxt schema diff pixelbot/app.py pixelbot_v3
 uv run --env-file .env pxt schema update pixelbot/app.py pixelbot_v3 -f
 uv run --env-file .env pxt service update pixelbot/app.py pixelbot_v3 app --port 8000 -f
 ```
 
-Build the interface before producing a wheel:
+Open **[localhost:8000](http://127.0.0.1:8000)**. Upload a file in Studio, ask about it in Chat, then inspect the computed results in Database. Interactive API docs are at [`/docs`](http://127.0.0.1:8000/docs).
 
-```bash
-cd ../frontend
-npm ci
-npm run lint
-npm run build
-```
+Pixelbot is a single-user local showcase. Keep the service on localhost. Its catalog lives in `backend/.pixeltable-v3`; the older `agents` catalog is left alone.
 
-Open `http://127.0.0.1:8000`. The Vite development server runs on port 5173 and proxies `/api` to port 8000.
+## Build your own
 
-## Operate and debug
+The [application entry](backend/pixelbot/app.py) declares Pixeltable query routes and the FastAPI service. The [schema](backend/pixelbot/schema.py) defines the tables, views, indexes, and computed pipelines; [Python UDFs](backend/pixelbot/functions.py) extend them. Edit the declarations, apply them with `pxt schema update`, then restart HTTP with `pxt service update`.
 
-```bash
-cd backend
-export PIXELTABLE_HOME="$PWD/.pixeltable-v3"
+Find more focused examples in [awesome-pixeltable-apps](https://github.com/pierrebrunelle/awesome-pixeltable-apps), or start with the [Pixeltable quickstart](https://docs.pixeltable.com/overview/quick-start).
 
-uv run pxt service list
-tail -50 "$PIXELTABLE_HOME/logs/services/pixelbot_v3/app.log"
-uv run pxt errors pixelbot_v3/collection
-uv run pxt recompute pixelbot_v3/collection summary --errors-only -f
-uv run pxt service stop pixelbot_v3/app
-```
-
-`--errors-only` accepts exactly one computed column. A computed expression cannot be migrated in place: rename the column, or drop and re-add it in separate schema changes. `--allow-destructive` does not make that migration supported.
-
-For a local service, `pxt service logs pixelbot_v3/app` reports the log file path but does not stream its contents. Read the file under `PIXELTABLE_HOME` as shown above.
-
-The Database page is an inspector for catalog rows, schemas, lineage, history, samples, joins, and computation errors. Schema and index changes are made in `pixelbot/schema.py` and applied with `pxt schema update`. CSV uploads remain editable only through their registry UUIDs in `pixelbot_scratch`.
-
-## Safety boundaries
-
-- Uploads are streamed to disk and capped by `MAX_UPLOAD_SIZE_MB`.
-- Remote ingestion accepts public HTTP(S) destinations only.
-- Media reads are confined to the upload root and configured `PIXELTABLE_HOME`, including resolved symlinks.
-- Database inspection and exports are confined to `pixelbot_v3` and registered scratch tables, with result caps.
-- The agent webhook tool can send only to `WEBHOOK_URL` configured at process startup.
-- HTTP routes and agent tools share one notification transport, and catalog logs store only the destination origin.
-- There is no runtime expression evaluation or general catalog mutation API.
-
-## Validation
-
-```bash
-cd backend
-uv run ruff format --check pixelbot tests
-uv run ruff check pixelbot tests
-uv run mypy pixelbot
-uv run pytest
-uv build
-
-cd ../frontend
-npm run lint
-npm run build
-```
-
-See [`docs/pixeltable-0.7.7-upgrade.md`](docs/pixeltable-0.7.7-upgrade.md) for reviewed versions, reproduced failures, verification evidence, and live-test limits.
+[Development and troubleshooting](docs/development.md) · [Upgrade and review evidence](docs/pixeltable-0.7.18-review.md) · [Design system](DESIGN.md) · [Apache 2.0](LICENSE)

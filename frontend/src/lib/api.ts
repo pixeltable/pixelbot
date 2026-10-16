@@ -30,6 +30,21 @@ function formatTimestamp(ts: unknown): string {
   return ts != null ? String(ts) : ''
 }
 
+function errorMessage(body: unknown, status: number): string {
+  if (typeof body === 'string') return body
+  if (!body || typeof body !== 'object') return `Request failed (HTTP ${status})`
+  const record = body as Record<string, unknown>
+  const detail = record.detail ?? record.error ?? record.message
+  if (Array.isArray(detail)) {
+    return detail.map((item) => {
+      const field = Array.isArray(item.loc) ? item.loc.filter((part: unknown) => part !== 'body').join('.') : ''
+      return `${field ? `${field}: ` : ''}${item.msg ?? 'Invalid value'}`
+    }).join('; ')
+  }
+  if (detail && typeof detail === 'object' && 'message' in detail) return String(detail.message)
+  return typeof detail === 'string' ? detail : `Request failed (HTTP ${status})`
+}
+
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${url}`, {
     headers: { 'Content-Type': 'application/json', ...init?.headers },
@@ -37,7 +52,7 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   })
   if (!res.ok) {
     const body = await res.json().catch(() => ({ detail: res.statusText }))
-    throw new Error(body.detail ?? body.error ?? `HTTP ${res.status}`)
+    throw new Error(errorMessage(body, res.status))
   }
   return res.json() as Promise<T>
 }
@@ -83,7 +98,7 @@ export async function uploadFile(file: File): Promise<{ message: string; filenam
   const res = await fetch(`${BASE}/upload`, { method: 'POST', body: formData })
   if (!res.ok) {
     const body = await res.json().catch(() => ({ detail: res.statusText }))
-    throw new Error(body.detail ?? body.error ?? `HTTP ${res.status}`)
+    throw new Error(errorMessage(body, res.status))
   }
   return res.json()
 }
@@ -341,7 +356,7 @@ export async function downloadTransformedImage(
   })
   if (!res.ok) {
     const body = await res.json().catch(() => ({ detail: res.statusText }))
-    throw new Error(body.detail ?? body.error ?? `HTTP ${res.status}`)
+    throw new Error(errorMessage(body, res.status))
   }
   return res.blob()
 }

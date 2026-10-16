@@ -248,10 +248,10 @@ export function ImagesPage() {
 
   const providerLabel =
     activeTab === 'images'
-      ? 'Gemini Imagen'
+      ? 'Gemini image'
       : activeTab === 'flux'
         ? 'BFL FLUX'
-        : 'Gemini Veo'
+        : 'Gemini video'
 
   return (
     <div className="flex flex-col h-full">
