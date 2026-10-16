@@ -22,7 +22,7 @@ Pixeltable manages the data and computed pipeline; model providers perform the i
 
 ## Quick start
 
-Requires Python 3.11+, Node.js 22.12+, and [uv](https://docs.astral.sh/uv/). The backend is pinned to **Pixeltable 0.7.18** for reproducible setup. Local CLIP and detection models download on first use and can require substantial disk space.
+Requires Python 3.11+, Node.js 22.12+, [uv](https://docs.astral.sh/uv/), and [FFmpeg](https://ffmpeg.org/download.html) for video editing. The backend is pinned to **Pixeltable 0.7.18**. Local CLIP and detection models download on first use and can require substantial disk space.
 
 ```bash
 git clone https://github.com/pixeltable/pixelbot.git

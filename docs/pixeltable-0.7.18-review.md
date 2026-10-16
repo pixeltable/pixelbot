@@ -45,12 +45,14 @@ Local environment: macOS arm64, Python 3.14.7, Pixeltable 0.7.18.
 - Ruff lint/format and mypy pass.
 - Backend: 51 tests pass, including eight real local video operations: metadata, frame extraction, clipping, overlay, crop, resize, scene detection, and concatenation.
 - Frontend: five contract tests and seven interaction/API tests pass; ESLint and TypeScript/Vite build pass. Initial production chunk is about 310 kB, below Vite's 500 kB warning threshold.
-- Locked dependency sync and a fresh Python 3.11 dependency resolution pass.
+- Locked dependency sync and a fresh Python 3.11 dependency resolution pass. Component tests use a jsdom release compatible with the documented Node 22.12 minimum.
 - Source and wheel distributions build; package contents and wheel import are checked separately.
 - The real managed service returns 200 for health, memory/personas, media lists, Studio, catalog/lineage, experiment configuration, integrations, and export listings. Missing-key chat returns a typed 403 instead of a generic 500.
 - CSV upload, read, append, update, undo, delete, and version history succeeded through HTTP in the isolated catalog.
 - Desktop and 390px-wide dark-mode browser checks cover chat, navigation, and populated Studio without document overflow. Component tests cover pending, success, error, queue, and failed-save behavior. Light-mode styles were reviewed in source; no screen-reader audit was performed.
 - The UI detector reported one existing Markdown blockquote border. This is a semantic quotation rule, not a new card accent; it was retained.
+
+The first Linux CI run exposed a missing system prerequisite: FFmpeg was absent from the runners, so five real video-operation cases failed. The workflow now installs FFmpeg, and setup guidance names it explicitly. These cases are retained as real execution tests.
 
 Provider mocks prove wiring, not model availability, output quality, billing, or account-specific access. No paid inference, actual notifications, hosted deployment, or Cloud service tests were run. Local model smoke checks use generated images; retrieval and detection quality were not evaluated. Python 3.11–3.13 and Linux are covered by the CI matrix, not claimed as local runs.
 

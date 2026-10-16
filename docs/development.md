@@ -17,6 +17,8 @@ For frontend development, run `npm run dev` from `frontend/`. Its `/api` request
 
 ## Provider configuration
 
+Video editing requires the `ffmpeg` executable on PATH, in addition to the Python packages. Install it with `brew install ffmpeg` on macOS or `sudo apt-get install ffmpeg` on Ubuntu/Debian. The backend CI job installs it before running the real video-operation tests.
+
 Keys in `backend/.env` are loaded by `uv run --env-file .env`. The Pixeltable daemon reads its environment at startup. After changing keys, restart it from `backend/`, then restart the service:
 
 ```bash
